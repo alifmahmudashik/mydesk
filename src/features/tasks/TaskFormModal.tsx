@@ -4,12 +4,14 @@ import { DatePicker } from '@/components/ui/date-picker'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
-import { Select } from '@/components/ui/select'
+import { Select, type SelectOption } from '@/components/ui/select'
 import { useData } from '@/data/store'
+import { eligibleAssignees, profileDisplayName } from '@/lib/derive'
 import { options, priorityMeta } from '@/lib/status'
 import type { Priority, Task } from '@/types'
 
 const priorityOptions = options(priorityMeta)
+const UNASSIGNED = 'unassigned'
 
 interface TaskFormModalProps {
   open: boolean
@@ -20,11 +22,14 @@ interface TaskFormModalProps {
 
 export function TaskFormModal({ open, onClose, projectId }: TaskFormModalProps) {
   const projects = useData((s) => s.projects)
+  const profiles = useData((s) => s.profiles)
+  const clientMembers = useData((s) => s.clientMembers)
   const createRow = useData((s) => s.createRow)
   const [title, setTitle] = useState('')
   const [project, setProject] = useState(projectId ?? '')
   const [priority, setPriority] = useState<Priority>('medium')
   const [dueDate, setDueDate] = useState('')
+  const [assignee, setAssignee] = useState(UNASSIGNED)
   const [errors, setErrors] = useState<{ title?: string; project?: string }>({})
 
   const activeProjects = projects.filter((p) => !['completed', 'cancelled'].includes(p.status))
@@ -32,6 +37,15 @@ export function TaskFormModal({ open, onClose, projectId }: TaskFormModalProps) 
     value: p.id,
     label: p.title,
   }))
+
+  const selectedProject = projects.find((p) => p.id === project)
+  const assigneeOptions: SelectOption<string>[] = [
+    { value: UNASSIGNED, label: 'Unassigned' },
+    ...eligibleAssignees(selectedProject?.client_id, profiles, clientMembers).map((p) => ({
+      value: p.id,
+      label: profileDisplayName(p),
+    })),
+  ]
 
   function submit() {
     const next: typeof errors = {}
@@ -47,12 +61,14 @@ export function TaskFormModal({ open, onClose, projectId }: TaskFormModalProps) 
         status: 'todo',
         priority,
         due_date: dueDate || null,
+        assignee_id: assignee === UNASSIGNED ? null : assignee,
       },
       { entity: 'task', action: 'created', message: `Added task "${title.trim()}"` },
     )
     setTitle('')
     setDueDate('')
     setPriority('medium')
+    setAssignee(UNASSIGNED)
     onClose()
   }
 
@@ -95,6 +111,9 @@ export function TaskFormModal({ open, onClose, projectId }: TaskFormModalProps) 
             <DatePicker value={dueDate} onChange={setDueDate} />
           </Field>
         </div>
+        <Field label="Assignee">
+          <Select value={assignee} onChange={setAssignee} options={assigneeOptions} />
+        </Field>
       </div>
     </Modal>
   )

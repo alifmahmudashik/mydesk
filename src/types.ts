@@ -102,9 +102,10 @@ export interface Profile {
   created_at: string
 }
 
-export interface ProjectMember {
+/** Grants a user every project (and task) under this client — see migration-005. */
+export interface ClientMember {
   id: string
-  project_id: string
+  client_id: string
   user_id: string
   created_at: string
 }

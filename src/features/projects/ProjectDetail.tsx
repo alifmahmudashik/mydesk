@@ -21,6 +21,7 @@ import { NotesThread } from '@/features/projects/NotesThread'
 import { ProjectFormModal } from '@/features/projects/ProjectFormModal'
 import { QuickAddTask } from '@/features/tasks/QuickAddTask'
 import { TaskItem } from '@/features/tasks/TaskItem'
+import { ClientAccessEditor, ClientTeamAvatars } from '@/features/team/ClientAccessEditor'
 
 const statusOptions = options(projectStatus)
 const priorityOptions = options(priorityMeta)
@@ -207,6 +208,20 @@ export function ProjectDetail({ projectId, onDeleted }: ProjectDetailProps) {
                     </p>
                   )}
                 </section>
+                )}
+
+                {isAdmin ? (
+                  <section>
+                    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Team access
+                    </h3>
+                    <p className="mb-3 text-[13px] text-muted-foreground">
+                      Checked teammates can see every project under this client, not just this one.
+                    </p>
+                    <ClientAccessEditor clientId={project.client_id} />
+                  </section>
+                ) : (
+                  <ClientTeamAvatars clientId={project.client_id} />
                 )}
 
                 <section>

@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import { demoData, type DemoData } from '@/data/demo'
 import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
-import type { ActivityAction, ActivityEntity, ActivityEvent, Profile, ProjectMember } from '@/types'
+import type { ActivityAction, ActivityEntity, ActivityEvent, ClientMember, Profile } from '@/types'
 import type { AccessItem, Client, Payment, Project, ProjectNote, Task } from '@/types'
 
 const LOCAL_KEY = 'mydesk-data-v2'
@@ -16,7 +16,7 @@ export type Table =
   | 'payments'
   | 'project_notes'
   | 'profiles'
-  | 'project_members'
+  | 'client_members'
 
 type StateKey =
   | 'clients'
@@ -26,7 +26,7 @@ type StateKey =
   | 'payments'
   | 'notes'
   | 'profiles'
-  | 'projectMembers'
+  | 'clientMembers'
 
 const tableToKey: Record<Table, StateKey> = {
   clients: 'clients',
@@ -36,7 +36,7 @@ const tableToKey: Record<Table, StateKey> = {
   payments: 'payments',
   project_notes: 'notes',
   profiles: 'profiles',
-  project_members: 'projectMembers',
+  client_members: 'clientMembers',
 }
 
 type AnyRow = { id: string; created_at: string }
@@ -59,7 +59,7 @@ interface DataState {
   notes: ProjectNote[]
   activity: ActivityEvent[]
   profiles: Profile[]
-  projectMembers: ProjectMember[]
+  clientMembers: ClientMember[]
   /** The signed-in user's profile (null until loaded / in demo before init). */
   me: Profile | null
   init: () => Promise<void>
@@ -80,7 +80,7 @@ function snapshot(s: DataState): DemoData {
     notes: s.notes,
     activity: s.activity,
     profiles: s.profiles,
-    projectMembers: s.projectMembers,
+    clientMembers: s.clientMembers,
   }
 }
 
@@ -147,7 +147,7 @@ export const useData = create<DataState>((set, get) => {
     notes: [],
     activity: [],
     profiles: [],
-    projectMembers: [],
+    clientMembers: [],
     me: null,
 
     init: async () => {
@@ -168,7 +168,7 @@ export const useData = create<DataState>((set, get) => {
           supabase.from('project_notes').select('*').order('created_at', { ascending: false }),
           supabase.from('activity_log').select('*').order('created_at', { ascending: false }).limit(300),
           supabase.from('profiles').select('*').order('created_at', { ascending: true }),
-          supabase.from('project_members').select('*'),
+          supabase.from('client_members').select('*'),
           supabase.auth.getUser(),
         ])
       // Members are denied on payments by RLS-less tables erroring is fine; only surface
@@ -187,7 +187,7 @@ export const useData = create<DataState>((set, get) => {
         notes: (notes.data as ProjectNote[]) ?? [],
         activity: (activity.data as ActivityEvent[]) ?? [],
         profiles: profileRows,
-        projectMembers: (members.data as ProjectMember[]) ?? [],
+        clientMembers: (members.data as ClientMember[]) ?? [],
         me: profileRows.find((p) => p.id === user.data.user?.id) ?? null,
         ready: true,
       })

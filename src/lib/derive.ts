@@ -1,4 +1,4 @@
-import type { Client, Payment, PaymentStatus } from '@/types'
+import type { Client, ClientMember, Payment, PaymentStatus, Profile } from '@/types'
 import { formatMoney, isOverdue } from '@/lib/format'
 
 /** The one way to name a client anywhere in the UI — respects the per-client display preference. */
@@ -11,6 +11,26 @@ export function clientDisplayName(c?: Client | null) {
 export function clientSecondaryName(c?: Client | null) {
   if (!c) return null
   return c.use_company_name && c.company_name ? c.name : (c.company_name ?? null)
+}
+
+export function profileDisplayName(p: Profile) {
+  return p.display_name || p.email.split('@')[0] || 'User'
+}
+
+/**
+ * Who can be assigned a task on this client's projects: admins/owner always
+ * (they see everything), plus members explicitly granted this client.
+ */
+export function eligibleAssignees(
+  clientId: string | undefined,
+  profiles: Profile[],
+  clientMembers: ClientMember[],
+) {
+  if (!clientId) return profiles
+  const granted = new Set(
+    clientMembers.filter((m) => m.client_id === clientId).map((m) => m.user_id),
+  )
+  return profiles.filter((p) => p.role !== 'member' || granted.has(p.id))
 }
 
 /** A payment past its due date that isn't settled reads as overdue even if not manually flagged. */

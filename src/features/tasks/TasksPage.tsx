@@ -8,7 +8,8 @@ import { Select, type SelectOption } from '@/components/ui/select'
 import { ListSkeleton } from '@/components/ui/skeleton'
 import { SearchInput, Toolbar } from '@/components/ui/toolbar'
 import { useData } from '@/data/store'
-import { clientDisplayName } from '@/lib/derive'
+import { useIsAdmin } from '@/hooks/usePermissions'
+import { clientDisplayName, profileDisplayName } from '@/lib/derive'
 import { daysUntil } from '@/lib/format'
 import { listContainer } from '@/lib/motion'
 import { options, taskStatus } from '@/lib/status'
@@ -41,10 +42,13 @@ const DUE_ORDER = ['Overdue', 'Today', 'This week', 'Later', 'No due date', 'Wra
 
 /** Global task list — "what do I need to do today" without opening every project. */
 export function TasksPage() {
-  const { ready, tasks, projects, clients } = useData()
+  const { ready, tasks, projects, clients, profiles, me } = useData()
+  const isAdmin = useIsAdmin()
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<'all' | TaskStatus>('all')
   const [projectFilter, setProjectFilter] = useState('all')
+  // Members land on "assigned to me" first — the rest of their granted work is one click away.
+  const [assigneeFilter, setAssigneeFilter] = useState(() => (isAdmin ? 'all' : (me?.id ?? 'all')))
   const [grouping, setGrouping] = useState<'status' | 'due'>('due')
   const [formOpen, setFormOpen] = useState(false)
 
@@ -56,15 +60,26 @@ export function TasksPage() {
     }),
   ]
 
+  const assigneeOptions = [
+    { value: 'all', label: 'Everyone' },
+    { value: 'unassigned', label: 'Unassigned' },
+    ...profiles.map((p) => ({
+      value: p.id,
+      label: p.id === me?.id ? `${profileDisplayName(p)} (me)` : profileDisplayName(p),
+    })),
+  ]
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return tasks.filter(
       (t) =>
         (status === 'all' || t.status === status) &&
         (projectFilter === 'all' || t.project_id === projectFilter) &&
+        (assigneeFilter === 'all' ||
+          (assigneeFilter === 'unassigned' ? !t.assignee_id : t.assignee_id === assigneeFilter)) &&
         (!q || t.title.toLowerCase().includes(q)),
     )
-  }, [tasks, search, status, projectFilter])
+  }, [tasks, search, status, projectFilter, assigneeFilter])
 
   const groups = useMemo(() => {
     const byDue = (a: Task, b: Task) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999')
@@ -98,6 +113,7 @@ export function TasksPage() {
         <SearchInput value={search} onChange={setSearch} placeholder="Search tasks…" />
         <Select value={status} onChange={setStatus} options={statusFilter} aria-label="Filter by status" className="w-36" />
         <Select value={projectFilter} onChange={setProjectFilter} options={projectOptions} aria-label="Filter by project" className="w-56" />
+        <Select value={assigneeFilter} onChange={setAssigneeFilter} options={assigneeOptions} aria-label="Filter by assignee" className="w-40" />
         <Select value={grouping} onChange={setGrouping} options={groupOptions} aria-label="Grouping" className="ml-auto w-44" />
       </Toolbar>
 

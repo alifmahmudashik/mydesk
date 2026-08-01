@@ -108,8 +108,9 @@ create index if not exists idx_notes_project on project_notes (project_id);
 create index if not exists idx_activity_created on activity_log (created_at desc);
 
 -- Row level security: single owner baseline.
--- NOTE (fresh installs): after this file, also run migration-002, -003 and -004 in order —
--- migration-004 replaces these policies with role-based ones (owner/admin/member + project sharing).
+-- NOTE (fresh installs): after this file, also run migrations 002-005 in order —
+-- migration-004 replaces these policies with role-based ones (owner/admin/member) and
+-- migration-005 moves collaborator access grants from per-project to per-client.
 do $$
 declare t text;
 begin

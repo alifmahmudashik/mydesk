@@ -9,6 +9,7 @@ import { useData } from '@/data/store'
 import { clientDisplayName, clientSecondaryName } from '@/lib/derive'
 import { options, paymentStatus, priorityMeta, projectStatus } from '@/lib/status'
 import type { Payment, PaymentStatus, Priority, Project, ProjectStatus } from '@/types'
+import { ClientAccessEditor } from '@/features/team/ClientAccessEditor'
 
 const statusOptions = options(projectStatus)
 const priorityOptions = options(priorityMeta)
@@ -261,6 +262,15 @@ export function ProjectFormModal({ open, onClose, project, clientId }: ProjectFo
             <Field label="Tags" hint="Comma-separated, e.g. GTM, sGTM, CRO">
               <Input value={form.tags} onChange={(e) => set('tags', e.target.value)} />
             </Field>
+          </FormSection>
+        )}
+
+        {form.client_id && (
+          <FormSection title="Team access">
+            <p className="mb-3 text-[13px] text-muted-foreground">
+              Checked teammates can see every project under this client, not just this one.
+            </p>
+            <ClientAccessEditor clientId={form.client_id} />
           </FormSection>
         )}
       </div>

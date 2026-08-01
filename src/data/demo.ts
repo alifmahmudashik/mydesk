@@ -3,10 +3,10 @@ import type {
   AccessItem,
   ActivityEvent,
   Client,
+  ClientMember,
   Payment,
   Profile,
   Project,
-  ProjectMember,
   ProjectNote,
   Task,
 } from '@/types'
@@ -25,7 +25,7 @@ export interface DemoData {
   notes: ProjectNote[]
   activity: ActivityEvent[]
   profiles: Profile[]
-  projectMembers: ProjectMember[]
+  clientMembers: ClientMember[]
 }
 
 export function demoData(): DemoData {
@@ -48,10 +48,10 @@ export function demoData(): DemoData {
   ]
 
   const tasks: Task[] = [
-    { id: 't1', project_id: 'p1', title: 'Rebuild checkout datalayer events', status: 'in_progress', priority: 'urgent', due_date: day(0), created_at: past(12) },
-    { id: 't2', project_id: 'p1', title: 'QA purchase event dedup (browser vs server)', status: 'todo', priority: 'high', due_date: day(1), created_at: past(10) },
+    { id: 't1', project_id: 'p1', title: 'Rebuild checkout datalayer events', status: 'in_progress', priority: 'urgent', due_date: day(0), assignee_id: 'u2', created_at: past(12) },
+    { id: 't2', project_id: 'p1', title: 'QA purchase event dedup (browser vs server)', status: 'todo', priority: 'high', due_date: day(1), assignee_id: 'u1', created_at: past(10) },
     { id: 't3', project_id: 'p1', title: 'Map custom dimensions in GA4 admin', status: 'done', priority: 'medium', due_date: day(-4), created_at: past(14) },
-    { id: 't4', project_id: 'p1', title: 'Write handover doc for Sarah', status: 'todo', priority: 'medium', due_date: day(3), created_at: past(4) },
+    { id: 't4', project_id: 'p1', title: 'Write handover doc for Sarah', status: 'todo', priority: 'medium', due_date: day(3), assignee_id: 'u2', created_at: past(4) },
     { id: 't5', project_id: 'p3', title: 'Configure Stape server container', status: 'done', priority: 'high', due_date: day(-8), created_at: past(20) },
     { id: 't6', project_id: 'p3', title: 'Move Meta CAPI to server-side', status: 'review', priority: 'high', due_date: day(2), created_at: past(9) },
     { id: 't7', project_id: 'p3', title: 'Waiting: DNS record for tagging subdomain', status: 'in_progress', priority: 'urgent', due_date: day(-1), notes: 'Blocked on Lumen IT — chased on Monday.', created_at: past(7) },
@@ -108,9 +108,11 @@ export function demoData(): DemoData {
     { id: 'u2', email: 'mahedi@mydesk.app', display_name: 'Mahedi', role: 'member', created_at: past(30) },
   ]
 
-  const projectMembers: ProjectMember[] = [
-    { id: 'pm1', project_id: 'p1', user_id: 'u2', created_at: past(20) },
+  // u2 (Mahedi) has access to the whole Northwind Outfitters account — every
+  // project under c1, not just one — matching the client-level access model.
+  const clientMembers: ClientMember[] = [
+    { id: 'cm1', client_id: 'c1', user_id: 'u2', created_at: past(20) },
   ]
 
-  return { clients, projects, tasks, accessItems, payments, notes, activity, profiles, projectMembers }
+  return { clients, projects, tasks, accessItems, payments, notes, activity, profiles, clientMembers }
 }
