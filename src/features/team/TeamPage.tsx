@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { ShieldCheck, UserRound } from 'lucide-react'
+import { UserRound } from 'lucide-react'
 import { Avatar } from '@/components/ui/avatar'
 import { Card } from '@/components/ui/card'
 import { CheckboxRow } from '@/components/ui/checkbox'
@@ -9,7 +9,6 @@ import { Select, type SelectOption } from '@/components/ui/select'
 import { ListSkeleton } from '@/components/ui/skeleton'
 import { StatusPill } from '@/components/ui/status-pill'
 import { useData } from '@/data/store'
-import { useIsAdmin, useIsOwner } from '@/hooks/usePermissions'
 import { clientDisplayName, profileDisplayName } from '@/lib/derive'
 import { listContainer, listItem } from '@/lib/motion'
 import type { ClientMember, Profile, Role } from '@/types'
@@ -25,12 +24,13 @@ const roleOptions: SelectOption<Role>[] = [
   { value: 'member', label: 'Member' },
 ]
 
-/** Team management: roles (owner-only) and per-member client access (admins). */
+/**
+ * Team management, open to everyone: roles (promote/demote anyone but yourself
+ * or the owner) and per-client access (grant clients you yourself can see).
+ */
 export function TeamPage() {
   const { ready, profiles, projects, clients, clientMembers, me, updateRow, createRow, deleteRow } =
     useData()
-  const isAdmin = useIsAdmin()
-  const isOwner = useIsOwner()
 
   if (!ready) {
     return (
@@ -38,16 +38,6 @@ export function TeamPage() {
         <PageHeader title="Team" />
         <ListSkeleton rows={3} />
       </>
-    )
-  }
-
-  if (!isAdmin) {
-    return (
-      <EmptyState
-        icon={ShieldCheck}
-        title="Admins only"
-        description="Ask the workspace owner if you need access changes."
-      />
     )
   }
 
@@ -71,15 +61,16 @@ export function TeamPage() {
     <>
       <PageHeader
         title="Team"
-        description="Who can sign in, their role, and which clients members can see."
+        description="Who can sign in, their role, and which clients they can see."
       />
 
       <p className="mb-4 rounded-xl border border-dashed px-4 py-3 text-[13px] leading-relaxed text-muted-foreground">
         Anyone can create an account from the sign-in page — they start as a{' '}
-        <span className="font-medium text-foreground">member</span> with no access until you grant
-        clients below. Granting a client gives every project (and task) under it, including work
-        assigned to teammates — client contact details, budgets, and payments stay hidden.{' '}
-        <span className="font-medium text-foreground">Admins</span> see everything you see.
+        <span className="font-medium text-foreground">member</span> with no access until granted a
+        client here. A granted client unlocks every project and task under it — create, edit, delete,
+        assign teammates, invite others — including work assigned to someone else. Client contact
+        details, budgets, and payments stay visible to{' '}
+        <span className="font-medium text-foreground">admins</span> only, who also see every client.
       </p>
 
       <motion.div variants={listContainer} initial="initial" animate="animate" className="space-y-4">
@@ -99,7 +90,7 @@ export function TeamPage() {
                       </p>
                       <p className="truncate text-xs text-muted-foreground">{profile.email}</p>
                     </div>
-                    {profile.role === 'owner' || isSelf || !isOwner ? (
+                    {profile.role === 'owner' || isSelf ? (
                       <StatusPill meta={roleMeta[profile.role]} animate={false} />
                     ) : (
                       <Select

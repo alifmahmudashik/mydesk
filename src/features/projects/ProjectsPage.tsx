@@ -80,12 +80,10 @@ export function ProjectsPage() {
         title="Projects"
         description="Every engagement, its status, and what it's worth."
         actions={
-          isAdmin && (
-            <Button onClick={() => setFormOpen(true)}>
-              <Plus strokeWidth={1.75} />
-              New project
-            </Button>
-          )
+          <Button onClick={() => setFormOpen(true)}>
+            <Plus strokeWidth={1.75} />
+            New project
+          </Button>
         }
       />
       <Toolbar>

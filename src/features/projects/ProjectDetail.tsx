@@ -21,7 +21,7 @@ import { NotesThread } from '@/features/projects/NotesThread'
 import { ProjectFormModal } from '@/features/projects/ProjectFormModal'
 import { QuickAddTask } from '@/features/tasks/QuickAddTask'
 import { TaskItem } from '@/features/tasks/TaskItem'
-import { ClientAccessEditor, ClientTeamAvatars } from '@/features/team/ClientAccessEditor'
+import { ClientAccessEditor } from '@/features/team/ClientAccessEditor'
 
 const statusOptions = options(projectStatus)
 const priorityOptions = options(priorityMeta)
@@ -122,24 +122,22 @@ export function ProjectDetail({ projectId, onDeleted }: ProjectDetailProps) {
             ))}
           </div>
         </div>
-        {isAdmin && (
-          <div className="flex shrink-0 items-center gap-1.5">
-            <Button variant="secondary" size="sm" onClick={() => setEditOpen(true)}>
-              <Pencil strokeWidth={1.75} />
-              Edit
-            </Button>
-            <Dropdown
-              trigger={
-                <Button variant="ghost" size="iconSm" aria-label="More project actions">
-                  <MoreHorizontal strokeWidth={1.75} />
-                </Button>
-              }
-              items={[
-                { label: 'Delete project', icon: Trash2, danger: true, onSelect: () => setConfirmDelete(true) },
-              ]}
-            />
-          </div>
-        )}
+        <div className="flex shrink-0 items-center gap-1.5">
+          <Button variant="secondary" size="sm" onClick={() => setEditOpen(true)}>
+            <Pencil strokeWidth={1.75} />
+            Edit
+          </Button>
+          <Dropdown
+            trigger={
+              <Button variant="ghost" size="iconSm" aria-label="More project actions">
+                <MoreHorizontal strokeWidth={1.75} />
+              </Button>
+            }
+            items={[
+              { label: 'Delete project', icon: Trash2, danger: true, onSelect: () => setConfirmDelete(true) },
+            ]}
+          />
+        </div>
       </div>
 
       <Tabs<TabKey>
@@ -210,19 +208,15 @@ export function ProjectDetail({ projectId, onDeleted }: ProjectDetailProps) {
                 </section>
                 )}
 
-                {isAdmin ? (
-                  <section>
-                    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Team access
-                    </h3>
-                    <p className="mb-3 text-[13px] text-muted-foreground">
-                      Checked teammates can see every project under this client, not just this one.
-                    </p>
-                    <ClientAccessEditor clientId={project.client_id} />
-                  </section>
-                ) : (
-                  <ClientTeamAvatars clientId={project.client_id} />
-                )}
+                <section>
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Team access
+                  </h3>
+                  <p className="mb-3 text-[13px] text-muted-foreground">
+                    Checked teammates can see every project under this client, not just this one.
+                  </p>
+                  <ClientAccessEditor clientId={project.client_id} />
+                </section>
 
                 <section>
                   <div className="mb-2 flex items-center justify-between">

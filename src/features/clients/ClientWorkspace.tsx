@@ -178,11 +178,9 @@ export function ClientWorkspace() {
             <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Projects · {clientProjects.length}
             </h2>
-            {isAdmin && (
-              <Button variant="ghost" size="iconSm" aria-label="New project" onClick={() => setProjectFormOpen(true)}>
-                <Plus strokeWidth={1.75} />
-              </Button>
-            )}
+            <Button variant="ghost" size="iconSm" aria-label="New project" onClick={() => setProjectFormOpen(true)}>
+              <Plus strokeWidth={1.75} />
+            </Button>
           </div>
 
           <motion.div variants={listContainer} initial="initial" animate="animate" className="space-y-2">

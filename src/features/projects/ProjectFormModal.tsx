@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
 import { useData } from '@/data/store'
+import { useIsAdmin } from '@/hooks/usePermissions'
 import { clientDisplayName, clientSecondaryName } from '@/lib/derive'
 import { options, paymentStatus, priorityMeta, projectStatus } from '@/lib/status'
 import type { Payment, PaymentStatus, Priority, Project, ProjectStatus } from '@/types'
@@ -30,6 +31,7 @@ export function ProjectFormModal({ open, onClose, project, clientId }: ProjectFo
   const payments = useData((s) => s.payments)
   const createRow = useData((s) => s.createRow)
   const updateRow = useData((s) => s.updateRow)
+  const isAdmin = useIsAdmin()
 
   const [form, setForm] = useState({
     title: project?.title ?? '',
@@ -208,27 +210,29 @@ export function ProjectFormModal({ open, onClose, project, clientId }: ProjectFo
           </div>
         </FormSection>
 
-        <FormSection title="Budget & timeline">
+        <FormSection title={isAdmin ? 'Budget & timeline' : 'Timeline'}>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Field label="Budget" error={errors.amount} hint={project ? undefined : 'Auto-creates an invoice.'}>
-              <div className="flex gap-2">
-                <Input
-                  inputMode="decimal"
-                  value={form.amount}
-                  onChange={(e) => set('amount', e.target.value)}
-                  placeholder="0"
-                  className="tnum"
-                  aria-label="Project amount"
-                />
-                <Select
-                  value={form.currency}
-                  onChange={(v) => set('currency', v)}
-                  options={currencyOptions}
-                  className="w-22 shrink-0"
-                  aria-label="Currency"
-                />
-              </div>
-            </Field>
+            {isAdmin && (
+              <Field label="Budget" error={errors.amount} hint={project ? undefined : 'Auto-creates an invoice.'}>
+                <div className="flex gap-2">
+                  <Input
+                    inputMode="decimal"
+                    value={form.amount}
+                    onChange={(e) => set('amount', e.target.value)}
+                    placeholder="0"
+                    className="tnum"
+                    aria-label="Project amount"
+                  />
+                  <Select
+                    value={form.currency}
+                    onChange={(v) => set('currency', v)}
+                    options={currencyOptions}
+                    className="w-22 shrink-0"
+                    aria-label="Currency"
+                  />
+                </div>
+              </Field>
+            )}
             <Field label="Start date">
               <DatePicker value={form.start_date} onChange={(v) => set('start_date', v)} />
             </Field>
@@ -246,13 +250,15 @@ export function ProjectFormModal({ open, onClose, project, clientId }: ProjectFo
             <Field label="Priority">
               <Select value={form.priority} onChange={(v) => set('priority', v)} options={priorityOptions} />
             </Field>
-            <Field label="Payment">
-              <Select
-                value={form.payment_status}
-                onChange={(v) => set('payment_status', v)}
-                options={paymentOptions}
-              />
-            </Field>
+            {isAdmin && (
+              <Field label="Payment">
+                <Select
+                  value={form.payment_status}
+                  onChange={(v) => set('payment_status', v)}
+                  options={paymentOptions}
+                />
+              </Field>
+            )}
           </div>
         </FormSection>
 

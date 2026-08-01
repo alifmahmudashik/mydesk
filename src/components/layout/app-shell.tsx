@@ -33,7 +33,7 @@ const NAV = [
   { to: '/projects', label: 'Projects', icon: FolderKanban },
   { to: '/tasks', label: 'My Tasks', icon: ListTodo },
   { to: '/payments', label: 'Payments', icon: CreditCard, adminOnly: true },
-  { to: '/team', label: 'Team', icon: Users, adminOnly: true },
+  { to: '/team', label: 'Team', icon: Users },
 ]
 
 function Logo() {

@@ -84,6 +84,27 @@ function snapshot(s: DataState): DemoData {
   }
 }
 
+/**
+ * Demo mode has no real RLS, so previewing a member (?as=) would otherwise still see every
+ * client/project — mimic what Postgres would actually return them.
+ */
+function scopedToMember(data: DemoData, me: Profile): DemoData {
+  const clientIds = new Set(data.clientMembers.filter((m) => m.user_id === me.id).map((m) => m.client_id))
+  const projects = data.projects.filter((p) => clientIds.has(p.client_id))
+  const projectIds = new Set(projects.map((p) => p.id))
+  return {
+    ...data,
+    clients: data.clients.filter((c) => clientIds.has(c.id)),
+    projects,
+    tasks: data.tasks.filter((t) => projectIds.has(t.project_id)),
+    accessItems: data.accessItems.filter((a) => projectIds.has(a.project_id)),
+    notes: data.notes.filter((n) => projectIds.has(n.project_id)),
+    clientMembers: data.clientMembers.filter((m) => clientIds.has(m.client_id)),
+    payments: [],
+    activity: [],
+  }
+}
+
 function saveLocal(data: DemoData) {
   try {
     localStorage.setItem(LOCAL_KEY, JSON.stringify(data))
@@ -102,9 +123,12 @@ function loadLocal(): DemoData | null {
 }
 
 export const useData = create<DataState>((set, get) => {
-  /** Persist current state (demo → localStorage; supabase persistence happens per-op). */
+  /** Persist current state (demo → localStorage; supabase persistence happens per-op).
+   *  Skipped while previewing another role (?as=) so a scoped preview can't overwrite the
+   *  full owner dataset other tabs/sessions rely on. */
   const persistLocal = () => {
-    if (get().demoMode) saveLocal(snapshot(get()))
+    const previewing = new URLSearchParams(window.location.search).has('as')
+    if (get().demoMode && !previewing) saveLocal(snapshot(get()))
   }
 
   const revert = (prev: DemoData) => {
@@ -155,7 +179,14 @@ export const useData = create<DataState>((set, get) => {
         // Demo mode: localStorage or fresh seed (older saves may lack newer keys).
         const data = { ...demoData(), ...(loadLocal() ?? {}) }
         await new Promise((r) => setTimeout(r, 450))
-        set({ ...data, me: data.profiles.find((p) => p.role === 'owner') ?? null, ready: true })
+        // ?as=member (or a profile id) previews another role's restricted view — demo mode only.
+        const as = new URLSearchParams(window.location.search).get('as')
+        const me =
+          (as && data.profiles.find((p) => p.id === as || p.role === as)) ||
+          data.profiles.find((p) => p.role === 'owner') ||
+          null
+        const view = me && me.role === 'member' ? scopedToMember(data, me) : data
+        set({ ...view, me, ready: true })
         return
       }
       const [clients, projects, tasks, accessItems, payments, notes, activity, profiles, members, user] =
