@@ -274,31 +274,25 @@ begin
   end loop;
 end $$;
 
--- Clean slate: drop every policy name used across this file's history so this
--- script produces the same end state no matter which earlier version ran last.
+-- Clean slate: drop every policy that actually exists on these tables, whatever
+-- it's named. A name-based drop list can't catch policies from schema versions
+-- it doesn't know about — and Postgres OR's multiple permissive policies
+-- together, so one leftover "select using (true)" from an old version silently
+-- overrides every restriction added since. Reading directly from pg_policies
+-- means nothing can ever survive a re-run.
 do $$
-declare
-  t text;
-  p text;
+declare r record;
 begin
-  foreach t in array array['clients','projects','tasks','access_items','payments','project_notes','activity_log'] loop
-    execute format('drop policy if exists "owner_all" on %I', t);
+  for r in
+    select schemaname, tablename, policyname from pg_policies
+    where schemaname = 'public'
+      and tablename in (
+        'clients','projects','tasks','access_items','payments',
+        'project_notes','activity_log','profiles','client_members'
+      )
+  loop
+    execute format('drop policy if exists %I on %I.%I', r.policyname, r.schemaname, r.tablename);
   end loop;
-  foreach p in array array['admin_all','member_all','member_select','member_update'] loop
-    foreach t in array array['clients','projects','tasks','access_items','payments','project_notes','activity_log'] loop
-      execute format('drop policy if exists "%s_%s" on %I', t, p, t);
-    end loop;
-  end loop;
-  execute 'drop policy if exists "profiles_select" on profiles';
-  execute 'drop policy if exists "profiles_update" on profiles';
-  -- activity_log's policies are prefixed "activity", not the table name "activity_log",
-  -- so the generic t||'_'||p loop above doesn't catch them — drop explicitly.
-  execute 'drop policy if exists "activity_admin_all" on activity_log';
-  execute 'drop policy if exists "activity_member_insert" on activity_log';
-  execute 'drop policy if exists "activity_member_select" on activity_log';
-  execute 'drop policy if exists "cm_admin_all" on client_members';
-  execute 'drop policy if exists "cm_member_select" on client_members';
-  execute 'drop policy if exists "cm_all" on client_members';
 end $$;
 
 -- profiles: any signed-in user can see the team and attempt role changes;
