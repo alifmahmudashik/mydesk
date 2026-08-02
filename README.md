@@ -22,7 +22,8 @@ npm run dev
 - **Demo mode** (no `.env`): seeded demo data, fully interactive, persisted to localStorage.
 - **Supabase mode**:
   1. Create a [Supabase](https://supabase.com) project
-  2. In the SQL editor run, in order: `supabase/schema.sql`, then `migration-002` through `-006`
+  2. In the SQL editor, paste and run the whole of `supabase/schema.sql` (one file, idempotent —
+     safe to re-run any time, including on a database that already has some of it applied)
   3. Copy `.env.example` → `.env` and fill in your project URL + anon/publishable key
   4. Restart the dev server and sign up — the first account becomes the workspace owner
 
@@ -41,6 +42,5 @@ src/
   components/ui/       # THE component kit — Button, StatusPill, Modal, DatePicker, RichText…
   components/layout/   # app shell (sidebar + clients list), page transitions
   features/            # dashboard, clients, projects, tasks, payments, team, auth
-supabase/              # schema.sql + ordered migrations (multi-project invoices, display
-                       # names, collaborators/RLS)
+supabase/schema.sql    # the entire database setup — tables, RLS, functions — one idempotent file
 ```
