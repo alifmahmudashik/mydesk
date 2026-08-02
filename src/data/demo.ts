@@ -4,6 +4,8 @@ import type {
   ActivityEvent,
   Client,
   ClientMember,
+  Invoice,
+  InvoiceSettings,
   Payment,
   Profile,
   Project,
@@ -26,6 +28,8 @@ export interface DemoData {
   activity: ActivityEvent[]
   profiles: Profile[]
   clientMembers: ClientMember[]
+  invoices: Invoice[]
+  invoiceSettings: InvoiceSettings | null
 }
 
 export function demoData(): DemoData {
@@ -114,5 +118,41 @@ export function demoData(): DemoData {
     { id: 'cm1', client_id: 'c1', user_id: 'u2', created_at: past(20) },
   ]
 
-  return { clients, projects, tasks, accessItems, payments, notes, activity, profiles, clientMembers }
+  const invoiceSettings: InvoiceSettings = {
+    id: 'inv-settings-1',
+    business_name: 'Your Business Name',
+    business_address: '123 Commercial Road\nYour City, Postcode\nYour Country',
+    email: 'you@example.com',
+    brand_color: '#6366f1',
+    payment_fields: [
+      { label: 'Bank name', value: 'Your Bank' },
+      { label: 'Account number', value: '000000000' },
+    ],
+    default_note: 'It was great doing business with you, and I appreciate your continued collaboration.',
+    created_at: past(200),
+  }
+
+  const invoices: Invoice[] = [
+    {
+      id: 'inv1',
+      client_id: 'c1',
+      number: 'NW-01',
+      issue_date: day(-10),
+      due_date: day(4),
+      currency: 'USD',
+      line_items: [
+        { description: 'Shopify GA4 + GTM rebuild', price: 3200, qty: 1 },
+        { description: 'Klaviyo flow tracking', price: 900, qty: 1 },
+      ],
+      tax_rate: 0,
+      notes: 'Covers work delivered this month.',
+      brand_color: '#6366f1',
+      created_at: past(10),
+    },
+  ]
+
+  return {
+    clients, projects, tasks, accessItems, payments, notes, activity, profiles, clientMembers,
+    invoices, invoiceSettings,
+  }
 }

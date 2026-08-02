@@ -13,6 +13,7 @@ import { ProjectsPage } from '@/features/projects/ProjectsPage'
 import { TasksPage } from '@/features/tasks/TasksPage'
 import { PaymentsPage } from '@/features/payments/PaymentsPage'
 import { TeamPage } from '@/features/team/TeamPage'
+import { InvoicesPage } from '@/features/invoices/InvoicesPage'
 
 function AnimatedRoutes() {
   const location = useLocation()
@@ -26,6 +27,7 @@ function AnimatedRoutes() {
         <Route path="/projects" element={<Page><ProjectsPage /></Page>} />
         <Route path="/tasks" element={<Page><TasksPage /></Page>} />
         <Route path="/payments" element={<Page><PaymentsPage /></Page>} />
+        <Route path="/invoices" element={<Page><InvoicesPage /></Page>} />
         <Route path="/team" element={<Page><TeamPage /></Page>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

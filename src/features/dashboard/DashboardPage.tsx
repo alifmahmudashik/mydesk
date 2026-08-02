@@ -71,7 +71,7 @@ export function DashboardPage() {
       projects.filter(
         (p) =>
           p.status === 'blocked' ||
-          (p.priority === 'urgent' && !['completed', 'cancelled'].includes(p.status)),
+          (p.priority === 'urgent' && !['completed', 'finished', 'cancelled'].includes(p.status)),
       ),
     [projects],
   )

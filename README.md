@@ -8,7 +8,10 @@ React 19 + TypeScript + Vite · Tailwind CSS v4 · Framer Motion · Radix UI · 
 
 - **Asana-style workspace** — clients in the sidebar, project cards per client, tabbed project detail (Overview / Tasks / Checklist / Notes) with a rich-text description
 - **Payments/invoices** — one invoice can cover multiple projects; creating a project with a budget auto-creates its invoice; confetti when you mark one paid
-- **Team & roles** — owner / admin / member; granting a member a client gives them full control over every project and task under it — create, edit, delete, assign teammates, invite others, filterable by assignee — while budgets, payments, and client contact details stay admin-only, enforced by Postgres row-level security
+- **Finished projects** — a distinct status from Completed: marking a project Finished settles its invoice(s) as paid automatically and tucks it out of the way, like archived clients
+- **Export as chat** — multi-select a client's projects and export a formatted work summary (titles, amounts, total) ready to paste into email or chat
+- **Invoice maker** (admin-only) — build a branded, per-client invoice (country/timezone autocomplete, company address, brand color, custom fields) and export it to PDF
+- **Team & roles** — owner / admin / member; granting a member a client gives them full control over every project and task under it — create, edit, delete, assign teammates, invite others, filterable by assignee — while budgets, payments, invoices, and client contact details stay admin-only, enforced by Postgres row-level security
 - **Design system first** — one component kit, one status-color convention, full dark mode, optimistic updates + skeleton loading
 - **Demo mode** — runs fully client-side with seeded data when no Supabase env is set
 

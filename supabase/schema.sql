@@ -32,6 +32,10 @@ create table if not exists clients (
   timezone text,
   status text not null default 'active' check (status in ('active','paused','completed','archived')),
   notes text,
+  company_address text,
+  brand_color text,
+  -- Extra label/value pairs shown on this client's invoices (e.g. "VAT Number").
+  invoice_fields jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now()
 );
 
@@ -46,7 +50,7 @@ create table if not exists projects (
   currency text not null default 'USD',
   start_date date,
   due_date date,
-  status text not null default 'not_started' check (status in ('not_started','in_progress','waiting_for_client','blocked','completed','cancelled')),
+  status text not null default 'not_started' check (status in ('not_started','in_progress','waiting_for_client','blocked','completed','finished','cancelled')),
   priority text not null default 'medium' check (priority in ('low','medium','high','urgent')),
   payment_status text not null default 'unpaid' check (payment_status in ('unpaid','partial','paid','refunded','overdue')),
   tags text[] not null default '{}',
@@ -133,6 +137,36 @@ create table if not exists client_members (
   unique (client_id, user_id)
 );
 
+-- The sender's own business/payment details, reused as the default on every
+-- invoice. Singleton in practice (the app always upserts the one row it finds).
+create table if not exists invoice_settings (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  business_name text,
+  business_address text,
+  email text,
+  brand_color text,
+  payment_fields jsonb not null default '[]'::jsonb,
+  default_note text,
+  created_at timestamptz not null default now()
+);
+
+-- Generated invoices — admin-only, never exposed to members (same as payments).
+create table if not exists invoices (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  client_id uuid not null references clients (id) on delete cascade,
+  number text not null,
+  issue_date date,
+  due_date date,
+  currency text not null default 'USD',
+  line_items jsonb not null default '[]'::jsonb,
+  tax_rate numeric(6,3) not null default 0,
+  notes text,
+  brand_color text,
+  created_at timestamptz not null default now()
+);
+
 -- ============================================================================
 -- Column safety net — adds anything an older partial run might be missing.
 -- (create table if not exists above only creates NEW tables; it can't retrofit
@@ -140,9 +174,19 @@ create table if not exists client_members (
 -- ============================================================================
 
 alter table clients add column if not exists use_company_name boolean not null default false;
+alter table clients add column if not exists company_address text;
+alter table clients add column if not exists brand_color text;
+alter table clients add column if not exists invoice_fields jsonb not null default '[]'::jsonb;
 alter table tasks add column if not exists assignee_id uuid references auth.users (id);
 alter table activity_log add column if not exists actor_id uuid default auth.uid();
 alter table payments add column if not exists project_ids uuid[] not null default '{}';
+
+-- 'finished' is a newer addition to the status list — widen the check constraint
+-- on databases created before it existed (a plain CREATE TABLE IF NOT EXISTS above
+-- can't alter a constraint on a table that's already there).
+alter table projects drop constraint if exists projects_status_check;
+alter table projects add constraint projects_status_check
+  check (status in ('not_started','in_progress','waiting_for_client','blocked','completed','finished','cancelled'));
 
 -- Old single-project payments column: migrate any data over, then drop it.
 do $$
@@ -184,6 +228,7 @@ create index if not exists idx_payments_client on payments (client_id);
 create index if not exists idx_payments_projects on payments using gin (project_ids);
 create index if not exists idx_notes_project on project_notes (project_id);
 create index if not exists idx_activity_created on activity_log (created_at desc);
+create index if not exists idx_invoices_client on invoices (client_id);
 
 -- ============================================================================
 -- Functions & triggers
@@ -268,7 +313,8 @@ declare t text;
 begin
   foreach t in array array[
     'clients','projects','tasks','access_items','payments',
-    'project_notes','activity_log','profiles','client_members'
+    'project_notes','activity_log','profiles','client_members',
+    'invoice_settings','invoices'
   ] loop
     execute format('alter table %I enable row level security', t);
   end loop;
@@ -288,7 +334,8 @@ begin
     where schemaname = 'public'
       and tablename in (
         'clients','projects','tasks','access_items','payments',
-        'project_notes','activity_log','profiles','client_members'
+        'project_notes','activity_log','profiles','client_members',
+        'invoice_settings','invoices'
       )
   loop
     execute format('drop policy if exists %I on %I.%I', r.policyname, r.schemaname, r.tablename);
@@ -329,8 +376,10 @@ begin
   end loop;
 end $$;
 
--- payments: strictly admin-only (never granted to members).
+-- payments / invoice_settings / invoices: strictly admin-only (never granted to members).
 create policy "payments_admin_all" on payments for all using (is_admin()) with check (is_admin());
+create policy "invoice_settings_admin_all" on invoice_settings for all using (is_admin()) with check (is_admin());
+create policy "invoices_admin_all" on invoices for all using (is_admin()) with check (is_admin());
 
 -- activity_log: admins see all; members write their own entries and read them back.
 create policy "activity_admin_all" on activity_log for all using (is_admin()) with check (is_admin());

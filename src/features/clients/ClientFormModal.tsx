@@ -1,15 +1,20 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { CheckboxRow } from '@/components/ui/checkbox'
-import { Field } from '@/components/ui/field'
+import { Combobox } from '@/components/ui/combobox'
+import { Field, FormSection } from '@/components/ui/field'
 import { Input, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
 import { useData } from '@/data/store'
+import { allTimezones, COUNTRIES, timezoneForCountry } from '@/lib/geo'
 import { clientStatus, options } from '@/lib/status'
-import type { Client, ClientStatus } from '@/types'
+import type { Client, ClientStatus, InvoiceField } from '@/types'
+import { InvoiceFieldsEditor } from '@/features/invoices/InvoiceFieldsEditor'
 
 const statusOptions = options(clientStatus)
+const countryNames = COUNTRIES.map((c) => c.name)
+const timezoneNames = allTimezones()
 
 interface ClientFormModalProps {
   open: boolean
@@ -33,6 +38,9 @@ export function ClientFormModal({ open, onClose, client }: ClientFormModalProps)
     status: client?.status ?? ('active' as ClientStatus),
     notes: client?.notes ?? '',
     use_company_name: client?.use_company_name ?? false,
+    company_address: client?.company_address ?? '',
+    brand_color: client?.brand_color ?? '#6366f1',
+    invoice_fields: client?.invoice_fields ?? ([] as InvoiceField[]),
   })
   const [nameError, setNameError] = useState<string>()
 
@@ -55,6 +63,9 @@ export function ClientFormModal({ open, onClose, client }: ClientFormModalProps)
       country: form.country.trim() || null,
       timezone: form.timezone.trim() || null,
       notes: form.notes.trim() || null,
+      company_address: form.company_address.trim() || null,
+      brand_color: form.brand_color || null,
+      invoice_fields: form.invoice_fields.filter((f) => f.label.trim() || f.value.trim()),
     }
     if (client) {
       updateRow('clients', client.id, data, {
@@ -147,10 +158,24 @@ export function ClientFormModal({ open, onClose, client }: ClientFormModalProps)
           <Select value={form.status} onChange={(v) => set('status', v)} options={statusOptions} />
         </Field>
         <Field label="Country">
-          <Input value={form.country} onChange={(e) => set('country', e.target.value)} />
+          <Combobox
+            value={form.country}
+            onChange={(v) => {
+              set('country', v)
+              const tz = timezoneForCountry(v)
+              if (tz) set('timezone', tz)
+            }}
+            options={countryNames}
+            placeholder="Select a country"
+          />
         </Field>
-        <Field label="Timezone" hint="e.g. Europe/Berlin — handy across regions.">
-          <Input value={form.timezone} onChange={(e) => set('timezone', e.target.value)} />
+        <Field label="Timezone" hint="Auto-filled from country — override if needed.">
+          <Combobox
+            value={form.timezone}
+            onChange={(v) => set('timezone', v)}
+            options={timezoneNames}
+            placeholder="Select a timezone"
+          />
         </Field>
         <Field label="Notes" className="sm:col-span-2">
           <Textarea
@@ -159,6 +184,42 @@ export function ClientFormModal({ open, onClose, client }: ClientFormModalProps)
             placeholder="Preferences, context, anything worth remembering…"
           />
         </Field>
+      </div>
+
+      <div className="mt-4 border-t pt-1">
+        <FormSection title="Invoicing">
+          <div className="space-y-4">
+            <Field label="Company address" hint="Shown as the “Invoice to” address on this client's invoices.">
+              <Textarea
+                value={form.company_address}
+                onChange={(e) => set('company_address', e.target.value)}
+                placeholder={'123 Commercial Road\nCity, Postcode\nCountry'}
+              />
+            </Field>
+            <Field label="Brand color" hint="Accent color used on this client's invoices.">
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={form.brand_color}
+                  onChange={(e) => set('brand_color', e.target.value)}
+                  className="size-9 shrink-0 cursor-pointer rounded-lg border bg-surface p-1"
+                  aria-label="Brand color"
+                />
+                <Input
+                  value={form.brand_color}
+                  onChange={(e) => set('brand_color', e.target.value)}
+                  className="w-32 uppercase"
+                />
+              </div>
+            </Field>
+            <Field label="Additional invoice fields" hint="e.g. VAT Number, Account manager — shown on every invoice for this client.">
+              <InvoiceFieldsEditor
+                value={form.invoice_fields}
+                onChange={(fields) => set('invoice_fields', fields)}
+              />
+            </Field>
+          </div>
+        </FormSection>
       </div>
     </Modal>
   )

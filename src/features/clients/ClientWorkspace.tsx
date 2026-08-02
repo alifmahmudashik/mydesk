@@ -1,22 +1,117 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowLeft, CalendarDays, Clock, FolderKanban, Globe, Mail, MapPin, Pencil, Phone, Plus } from 'lucide-react'
+import {
+  ArrowLeft,
+  CalendarDays,
+  Check,
+  CheckSquare,
+  ChevronRight,
+  Clock,
+  Copy,
+  FolderKanban,
+  Globe,
+  Mail,
+  MapPin,
+  MessageSquareText,
+  Pencil,
+  Phone,
+  Plus,
+  X,
+} from 'lucide-react'
+import { toast } from 'sonner'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
+import { Modal } from '@/components/ui/modal'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusPill } from '@/components/ui/status-pill'
 import { useData } from '@/data/store'
 import { useIsAdmin } from '@/hooks/usePermissions'
 import { clientDisplayName, clientSecondaryName, isOpenPayment, sumByCurrency } from '@/lib/derive'
 import { formatDate, formatMoney } from '@/lib/format'
-import { listContainer, listItem } from '@/lib/motion'
+import { EASE_OUT_EXPO, listContainer, listItem } from '@/lib/motion'
 import { clientStatus, projectStatus } from '@/lib/status'
 import { cn } from '@/lib/utils'
+import type { Project } from '@/types'
 import { ClientFormModal } from '@/features/clients/ClientFormModal'
 import { ProjectDetail } from '@/features/projects/ProjectDetail'
 import { ProjectFormModal } from '@/features/projects/ProjectFormModal'
+
+/** "1. Title — $30" lines plus a per-currency total, ready to paste into a chat. */
+function buildChatSummary(clientName: string, selected: Project[]) {
+  const lines = selected.map((p, i) => `${i + 1}. ${p.title} — ${formatMoney(p.amount, p.currency)}`)
+  return [
+    `${clientName} — ${selected.length} project${selected.length === 1 ? '' : 's'}`,
+    '',
+    ...lines,
+    '',
+    `Total: ${sumByCurrency(selected)}`,
+  ].join('\n')
+}
+
+interface ProjectCardProps {
+  project: Project
+  isAdmin: boolean
+  isSelected: boolean
+  selectMode: boolean
+  checked: boolean
+  onOpen: () => void
+  onToggle: () => void
+}
+
+function ProjectCard({ project, isAdmin, isSelected, selectMode, checked, onOpen, onToggle }: ProjectCardProps) {
+  return (
+    <motion.button
+      type="button"
+      layout="position"
+      variants={listItem}
+      exit="exit"
+      aria-current={!selectMode && isSelected ? true : undefined}
+      aria-pressed={selectMode ? checked : undefined}
+      onClick={selectMode ? onToggle : onOpen}
+      className={cn(
+        'w-full cursor-pointer rounded-xl border p-3.5 text-left shadow-sm transition-all duration-150',
+        isSelected && !selectMode
+          ? 'border-primary/50 bg-primary-soft'
+          : checked
+            ? 'border-primary/50 bg-primary-soft'
+            : 'bg-surface hover:-translate-y-0.5 hover:bg-surface-hover hover:shadow-md',
+      )}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          {selectMode && (
+            <span
+              className={cn(
+                'grid size-4.5 shrink-0 place-items-center rounded border transition-colors duration-150',
+                checked ? 'border-primary bg-primary text-primary-foreground' : 'border-border-strong bg-surface',
+              )}
+              aria-hidden
+            >
+              {checked && <Check className="size-3" strokeWidth={3} />}
+            </span>
+          )}
+          <p className="min-w-0 truncate text-sm font-medium">{project.title}</p>
+        </div>
+        <StatusPill meta={projectStatus[project.status]} animate={false} />
+      </div>
+      <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+        {isAdmin ? (
+          <span className="tnum font-medium text-foreground">{formatMoney(project.amount, project.currency)}</span>
+        ) : (
+          <span />
+        )}
+        {project.due_date && (
+          <span className="tnum flex items-center gap-1">
+            <CalendarDays className="size-3.5" strokeWidth={1.75} aria-hidden />
+            {formatDate(project.due_date)}
+          </span>
+        )}
+      </div>
+    </motion.button>
+  )
+}
 
 function ContactRow({ icon: Icon, children }: { icon: typeof Mail; children: React.ReactNode }) {
   return (
@@ -40,13 +135,34 @@ export function ClientWorkspace() {
   const isAdmin = useIsAdmin()
   const [editOpen, setEditOpen] = useState(false)
   const [projectFormOpen, setProjectFormOpen] = useState(false)
+  const [finishedOpen, setFinishedOpen] = useState(false)
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [exportText, setExportText] = useState<string | null>(null)
 
   const client = clients.find((c) => c.id === id)
   const clientProjects = useMemo(() => projects.filter((p) => p.client_id === id), [projects, id])
+  // Finished projects are settled and paid — tuck them away like archived clients.
+  const activeProjects = useMemo(() => clientProjects.filter((p) => p.status !== 'finished'), [clientProjects])
+  const finishedProjects = useMemo(() => clientProjects.filter((p) => p.status === 'finished'), [clientProjects])
   const openBalance = payments.filter((p) => p.client_id === id && isOpenPayment(p))
 
-  const selectedId = searchParams.get('project') ?? clientProjects[0]?.id ?? null
+  const selectedId = searchParams.get('project') ?? activeProjects[0]?.id ?? clientProjects[0]?.id ?? null
   const selected = clientProjects.find((p) => p.id === selectedId) ?? clientProjects[0]
+
+  const exitSelectMode = () => {
+    setSelectMode(false)
+    setSelectedIds(new Set())
+  }
+
+  const toggleSelected = (projectId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(projectId)) next.delete(projectId)
+      else next.add(projectId)
+      return next
+    })
+  }
 
   if (!ready) {
     return (
@@ -178,53 +294,38 @@ export function ClientWorkspace() {
             <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Projects · {clientProjects.length}
             </h2>
-            <Button variant="ghost" size="iconSm" aria-label="New project" onClick={() => setProjectFormOpen(true)}>
-              <Plus strokeWidth={1.75} />
-            </Button>
+            <div className="flex items-center gap-0.5">
+              {isAdmin && clientProjects.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="iconSm"
+                  aria-label={selectMode ? 'Cancel selection' : 'Select projects to export'}
+                  aria-pressed={selectMode}
+                  onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+                >
+                  {selectMode ? <X strokeWidth={1.75} /> : <CheckSquare strokeWidth={1.75} />}
+                </Button>
+              )}
+              <Button variant="ghost" size="iconSm" aria-label="New project" onClick={() => setProjectFormOpen(true)}>
+                <Plus strokeWidth={1.75} />
+              </Button>
+            </div>
           </div>
 
           <motion.div variants={listContainer} initial="initial" animate="animate" className="space-y-2">
             <AnimatePresence initial={false}>
-              {clientProjects.map((project) => {
-                const isSelected = selected?.id === project.id
-                return (
-                  <motion.button
-                    key={project.id}
-                    type="button"
-                    layout="position"
-                    variants={listItem}
-                    exit="exit"
-                    aria-current={isSelected || undefined}
-                    onClick={() => setSearchParams({ project: project.id }, { replace: true })}
-                    className={cn(
-                      'w-full cursor-pointer rounded-xl border p-3.5 text-left shadow-sm transition-all duration-150',
-                      isSelected
-                        ? 'border-primary/50 bg-primary-soft'
-                        : 'bg-surface hover:-translate-y-0.5 hover:bg-surface-hover hover:shadow-md',
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="min-w-0 truncate text-sm font-medium">{project.title}</p>
-                      <StatusPill meta={projectStatus[project.status]} animate={false} />
-                    </div>
-                    <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-                      {isAdmin ? (
-                        <span className="tnum font-medium text-foreground">
-                          {formatMoney(project.amount, project.currency)}
-                        </span>
-                      ) : (
-                        <span />
-                      )}
-                      {project.due_date && (
-                        <span className="tnum flex items-center gap-1">
-                          <CalendarDays className="size-3.5" strokeWidth={1.75} aria-hidden />
-                          {formatDate(project.due_date)}
-                        </span>
-                      )}
-                    </div>
-                  </motion.button>
-                )
-              })}
+              {activeProjects.map((project) => (
+                <ProjectCard
+                  key={project.id}
+                  project={project}
+                  isAdmin={isAdmin}
+                  isSelected={selected?.id === project.id}
+                  selectMode={selectMode}
+                  checked={selectedIds.has(project.id)}
+                  onOpen={() => setSearchParams({ project: project.id }, { replace: true })}
+                  onToggle={() => toggleSelected(project.id)}
+                />
+              ))}
             </AnimatePresence>
           </motion.div>
 
@@ -232,6 +333,64 @@ export function ClientWorkspace() {
             <p className="rounded-xl border border-dashed px-4 py-6 text-center text-[13px] text-muted-foreground">
               No projects yet for this client.
             </p>
+          )}
+
+          {finishedProjects.length > 0 && (
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={() => setFinishedOpen((v) => !v)}
+                aria-expanded={finishedOpen}
+                className="flex h-8 w-full cursor-pointer items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-faint transition-colors duration-150 hover:bg-surface-hover hover:text-muted-foreground"
+              >
+                <ChevronRight
+                  className={cn('size-3.5 transition-transform duration-200', finishedOpen && 'rotate-90')}
+                  strokeWidth={1.75}
+                  aria-hidden
+                />
+                {finishedProjects.length} finished
+              </button>
+              <AnimatePresence initial={false}>
+                {finishedOpen && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1, transition: { duration: 0.2, ease: EASE_OUT_EXPO } }}
+                    exit={{ height: 0, opacity: 0, transition: { duration: 0.15, ease: 'easeIn' } }}
+                    className="space-y-2 overflow-hidden pt-2"
+                  >
+                    {finishedProjects.map((project) => (
+                      <ProjectCard
+                        key={project.id}
+                        project={project}
+                        isAdmin={isAdmin}
+                        isSelected={selected?.id === project.id}
+                        selectMode={selectMode}
+                        checked={selectedIds.has(project.id)}
+                        onOpen={() => setSearchParams({ project: project.id }, { replace: true })}
+                        onToggle={() => toggleSelected(project.id)}
+                      />
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
+
+          {selectMode && (
+            <div className="sticky bottom-4 mt-4 flex items-center justify-between gap-2 rounded-xl border bg-surface px-3.5 py-2.5 shadow-lg">
+              <span className="text-[13px] font-medium">{selectedIds.size} selected</span>
+              <Button
+                size="sm"
+                disabled={selectedIds.size === 0}
+                onClick={() => {
+                  const selectedProjects = clientProjects.filter((p) => selectedIds.has(p.id))
+                  setExportText(buildChatSummary(clientDisplayName(client), selectedProjects))
+                }}
+              >
+                <MessageSquareText strokeWidth={1.75} />
+                Export as chat
+              </Button>
+            </div>
           )}
         </aside>
 
@@ -266,6 +425,29 @@ export function ClientWorkspace() {
         onClose={() => setProjectFormOpen(false)}
         clientId={client.id}
       />
+
+      <Modal
+        open={exportText !== null}
+        onClose={() => setExportText(null)}
+        title="Export as chat"
+        description="Copy this and paste it straight into email, WhatsApp, or Slack."
+        footer={
+          <Button
+            onClick={() => {
+              if (exportText) void navigator.clipboard.writeText(exportText).then(() => toast.success('Copied to clipboard'))
+              setExportText(null)
+              exitSelectMode()
+            }}
+          >
+            <Copy strokeWidth={1.75} />
+            Copy & close
+          </Button>
+        }
+      >
+        <pre className="whitespace-pre-wrap rounded-lg bg-surface-hover px-3.5 py-3 text-[13px] leading-relaxed">
+          {exportText}
+        </pre>
+      </Modal>
     </>
   )
 }

@@ -69,7 +69,7 @@ export function ProjectDetail({ projectId, onDeleted }: ProjectDetailProps) {
     updateRow(
       'projects',
       project.id,
-      { status },
+      { status, ...(status === 'finished' && isAdmin ? { payment_status: 'paid' } : {}) },
       {
         entity: 'project',
         entityId: project.id,
@@ -77,11 +77,32 @@ export function ProjectDetail({ projectId, onDeleted }: ProjectDetailProps) {
         message:
           status === 'completed'
             ? `Completed project "${project.title}"`
-            : status === 'blocked'
-              ? `Project "${project.title}" is blocked`
-              : `Moved "${project.title}" to ${projectStatus[status].label}`,
+            : status === 'finished'
+              ? `Finished project "${project.title}"`
+              : status === 'blocked'
+                ? `Project "${project.title}" is blocked`
+                : `Moved "${project.title}" to ${projectStatus[status].label}`,
       },
     )
+    // Payments are strictly admin-only (RLS would reject a member's write), so only
+    // admins get the auto-settle side effect — members can still mark a project finished.
+    if (status === 'finished' && isAdmin) {
+      for (const p of projectPayments) {
+        if (p.status !== 'paid') {
+          updateRow(
+            'payments',
+            p.id,
+            { status: 'paid', payment_date: p.payment_date ?? new Date().toISOString().slice(0, 10) },
+            {
+              entity: 'payment',
+              entityId: p.id,
+              action: 'paid',
+              message: `Marked invoice for "${project.title}" as paid (project finished)`,
+            },
+          )
+        }
+      }
+    }
   }
 
   const setPriority = (priority: Priority) => {
@@ -99,7 +120,7 @@ export function ProjectDetail({ projectId, onDeleted }: ProjectDetailProps) {
     )
   }
 
-  const overdue = isOverdue(project.due_date) && !['completed', 'cancelled'].includes(project.status)
+  const overdue = isOverdue(project.due_date) && !['completed', 'finished', 'cancelled'].includes(project.status)
 
   return (
     // Capped width: on wide screens the description and properties stay adjacent instead of
@@ -289,7 +310,7 @@ export function ProjectDetail({ projectId, onDeleted }: ProjectDetailProps) {
                     <span className={cn('tnum', overdue && 'font-medium text-danger')}>
                       {formatDate(project.due_date)}
                     </span>
-                    {!['completed', 'cancelled'].includes(project.status) && dueLabel(project.due_date) && (
+                    {!['completed', 'finished', 'cancelled'].includes(project.status) && dueLabel(project.due_date) && (
                       <span className={cn('block text-xs', overdue ? 'text-danger' : 'text-muted-foreground')}>
                         {dueLabel(project.due_date)}
                       </span>

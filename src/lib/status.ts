@@ -59,6 +59,7 @@ export const projectStatus: Record<ProjectStatus, StatusMeta> = {
   waiting_for_client: { label: 'Waiting for client', tone: 'amber' },
   blocked: { label: 'Blocked', tone: 'red' },
   completed: { label: 'Completed', tone: 'green' },
+  finished: { label: 'Finished', tone: 'violet' },
   cancelled: { label: 'Cancelled', tone: 'neutral' },
 }
 

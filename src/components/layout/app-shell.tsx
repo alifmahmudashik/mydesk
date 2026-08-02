@@ -12,6 +12,7 @@ import {
   Menu,
   Moon,
   Plus,
+  Receipt,
   Sun,
   Users,
   X,
@@ -33,6 +34,7 @@ const NAV = [
   { to: '/projects', label: 'Projects', icon: FolderKanban },
   { to: '/tasks', label: 'My Tasks', icon: ListTodo },
   { to: '/payments', label: 'Payments', icon: CreditCard, adminOnly: true },
+  { to: '/invoices', label: 'Invoices', icon: Receipt, adminOnly: true },
   { to: '/team', label: 'Team', icon: Users },
 ]
 

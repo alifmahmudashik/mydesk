@@ -63,7 +63,9 @@ export function ProjectsPage() {
     return projects.filter((p) => {
       const client = clients.find((c) => c.id === p.client_id)
       return (
-        (status === 'all' || p.status === status) &&
+        // Finished projects are done and paid — keep them out of the way, like archived
+        // clients, unless someone explicitly filters to "Finished".
+        (status === 'all' ? p.status !== 'finished' : p.status === status) &&
         (priority === 'all' || p.priority === priority) &&
         (clientFilter === 'all' || p.client_id === clientFilter) &&
         (!q ||
@@ -127,7 +129,7 @@ export function ProjectsPage() {
             <AnimatePresence initial={false}>
               {filtered.map((project) => {
                 const client = clients.find((c) => c.id === project.client_id)
-                const overdue = isOverdue(project.due_date) && !['completed', 'cancelled'].includes(project.status)
+                const overdue = isOverdue(project.due_date) && !['completed', 'finished', 'cancelled'].includes(project.status)
                 return (
                   <Row
                     key={project.id}

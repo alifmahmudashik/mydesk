@@ -5,11 +5,18 @@ export type ProjectStatus =
   | 'waiting_for_client'
   | 'blocked'
   | 'completed'
+  | 'finished'
   | 'cancelled'
 export type TaskStatus = 'todo' | 'in_progress' | 'review' | 'done' | 'cancelled'
 export type AccessStatus = 'needed' | 'requested' | 'received' | 'not_needed'
 export type PaymentStatus = 'unpaid' | 'partial' | 'paid' | 'refunded' | 'overdue'
 export type Priority = 'low' | 'medium' | 'high' | 'urgent'
+
+/** Freeform extra field shown on invoices (e.g. VAT Number, Account manager). */
+export interface InvoiceField {
+  label: string
+  value: string
+}
 
 export interface Client {
   id: string
@@ -24,6 +31,12 @@ export interface Client {
   timezone?: string | null
   status: ClientStatus
   notes?: string | null
+  /** Full postal address shown as "Invoice to" on this client's invoices. */
+  company_address?: string | null
+  /** Accent color (hex) used on this client's invoices. */
+  brand_color?: string | null
+  /** Extra label/value rows shown on this client's invoices, e.g. VAT Number. */
+  invoice_fields?: InvoiceField[]
   created_at: string
 }
 
@@ -81,6 +94,39 @@ export interface Payment {
   payment_date?: string | null
   due_date?: string | null
   notes?: string | null
+  created_at: string
+}
+
+export interface InvoiceLineItem {
+  description: string
+  price: number
+  qty: number
+}
+
+/** A generated, exportable invoice — separate from Payments (which track what's owed/settled). */
+export interface Invoice {
+  id: string
+  client_id: string
+  number: string
+  issue_date?: string | null
+  due_date?: string | null
+  currency: string
+  line_items: InvoiceLineItem[]
+  tax_rate: number
+  notes?: string | null
+  brand_color?: string | null
+  created_at: string
+}
+
+/** The sender's own business/payment details — reused as the default on every invoice. */
+export interface InvoiceSettings {
+  id: string
+  business_name?: string | null
+  business_address?: string | null
+  email?: string | null
+  brand_color?: string | null
+  payment_fields: InvoiceField[]
+  default_note?: string | null
   created_at: string
 }
 

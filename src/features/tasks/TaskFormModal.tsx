@@ -32,7 +32,7 @@ export function TaskFormModal({ open, onClose, projectId }: TaskFormModalProps) 
   const [assignee, setAssignee] = useState(UNASSIGNED)
   const [errors, setErrors] = useState<{ title?: string; project?: string }>({})
 
-  const activeProjects = projects.filter((p) => !['completed', 'cancelled'].includes(p.status))
+  const activeProjects = projects.filter((p) => !['completed', 'finished', 'cancelled'].includes(p.status))
   const projectOptions = (activeProjects.length ? activeProjects : projects).map((p) => ({
     value: p.id,
     label: p.title,

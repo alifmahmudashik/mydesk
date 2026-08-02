@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import { demoData, type DemoData } from '@/data/demo'
 import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
-import type { ActivityAction, ActivityEntity, ActivityEvent, ClientMember, Profile } from '@/types'
+import type { ActivityAction, ActivityEntity, ActivityEvent, ClientMember, Invoice, InvoiceSettings, Profile } from '@/types'
 import type { AccessItem, Client, Payment, Project, ProjectNote, Task } from '@/types'
 
 const LOCAL_KEY = 'mydesk-data-v2'
@@ -17,6 +17,7 @@ export type Table =
   | 'project_notes'
   | 'profiles'
   | 'client_members'
+  | 'invoices'
 
 type StateKey =
   | 'clients'
@@ -27,6 +28,7 @@ type StateKey =
   | 'notes'
   | 'profiles'
   | 'clientMembers'
+  | 'invoices'
 
 const tableToKey: Record<Table, StateKey> = {
   clients: 'clients',
@@ -37,6 +39,7 @@ const tableToKey: Record<Table, StateKey> = {
   project_notes: 'notes',
   profiles: 'profiles',
   client_members: 'clientMembers',
+  invoices: 'invoices',
 }
 
 type AnyRow = { id: string; created_at: string }
@@ -60,6 +63,9 @@ interface DataState {
   activity: ActivityEvent[]
   profiles: Profile[]
   clientMembers: ClientMember[]
+  invoices: Invoice[]
+  /** The sender's own business/payment details — one row, null until first saved. */
+  invoiceSettings: InvoiceSettings | null
   /** The signed-in user's profile (null until loaded / in demo before init). */
   me: Profile | null
   init: () => Promise<void>
@@ -68,6 +74,8 @@ interface DataState {
   /** Optimistic patch — reverted with a toast if the background sync fails. */
   updateRow: (table: Table, id: string, patch: Record<string, unknown>, log?: LogInput) => void
   deleteRow: (table: Table, id: string, log?: LogInput) => void
+  /** Upserts the one invoice_settings row (creates it on first save). */
+  saveInvoiceSettings: (patch: Partial<Omit<InvoiceSettings, 'id' | 'created_at'>>) => void
 }
 
 function snapshot(s: DataState): DemoData {
@@ -81,6 +89,8 @@ function snapshot(s: DataState): DemoData {
     activity: s.activity,
     profiles: s.profiles,
     clientMembers: s.clientMembers,
+    invoices: s.invoices,
+    invoiceSettings: s.invoiceSettings,
   }
 }
 
@@ -102,6 +112,8 @@ function scopedToMember(data: DemoData, me: Profile): DemoData {
     clientMembers: data.clientMembers.filter((m) => clientIds.has(m.client_id)),
     payments: [],
     activity: [],
+    invoices: [],
+    invoiceSettings: null,
   }
 }
 
@@ -172,6 +184,8 @@ export const useData = create<DataState>((set, get) => {
     activity: [],
     profiles: [],
     clientMembers: [],
+    invoices: [],
+    invoiceSettings: null,
     me: null,
 
     init: async () => {
@@ -189,21 +203,25 @@ export const useData = create<DataState>((set, get) => {
         set({ ...view, me, ready: true })
         return
       }
-      const [clients, projects, tasks, accessItems, payments, notes, activity, profiles, members, user] =
-        await Promise.all([
-          supabase.from('clients').select('*').order('created_at', { ascending: false }),
-          supabase.from('projects').select('*').order('created_at', { ascending: false }),
-          supabase.from('tasks').select('*').order('created_at', { ascending: false }),
-          supabase.from('access_items').select('*').order('created_at', { ascending: true }),
-          supabase.from('payments').select('*').order('created_at', { ascending: false }),
-          supabase.from('project_notes').select('*').order('created_at', { ascending: false }),
-          supabase.from('activity_log').select('*').order('created_at', { ascending: false }).limit(300),
-          supabase.from('profiles').select('*').order('created_at', { ascending: true }),
-          supabase.from('client_members').select('*'),
-          supabase.auth.getUser(),
-        ])
-      // Members are denied on payments by RLS-less tables erroring is fine; only surface
-      // failures on the core tables a member is allowed to read.
+      const [
+        clients, projects, tasks, accessItems, payments, notes, activity, profiles, members,
+        invoices, invoiceSettings, user,
+      ] = await Promise.all([
+        supabase.from('clients').select('*').order('created_at', { ascending: false }),
+        supabase.from('projects').select('*').order('created_at', { ascending: false }),
+        supabase.from('tasks').select('*').order('created_at', { ascending: false }),
+        supabase.from('access_items').select('*').order('created_at', { ascending: true }),
+        supabase.from('payments').select('*').order('created_at', { ascending: false }),
+        supabase.from('project_notes').select('*').order('created_at', { ascending: false }),
+        supabase.from('activity_log').select('*').order('created_at', { ascending: false }).limit(300),
+        supabase.from('profiles').select('*').order('created_at', { ascending: true }),
+        supabase.from('client_members').select('*'),
+        supabase.from('invoices').select('*').order('created_at', { ascending: false }),
+        supabase.from('invoice_settings').select('*').limit(1).maybeSingle(),
+        supabase.auth.getUser(),
+      ])
+      // Members are denied on payments/invoices by RLS — errors there are expected; only
+      // surface failures on the core tables a member is allowed to read.
       const failed = [clients, projects, tasks, notes].find((r) => r.error)
       if (failed?.error) {
         toast.error('Failed to load data', { description: failed.error.message })
@@ -219,6 +237,8 @@ export const useData = create<DataState>((set, get) => {
         activity: (activity.data as ActivityEvent[]) ?? [],
         profiles: profileRows,
         clientMembers: (members.data as ClientMember[]) ?? [],
+        invoices: (invoices.data as Invoice[]) ?? [],
+        invoiceSettings: (invoiceSettings.data as InvoiceSettings | null) ?? null,
         me: profileRows.find((p) => p.id === user.data.user?.id) ?? null,
         ready: true,
       })
@@ -275,6 +295,24 @@ export const useData = create<DataState>((set, get) => {
           .from(table)
           .delete()
           .eq('id', id)
+          .then(({ error }) => {
+            if (error) revert(prev)
+          })
+      }
+    },
+
+    saveInvoiceSettings: (patch) => {
+      const prev = snapshot(get())
+      const existing = get().invoiceSettings
+      const next: InvoiceSettings = existing
+        ? { ...existing, ...patch }
+        : { id: uid(), created_at: new Date().toISOString(), payment_fields: [], ...patch }
+      set({ invoiceSettings: next })
+      persistLocal()
+      if (supabase) {
+        void supabase
+          .from('invoice_settings')
+          .upsert(next)
           .then(({ error }) => {
             if (error) revert(prev)
           })

@@ -44,10 +44,10 @@ export function isOpenPayment(p: Payment) {
   return s === 'unpaid' || s === 'partial' || s === 'overdue'
 }
 
-/** "$1,600 · €3,600" — totals grouped per currency, order stable. */
-export function sumByCurrency(payments: Payment[]) {
+/** "$1,600 · €3,600" — totals grouped per currency, order stable. Works for any amount+currency rows. */
+export function sumByCurrency(items: { amount: number; currency: string }[]) {
   const sums = new Map<string, number>()
-  for (const p of payments) sums.set(p.currency, (sums.get(p.currency) ?? 0) + p.amount)
+  for (const p of items) sums.set(p.currency, (sums.get(p.currency) ?? 0) + p.amount)
   return (
     [...sums.entries()].map(([currency, amount]) => formatMoney(amount, currency)).join(' · ') ||
     formatMoney(0)

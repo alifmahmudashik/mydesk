@@ -66,6 +66,9 @@ export function ProjectFormModal({ open, onClose, project, clientId }: ProjectFo
     setErrors(next)
     if (Object.keys(next).length) return
 
+    // Marking a project finished settles it — auto-paid, same as the properties rail toggle.
+    const justFinished = isAdmin && form.status === 'finished' && project?.status !== 'finished'
+
     const data = {
       title: form.title.trim(),
       client_id: form.client_id,
@@ -78,7 +81,7 @@ export function ProjectFormModal({ open, onClose, project, clientId }: ProjectFo
       due_date: form.due_date || null,
       status: form.status,
       priority: form.priority,
-      payment_status: form.payment_status,
+      payment_status: justFinished ? 'paid' : form.payment_status,
       tags: form.tags
         .split(',')
         .map((t) => t.trim())
@@ -92,6 +95,23 @@ export function ProjectFormModal({ open, onClose, project, clientId }: ProjectFo
         action: 'updated',
         message: `Updated project "${data.title}"`,
       })
+      if (justFinished) {
+        for (const p of payments.filter((p) => (p.project_ids ?? []).includes(project.id))) {
+          if (p.status !== 'paid') {
+            updateRow(
+              'payments',
+              p.id,
+              { status: 'paid', payment_date: p.payment_date ?? new Date().toISOString().slice(0, 10) },
+              {
+                entity: 'payment',
+                entityId: p.id,
+                action: 'paid',
+                message: `Marked invoice for "${data.title}" as paid (project finished)`,
+              },
+            )
+          }
+        }
+      }
       // Keep the project's invoice in sync with its budget:
       // no invoice yet + budget set -> create one; a single open invoice covering
       // only this project -> update its amount. Paid/refunded or shared invoices are left alone.
