@@ -108,7 +108,31 @@ export function TeamPage() {
                       <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                         Client access · {memberClients.length}
                       </p>
-                      {clients.length === 0 ? (
+                      {isSelf ? (
+                        // You can't grant yourself a client you don't already have (the database
+                        // correctly blocks it — you can only invite others into clients you can
+                        // already see), so this is a read-only summary, not a checklist.
+                        memberClients.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {memberClients.map((m) => {
+                              const c = clients.find((c) => c.id === m.client_id)
+                              return c ? (
+                                <span
+                                  key={m.id}
+                                  className="rounded-md bg-surface-hover px-2 py-1 text-[13px] font-medium"
+                                >
+                                  {clientDisplayName(c)}
+                                </span>
+                              ) : null
+                            })}
+                          </div>
+                        ) : (
+                          <p className="text-[13px] text-muted-foreground">
+                            No client access yet — ask an admin or a teammate on the relevant account
+                            to grant you one.
+                          </p>
+                        )
+                      ) : clients.length === 0 ? (
                         <p className="text-[13px] text-muted-foreground">No clients yet.</p>
                       ) : (
                         <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
