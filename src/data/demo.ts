@@ -124,9 +124,15 @@ export function demoData(): DemoData {
     business_address: '123 Commercial Road\nYour City, Postcode\nYour Country',
     email: 'you@example.com',
     brand_color: '#6366f1',
-    payment_fields: [
-      { label: 'Bank name', value: 'Your Bank' },
-      { label: 'Account number', value: '000000000' },
+    payment_profiles: [
+      {
+        id: 'pp1',
+        name: 'Bank transfer',
+        fields: [
+          { label: 'Bank name', value: 'Your Bank' },
+          { label: 'Account number', value: '000000000' },
+        ],
+      },
     ],
     default_note: 'It was great doing business with you, and I appreciate your continued collaboration.',
     created_at: past(200),
@@ -147,6 +153,10 @@ export function demoData(): DemoData {
       tax_rate: 0,
       notes: 'Covers work delivered this month.',
       brand_color: '#6366f1',
+      payment_fields: [
+        { label: 'Bank name', value: 'Your Bank' },
+        { label: 'Account number', value: '000000000' },
+      ],
       created_at: past(10),
     },
   ]

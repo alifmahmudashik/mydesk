@@ -13,7 +13,12 @@ interface InvoicePreviewProps {
   brandColor: string
   client: Client | undefined
   settings: InvoiceSettings | null
+  paymentFields: InvoiceField[]
 }
+
+/** Matches the app's --font-sans exactly, so the on-screen preview and the exported PDF
+ *  both render actual Inter rather than falling back to a generic system sans-serif. */
+const FONT_STACK = "'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif"
 
 const money = (n: number, currency: string) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 2 }).format(n)
@@ -40,7 +45,7 @@ function FieldRows({ fields }: { fields: InvoiceField[] }) {
  * shows through regardless of the viewer's light/dark mode.
  */
 export const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(function InvoicePreview(
-  { number, issueDate, dueDate, currency, lineItems, taxRate, notes, brandColor, client, settings },
+  { number, issueDate, dueDate, currency, lineItems, taxRate, notes, brandColor, client, settings, paymentFields },
   ref,
 ) {
   const subtotal = lineItems.reduce((sum, li) => sum + li.price * li.qty, 0)
@@ -51,8 +56,8 @@ export const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(fu
   return (
     <div
       ref={ref}
-      style={{ background: '#ffffff', color: '#18181b', fontFamily: 'Inter, system-ui, sans-serif' }}
-      className="w-[210mm] max-w-full p-10 text-[13px] leading-relaxed"
+      style={{ background: '#ffffff', color: '#18181b', fontFamily: FONT_STACK }}
+      className="w-[210mm] min-h-[297mm] max-w-full p-12 text-[13px] leading-relaxed"
     >
       <div className="flex items-start justify-between gap-6">
         <div>
@@ -68,7 +73,15 @@ export const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(fu
         <div className="min-w-0">
           <p className="mb-1 text-xs font-bold uppercase tracking-wider text-zinc-500">Invoice to</p>
           <p className="font-bold">{client?.use_company_name && client.company_name ? client.company_name : (client?.name ?? '—')}</p>
-          {client?.company_address?.split('\n').map((line, i) => <p key={i}>{line}</p>)}
+          {client?.company_address ? (
+            client.company_address.split('\n').map((line, i) => <p key={i}>{line}</p>)
+          ) : (
+            <>
+              {client?.email && <p>{client.email}</p>}
+              {client?.phone && <p>{client.phone}</p>}
+              {client?.country && <p>{client.country}</p>}
+            </>
+          )}
           {client?.invoice_fields && <FieldRows fields={client.invoice_fields} />}
         </div>
         <div className="shrink-0 text-right">
@@ -118,10 +131,10 @@ export const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(fu
 
       <div className="mt-6 flex items-start justify-between gap-8">
         <div className="min-w-0 flex-1">
-          {(settings?.payment_fields?.length ?? 0) > 0 && (
+          {paymentFields.length > 0 && (
             <>
               <p className="mb-1 font-bold">Payment Method</p>
-              <FieldRows fields={settings?.payment_fields ?? []} />
+              <FieldRows fields={paymentFields} />
             </>
           )}
         </div>

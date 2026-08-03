@@ -306,7 +306,7 @@ export const useData = create<DataState>((set, get) => {
       const existing = get().invoiceSettings
       const next: InvoiceSettings = existing
         ? { ...existing, ...patch }
-        : { id: uid(), created_at: new Date().toISOString(), payment_fields: [], ...patch }
+        : { id: uid(), created_at: new Date().toISOString(), payment_profiles: [], ...patch }
       set({ invoiceSettings: next })
       persistLocal()
       if (supabase) {

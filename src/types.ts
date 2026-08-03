@@ -115,7 +115,18 @@ export interface Invoice {
   tax_rate: number
   notes?: string | null
   brand_color?: string | null
+  /** Snapshot of whichever payment profile was picked when this invoice was made — stays
+   *  accurate even if the profile is later renamed/edited/deleted in Business settings. */
+  payment_fields?: InvoiceField[]
   created_at: string
+}
+
+/** A named set of payment details (e.g. "Wise", "Payoneer") — pick one per invoice instead of
+ *  re-typing/re-editing bank details every time. */
+export interface PaymentProfile {
+  id: string
+  name: string
+  fields: InvoiceField[]
 }
 
 /** The sender's own business/payment details — reused as the default on every invoice. */
@@ -125,7 +136,7 @@ export interface InvoiceSettings {
   business_address?: string | null
   email?: string | null
   brand_color?: string | null
-  payment_fields: InvoiceField[]
+  payment_profiles: PaymentProfile[]
   default_note?: string | null
   created_at: string
 }

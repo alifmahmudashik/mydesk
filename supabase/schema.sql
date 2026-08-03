@@ -146,7 +146,9 @@ create table if not exists invoice_settings (
   business_address text,
   email text,
   brand_color text,
-  payment_fields jsonb not null default '[]'::jsonb,
+  -- Named payment method profiles (e.g. "Wise", "Payoneer"), each its own set of custom
+  -- fields — pick one per invoice instead of re-typing bank details every time.
+  payment_profiles jsonb not null default '[]'::jsonb,
   default_note text,
   created_at timestamptz not null default now()
 );
@@ -164,6 +166,8 @@ create table if not exists invoices (
   tax_rate numeric(6,3) not null default 0,
   notes text,
   brand_color text,
+  -- Snapshot of the payment profile fields picked at generation time.
+  payment_fields jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now()
 );
 
@@ -180,6 +184,25 @@ alter table clients add column if not exists invoice_fields jsonb not null defau
 alter table tasks add column if not exists assignee_id uuid references auth.users (id);
 alter table activity_log add column if not exists actor_id uuid default auth.uid();
 alter table payments add column if not exists project_ids uuid[] not null default '{}';
+alter table invoice_settings add column if not exists payment_profiles jsonb not null default '[]'::jsonb;
+alter table invoices add column if not exists payment_fields jsonb not null default '[]'::jsonb;
+
+-- Old flat payment_fields on invoice_settings: wrap into a single "Default" payment
+-- profile so nobody's saved bank details vanish, then drop it.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'invoice_settings' and column_name = 'payment_fields'
+  ) then
+    update invoice_settings
+    set payment_profiles = jsonb_build_array(
+      jsonb_build_object('id', gen_random_uuid()::text, 'name', 'Default', 'fields', payment_fields)
+    )
+    where payment_profiles = '[]'::jsonb and jsonb_array_length(payment_fields) > 0;
+    alter table invoice_settings drop column payment_fields;
+  end if;
+end $$;
 
 -- 'finished' is a newer addition to the status list — widen the check constraint
 -- on databases created before it existed (a plain CREATE TABLE IF NOT EXISTS above

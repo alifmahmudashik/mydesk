@@ -15,7 +15,7 @@ import { useData } from '@/data/store'
 import { useIsAdmin } from '@/hooks/usePermissions'
 import { clientDisplayName } from '@/lib/derive'
 import { formatDate, formatMoney } from '@/lib/format'
-import type { Client, Invoice, InvoiceLineItem } from '@/types'
+import type { Client, Invoice, InvoiceField, InvoiceLineItem } from '@/types'
 import { InvoicePreview } from '@/features/invoices/InvoicePreview'
 import { InvoiceSettingsModal } from '@/features/invoices/InvoiceSettingsModal'
 import { exportElementToPdf } from '@/features/invoices/pdf'
@@ -44,6 +44,8 @@ function emptyForm(client?: Client) {
     tax_rate: 0,
     notes: '',
     brand_color: client?.brand_color ?? '#6366f1',
+    payment_profile_id: 'none',
+    payment_fields: [] as InvoiceField[],
   }
 }
 
@@ -78,6 +80,17 @@ export function InvoicesPage() {
     }))
   }
 
+  const paymentProfiles = invoiceSettings?.payment_profiles ?? []
+  const paymentMethodOptions = [
+    { value: 'none', label: 'None' },
+    ...paymentProfiles.map((p) => ({ value: p.id, label: p.name || 'Untitled' })),
+  ]
+
+  const selectPaymentMethod = (profileId: string) => {
+    const profile = paymentProfiles.find((p) => p.id === profileId)
+    setForm((f) => ({ ...f, payment_profile_id: profileId, payment_fields: profile ? profile.fields : [] }))
+  }
+
   const setLineItem = (i: number, patch: Partial<InvoiceLineItem>) =>
     set(
       'line_items',
@@ -98,6 +111,10 @@ export function InvoicesPage() {
       tax_rate: inv.tax_rate,
       notes: inv.notes ?? '',
       brand_color: inv.brand_color ?? '#6366f1',
+      // The profile itself may have since been renamed or deleted — the invoice keeps its
+      // own snapshot of the fields, so re-picking a profile here is optional, not required.
+      payment_profile_id: 'none',
+      payment_fields: inv.payment_fields ?? [],
     })
   }
 
@@ -120,6 +137,7 @@ export function InvoicesPage() {
       tax_rate: form.tax_rate,
       notes: form.notes.trim() || null,
       brand_color: form.brand_color || null,
+      payment_fields: form.payment_fields,
     }
     if (form.id) {
       updateRow('invoices', form.id, data)
@@ -244,6 +262,14 @@ export function InvoicesPage() {
 
                 <FormSection title="Totals & notes">
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Field label="Payment method" hint={paymentProfiles.length === 0 ? 'Add one in Business settings.' : undefined}>
+                      <Select
+                        value={form.payment_profile_id}
+                        onChange={selectPaymentMethod}
+                        options={paymentMethodOptions}
+                        disabled={paymentProfiles.length === 0}
+                      />
+                    </Field>
                     <Field label="Tax rate (%)">
                       <Input
                         inputMode="decimal"
@@ -313,20 +339,25 @@ export function InvoicesPage() {
           </div>
 
           {/* ---- Right: live preview ---- */}
-          <div className="min-w-0 overflow-x-auto rounded-xl border bg-surface-hover p-4 shadow-sm sm:p-8">
-            <InvoicePreview
-              ref={previewRef}
-              number={form.number}
-              issueDate={form.issue_date}
-              dueDate={form.due_date}
-              currency={form.currency}
-              lineItems={form.line_items}
-              taxRate={form.tax_rate}
-              notes={form.notes}
-              brandColor={form.brand_color}
-              client={client}
-              settings={invoiceSettings}
-            />
+          <div className="min-w-0 overflow-x-auto rounded-xl border bg-surface-hover p-6 shadow-sm sm:p-10">
+            {/* The shadow lives on this wrapper, not the page itself, so html2canvas never
+                bakes it into the exported PDF. */}
+            <div className="mx-auto w-fit rounded-sm shadow-xl">
+              <InvoicePreview
+                ref={previewRef}
+                number={form.number}
+                issueDate={form.issue_date}
+                dueDate={form.due_date}
+                currency={form.currency}
+                lineItems={form.line_items}
+                taxRate={form.tax_rate}
+                notes={form.notes}
+                brandColor={form.brand_color}
+                client={client}
+                settings={invoiceSettings}
+                paymentFields={form.payment_fields}
+              />
+            </div>
           </div>
         </div>
       )}

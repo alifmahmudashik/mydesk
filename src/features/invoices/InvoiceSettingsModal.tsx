@@ -4,8 +4,8 @@ import { Field, FormSection } from '@/components/ui/field'
 import { Input, Textarea } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { useData } from '@/data/store'
-import type { InvoiceField } from '@/types'
-import { InvoiceFieldsEditor } from '@/features/invoices/InvoiceFieldsEditor'
+import type { PaymentProfile } from '@/types'
+import { PaymentProfilesEditor } from '@/features/invoices/PaymentProfilesEditor'
 
 interface InvoiceSettingsModalProps {
   open: boolean
@@ -22,7 +22,7 @@ export function InvoiceSettingsModal({ open, onClose }: InvoiceSettingsModalProp
     business_address: settings?.business_address ?? '',
     email: settings?.email ?? '',
     default_note: settings?.default_note ?? '',
-    payment_fields: settings?.payment_fields ?? ([] as InvoiceField[]),
+    payment_profiles: settings?.payment_profiles ?? ([] as PaymentProfile[]),
   })
 
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
@@ -34,7 +34,9 @@ export function InvoiceSettingsModal({ open, onClose }: InvoiceSettingsModalProp
       business_address: form.business_address.trim() || null,
       email: form.email.trim() || null,
       default_note: form.default_note.trim() || null,
-      payment_fields: form.payment_fields.filter((f) => f.label.trim() || f.value.trim()),
+      payment_profiles: form.payment_profiles
+        .filter((p) => p.name.trim() || p.fields.length > 0)
+        .map((p) => ({ ...p, fields: p.fields.filter((f) => f.label.trim() || f.value.trim()) })),
     })
     onClose()
   }
@@ -83,12 +85,15 @@ export function InvoiceSettingsModal({ open, onClose }: InvoiceSettingsModalProp
           </div>
         </FormSection>
 
-        <FormSection title="Payment details">
+        <FormSection title="Payment methods">
           <p className="mb-3 text-[13px] text-muted-foreground">
-            Bank name, account number, SWIFT/BIC, payment links — whatever you want shown on
-            every invoice.
+            Set up each way you get paid — Wise, Payoneer, bank transfer — with its own bank
+            name, account number, SWIFT/BIC, whatever it needs. Pick one by name on each invoice.
           </p>
-          <InvoiceFieldsEditor value={form.payment_fields} onChange={(v) => set('payment_fields', v)} />
+          <PaymentProfilesEditor
+            value={form.payment_profiles}
+            onChange={(v) => set('payment_profiles', v)}
+          />
         </FormSection>
 
         <FormSection title="Default note">
