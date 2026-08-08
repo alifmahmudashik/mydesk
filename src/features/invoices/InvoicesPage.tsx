@@ -20,7 +20,7 @@ import { InvoicePreview } from '@/features/invoices/InvoicePreview'
 import { InvoiceSettingsModal } from '@/features/invoices/InvoiceSettingsModal'
 import { exportElementToPdf } from '@/features/invoices/pdf'
 
-const currencyOptions = ['USD', 'EUR', 'GBP', 'BDT'].map((c) => ({ value: c, label: c }))
+const currencyOptions = ['USD', 'EUR', 'GBP', 'AUD', 'BDT'].map((c) => ({ value: c, label: c }))
 const today = () => new Date().toISOString().slice(0, 10)
 const plusDays = (n: number) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10)
 

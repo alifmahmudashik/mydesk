@@ -15,7 +15,7 @@ import { ClientAccessEditor } from '@/features/team/ClientAccessEditor'
 const statusOptions = options(projectStatus)
 const priorityOptions = options(priorityMeta)
 const paymentOptions = options(paymentStatus)
-const currencyOptions = ['USD', 'EUR', 'GBP', 'BDT'].map((c) => ({ value: c, label: c }))
+const currencyOptions = ['USD', 'EUR', 'GBP', 'AUD', 'BDT'].map((c) => ({ value: c, label: c }))
 
 interface ProjectFormModalProps {
   open: boolean
