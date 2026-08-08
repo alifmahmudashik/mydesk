@@ -38,6 +38,19 @@ function ToolButton({
   )
 }
 
+/**
+ * Runs a formatting command pinned to the exact selection visible when the button was
+ * clicked. Needed because TipTap/ProseMirror can otherwise resolve `.focus()` against a
+ * broader selection type (e.g. after a prior select-all) than what's actually highlighted,
+ * which — for list toggles in particular — wraps far more content than intended
+ * (see ueberdosis/tiptap#6260, #7398). Re-expressing the same range as a plain text
+ * selection first sidesteps that path entirely.
+ */
+function runOnSelection(editor: Editor, apply: (chain: ReturnType<Editor['chain']>) => ReturnType<Editor['chain']>) {
+  const { from, to } = editor.state.selection
+  apply(editor.chain().focus().setTextSelection({ from, to })).run()
+}
+
 function promptForLink(editor: Editor) {
   const prev = editor.getAttributes('link').href as string | undefined
   const url = window.prompt('Link URL', prev ?? 'https://')
@@ -105,32 +118,32 @@ export function RichTextEditor({
           icon={Bold}
           label="Bold"
           active={editor.isActive('bold')}
-          onClick={() => editor.chain().focus().toggleBold().run()}
+          onClick={() => runOnSelection(editor, (c) => c.toggleBold())}
         />
         <ToolButton
           icon={Italic}
           label="Italic"
           active={editor.isActive('italic')}
-          onClick={() => editor.chain().focus().toggleItalic().run()}
+          onClick={() => runOnSelection(editor, (c) => c.toggleItalic())}
         />
         <ToolButton
           icon={Strikethrough}
           label="Strikethrough"
           active={editor.isActive('strike')}
-          onClick={() => editor.chain().focus().toggleStrike().run()}
+          onClick={() => runOnSelection(editor, (c) => c.toggleStrike())}
         />
         <span className="mx-1 h-4 w-px bg-border" aria-hidden />
         <ToolButton
           icon={List}
           label="Bullet list"
           active={editor.isActive('bulletList')}
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
+          onClick={() => runOnSelection(editor, (c) => c.toggleBulletList())}
         />
         <ToolButton
           icon={ListOrdered}
           label="Numbered list"
           active={editor.isActive('orderedList')}
-          onClick={() => editor.chain().focus().toggleOrderedList().run()}
+          onClick={() => runOnSelection(editor, (c) => c.toggleOrderedList())}
         />
         <span className="mx-1 h-4 w-px bg-border" aria-hidden />
         <ToolButton
