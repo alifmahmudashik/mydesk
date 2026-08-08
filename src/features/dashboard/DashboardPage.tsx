@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -14,8 +14,10 @@ import {
   StickyNote,
   Trash2,
   Users,
+  Zap,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Card, CardHeader } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/ui/page-header'
@@ -30,13 +32,38 @@ import { toneDot, type Tone } from '@/lib/status'
 import { cn } from '@/lib/utils'
 import type { ActivityEvent } from '@/types'
 import { TaskItem } from '@/features/tasks/TaskItem'
+import { TaskFormModal } from '@/features/tasks/TaskFormModal'
+import { ProjectFormModal } from '@/features/projects/ProjectFormModal'
+import { ClientFormModal } from '@/features/clients/ClientFormModal'
 
-function greeting() {
+function getDynamicGreeting(displayName?: string | null) {
   const h = new Date().getHours()
-  if (h < 5) return 'Working late'
-  if (h < 12) return 'Good morning'
-  if (h < 18) return 'Good afternoon'
-  return 'Good evening'
+  const firstName = displayName && displayName !== 'You' ? displayName.trim().split(' ')[0] : null
+  const greetingName = firstName ? `, ${firstName}` : ''
+
+  const sparkle = '✨'
+  if (h < 5) {
+    return {
+      title: `Working late${greetingName} ${sparkle}`,
+      sub: 'Night owl session — stay focused and take breaks when needed.',
+    }
+  }
+  if (h < 12) {
+    return {
+      title: `Good morning${greetingName} ${sparkle}`,
+      sub: 'Here is your daily snapshot and priorities for today.',
+    }
+  }
+  if (h < 18) {
+    return {
+      title: `Good afternoon${greetingName} ${sparkle}`,
+      sub: 'Keep up the steady momentum on your ongoing work.',
+    }
+  }
+  return {
+    title: `Good evening${greetingName} ${sparkle}`,
+    sub: 'Review today’s updates and progress across your projects.',
+  }
 }
 
 const ENTITY_ICON: Record<ActivityEvent['entity'], LucideIcon> = {
@@ -59,8 +86,14 @@ const ACTION_META: Record<ActivityEvent['action'], { tone: Tone; icon?: LucideIc
 
 export function DashboardPage() {
   const navigate = useNavigate()
-  const { ready, projects, tasks, accessItems, payments, activity } = useData()
+  const { ready, projects, tasks, accessItems, payments, activity, me } = useData()
   const isAdmin = useIsAdmin()
+
+  const [taskModalOpen, setTaskModalOpen] = useState(false)
+  const [projectModalOpen, setProjectModalOpen] = useState(false)
+  const [clientModalOpen, setClientModalOpen] = useState(false)
+
+  const greetingInfo = useMemo(() => getDynamicGreeting(me?.display_name), [me?.display_name])
 
   const overduePayments = useMemo(
     () => payments.filter((p) => effectivePaymentStatus(p) === 'overdue'),
@@ -97,11 +130,44 @@ export function DashboardPage() {
     [tasks],
   )
 
+  const dateDescription = useMemo(() => {
+    const formattedDate = format(new Date(), 'EEEE, MMMM d, yyyy')
+    return formattedDate
+  }, [])
+
   return (
     <>
       <PageHeader
-        title={greeting()}
-        description={format(new Date(), 'EEEE, MMMM d')}
+        title={greetingInfo.title}
+        description={dateDescription}
+        actions={
+          <div className="flex flex-wrap items-center gap-2.5">
+            <Button
+              variant="secondary"
+              onClick={() => setTaskModalOpen(true)}
+              className="bg-surface hover:bg-surface-hover border shadow-2xs transition-all duration-150 active:scale-95 text-foreground"
+            >
+              <Plus strokeWidth={1.75} className="size-4" />
+              <span>New Task</span>
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => setProjectModalOpen(true)}
+              className="bg-surface hover:bg-surface-hover border shadow-2xs transition-all duration-150 active:scale-95 text-foreground"
+            >
+              <FolderKanban strokeWidth={1.75} className="size-4" />
+              <span>New Project</span>
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => setClientModalOpen(true)}
+              className="shadow-sm transition-all duration-150 active:scale-95"
+            >
+              <Plus strokeWidth={2} className="size-4" />
+              <span>Add Client</span>
+            </Button>
+          </div>
+        }
       />
 
       {!ready ? (
@@ -117,6 +183,24 @@ export function DashboardPage() {
         </>
       ) : (
         <>
+          {/* Quick Actions toolbar banner for small screens or extra accessibility */}
+          <div className="mb-5 flex items-center justify-between gap-3 rounded-xl border bg-surface/60 p-3.5 backdrop-blur-sm sm:hidden">
+            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+              <Zap className="size-3.5 text-primary" strokeWidth={2} />
+              <span>Quick actions</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button size="sm" onClick={() => setTaskModalOpen(true)}>
+                <Plus strokeWidth={2} className="size-3.5" />
+                <span>Task</span>
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setProjectModalOpen(true)}>
+                <Plus strokeWidth={2} className="size-3.5" />
+                <span>Project</span>
+              </Button>
+            </div>
+          </div>
+
           {/* At-a-glance: each card answers one question and jumps to the list behind it */}
           <motion.div
             variants={listContainer}
@@ -166,7 +250,7 @@ export function DashboardPage() {
 
           <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
             {/* Up next */}
-            <Card>
+            <Card className="transition-all duration-200 hover:shadow-sm">
               <CardHeader title="Up next" />
               {upNext.length > 0 ? (
                 <motion.div
@@ -193,7 +277,7 @@ export function DashboardPage() {
             </Card>
 
             {/* Activity feed */}
-            <Card>
+            <Card className="transition-all duration-200 hover:shadow-sm">
               <CardHeader title="Recent activity" />
               {activity.length > 0 ? (
                 <motion.ul
@@ -207,7 +291,7 @@ export function DashboardPage() {
                     return (
                       <motion.li key={event.id} variants={listItem} className="relative flex gap-3 pb-4 last:pb-1">
                         <div className="flex flex-col items-center">
-                          <span className="grid size-6 shrink-0 place-items-center rounded-full border bg-background">
+                          <span className="grid size-6 shrink-0 place-items-center rounded-full border bg-background shadow-2xs">
                             <Icon className="size-3 text-muted-foreground" strokeWidth={1.75} aria-hidden />
                           </span>
                           <span className="mt-1 w-px flex-1 bg-border" aria-hidden />
@@ -235,6 +319,24 @@ export function DashboardPage() {
           </div>
         </>
       )}
+
+      {/* Creation modals triggered from Quick Action buttons */}
+      <TaskFormModal
+        key={taskModalOpen ? 'task-open' : 'task-closed'}
+        open={taskModalOpen}
+        onClose={() => setTaskModalOpen(false)}
+      />
+      <ProjectFormModal
+        key={projectModalOpen ? 'project-open' : 'project-closed'}
+        open={projectModalOpen}
+        onClose={() => setProjectModalOpen(false)}
+      />
+      <ClientFormModal
+        key={clientModalOpen ? 'client-open' : 'client-closed'}
+        open={clientModalOpen}
+        onClose={() => setClientModalOpen(false)}
+      />
     </>
   )
 }
+

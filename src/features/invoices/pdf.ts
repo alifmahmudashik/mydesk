@@ -10,7 +10,9 @@ export async function exportElementToPdf(el: HTMLElement, filename: string) {
   // browser's fallback system font instead of the one actually shown on screen.
   await document.fonts.ready
 
-  const scale = 2
+  // 300 DPI (print quality) at the browser's baseline 96 DPI — anything lower reads as
+  // soft/blurry once exported, especially on retina screens or when printed.
+  const scale = 300 / 96
   const canvas = await html2canvas(el, { scale, backgroundColor: '#ffffff' })
   const imgData = canvas.toDataURL('image/png')
 

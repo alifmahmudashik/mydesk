@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { FolderKanban, Plus } from 'lucide-react'
+import { CheckCircle2, Eye, EyeOff, FolderKanban, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/ui/page-header'
@@ -21,7 +21,7 @@ import type { Priority, ProjectStatus } from '@/types'
 import { ProjectFormModal } from '@/features/projects/ProjectFormModal'
 
 const statusFilter: SelectOption<'all' | ProjectStatus>[] = [
-  { value: 'all', label: 'All statuses' },
+  { value: 'all', label: 'All active statuses' },
   ...options(projectStatus),
 ]
 const priorityFilter: SelectOption<'all' | Priority>[] = [
@@ -38,6 +38,7 @@ export function ProjectsPage() {
   const [status, setStatus] = useState<'all' | ProjectStatus>('all')
   const [priority, setPriority] = useState<'all' | Priority>('all')
   const [clientFilter, setClientFilter] = useState('all')
+  const [showCompleted, setShowCompleted] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
 
   /** Project details live in the client workspace (master-detail). */
@@ -58,14 +59,25 @@ export function ProjectsPage() {
     ...clients.map((c) => ({ value: c.id, label: clientDisplayName(c) })),
   ]
 
+  const completedCount = useMemo(() => {
+    return projects.filter((p) => p.status === 'completed' || p.status === 'finished').length
+  }, [projects])
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return projects.filter((p) => {
       const client = clients.find((c) => c.id === p.client_id)
+      const isDone = p.status === 'completed' || p.status === 'finished'
+
+      // By default, don't show completed/finished projects when 'all' is selected
+      // unless user explicitly toggles showCompleted or selects 'completed'/'finished' in status filter.
+      const statusMatches =
+        status === 'all'
+          ? showCompleted || !isDone
+          : p.status === status
+
       return (
-        // Finished projects are done and paid — keep them out of the way, like archived
-        // clients, unless someone explicitly filters to "Finished".
-        (status === 'all' ? p.status !== 'finished' : p.status === status) &&
+        statusMatches &&
         (priority === 'all' || p.priority === priority) &&
         (clientFilter === 'all' || p.client_id === clientFilter) &&
         (!q ||
@@ -74,7 +86,7 @@ export function ProjectsPage() {
             .includes(q))
       )
     })
-  }, [projects, clients, search, status, priority, clientFilter])
+  }, [projects, clients, search, status, priority, clientFilter, showCompleted])
 
   return (
     <>
@@ -82,7 +94,7 @@ export function ProjectsPage() {
         title="Projects"
         description="Every engagement, its status, and what it's worth."
         actions={
-          <Button onClick={() => setFormOpen(true)}>
+          <Button onClick={() => setFormOpen(true)} className="shadow-sm hover:shadow transition-all active:scale-95">
             <Plus strokeWidth={1.75} />
             New project
           </Button>
@@ -90,9 +102,29 @@ export function ProjectsPage() {
       />
       <Toolbar>
         <SearchInput value={search} onChange={setSearch} placeholder="Search projects, tags…" />
-        <Select value={status} onChange={setStatus} options={statusFilter} aria-label="Filter by status" className="w-44" />
+        <Select value={status} onChange={setStatus} options={statusFilter} aria-label="Filter by status" className="w-48" />
         <Select value={priority} onChange={setPriority} options={priorityFilter} aria-label="Filter by priority" className="w-36" />
         <Select value={clientFilter} onChange={setClientFilter} options={clientOptions} aria-label="Filter by client" className="w-44" />
+        {completedCount > 0 && status === 'all' && (
+          <Button
+            variant={showCompleted ? 'secondary' : 'ghost'}
+            size="sm"
+            onClick={() => setShowCompleted(!showCompleted)}
+            className="ml-auto text-xs font-medium text-muted-foreground hover:text-foreground"
+          >
+            {showCompleted ? (
+              <>
+                <EyeOff className="size-3.5" strokeWidth={1.75} />
+                <span>Hide completed ({completedCount})</span>
+              </>
+            ) : (
+              <>
+                <Eye className="size-3.5 text-primary" strokeWidth={1.75} />
+                <span>Show completed ({completedCount})</span>
+              </>
+            )}
+          </Button>
+        )}
       </Toolbar>
 
       {!ready ? (
@@ -100,19 +132,26 @@ export function ProjectsPage() {
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={FolderKanban}
-          title={projects.length === 0 ? 'No projects yet' : 'No projects match'}
+          title={projects.length === 0 ? 'No projects yet' : 'No active projects found'}
           description={
             projects.length === 0
               ? 'Create your first project and start tracking work, access, and payments.'
-              : 'Try different filters or clear the search.'
+              : completedCount > 0 && !showCompleted && status === 'all'
+                ? `${completedCount} completed project${completedCount > 1 ? 's are' : ' is'} hidden. Click "Show completed" above to view.`
+                : 'Try different filters or clear the search.'
           }
           action={
-            projects.length === 0 && (
+            projects.length === 0 ? (
               <Button onClick={() => setFormOpen(true)}>
                 <Plus strokeWidth={1.75} />
                 New project
               </Button>
-            )
+            ) : completedCount > 0 && !showCompleted && status === 'all' ? (
+              <Button variant="secondary" onClick={() => setShowCompleted(true)}>
+                <CheckCircle2 strokeWidth={1.75} className="size-4 text-emerald-500" />
+                Show completed projects ({completedCount})
+              </Button>
+            ) : undefined
           }
         />
       ) : (
@@ -136,12 +175,13 @@ export function ProjectsPage() {
                     clickable
                     exit="exit"
                     onClick={() => openProject(project.id)}
+                    className="group transition-colors duration-150 hover:bg-surface-hover/80"
                   >
                     <TD>
                       <div className="flex items-center gap-3">
                         <span
                           className={cn(
-                            'grid size-9 shrink-0 place-items-center rounded-lg',
+                            'grid size-9 shrink-0 place-items-center rounded-lg transition-transform duration-150 group-hover:scale-105',
                             tonePill[projectStatus[project.status].tone],
                           )}
                           aria-hidden
@@ -149,7 +189,7 @@ export function ProjectsPage() {
                           <FolderKanban className="size-4" strokeWidth={1.75} />
                         </span>
                         <div>
-                          <p className="font-medium">{project.title}</p>
+                          <p className="font-medium group-hover:text-primary transition-colors duration-150">{project.title}</p>
                           <p className="text-xs text-muted-foreground">
                             {clientDisplayName(client)}
                             {project.tags.length > 0 && <> · {project.tags.join(', ')}</>}
@@ -188,3 +228,4 @@ export function ProjectsPage() {
     </>
   )
 }
+

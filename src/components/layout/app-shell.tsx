@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import * as Dialog from '@radix-ui/react-dialog'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -23,7 +23,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useIsAdmin } from '@/hooks/usePermissions'
 import { useTheme } from '@/hooks/useTheme'
 import { useData } from '@/data/store'
-import { clientDisplayName } from '@/lib/derive'
+import { clientDisplayName, effectivePaymentStatus } from '@/lib/derive'
 import { EASE_OUT_EXPO, overlayVariants, panelSpring } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 import { ClientFormModal } from '@/features/clients/ClientFormModal'
@@ -51,6 +51,46 @@ function Logo() {
 
 function NavItems({ onNavigate }: { onNavigate?: () => void }) {
   const isAdmin = useIsAdmin()
+  const { projects, tasks, payments } = useData()
+
+  const activeProjectsCount = useMemo(
+    () => projects.filter((p) => !['completed', 'finished', 'cancelled'].includes(p.status)).length,
+    [projects],
+  )
+  const openTasksCount = useMemo(
+    () => tasks.filter((t) => t.status !== 'done' && t.status !== 'cancelled').length,
+    [tasks],
+  )
+  const overduePaymentsCount = useMemo(
+    () => payments.filter((p) => effectivePaymentStatus(p) === 'overdue').length,
+    [payments],
+  )
+
+  const getBadge = (path: string) => {
+    if (path === '/projects' && activeProjectsCount > 0) {
+      return (
+        <span className="relative ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-surface-hover px-1.5 text-[11px] font-medium text-muted-foreground">
+          {activeProjectsCount}
+        </span>
+      )
+    }
+    if (path === '/tasks' && openTasksCount > 0) {
+      return (
+        <span className="relative ml-auto grid size-5 place-items-center rounded-full bg-surface-hover text-[11px] font-medium text-muted-foreground">
+          {openTasksCount}
+        </span>
+      )
+    }
+    if (path === '/payments' && overduePaymentsCount > 0) {
+      return (
+        <span className="relative ml-auto grid size-5 place-items-center rounded-full bg-red-100 dark:bg-red-950/60 text-[11px] font-semibold text-red-600 dark:text-red-400">
+          {overduePaymentsCount}
+        </span>
+      )
+    }
+    return null
+  }
+
   return (
     <nav className="flex flex-col gap-0.5 px-3" aria-label="Main navigation">
       {NAV.filter((item) => isAdmin || !item.adminOnly).map(({ to, label, icon: Icon }) => (
@@ -80,6 +120,7 @@ function NavItems({ onNavigate }: { onNavigate?: () => void }) {
               )}
               <Icon className="relative size-4" strokeWidth={1.75} aria-hidden />
               <span className="relative">{label}</span>
+              {getBadge(to)}
             </>
           )}
         </NavLink>

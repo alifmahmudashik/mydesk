@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { FileText, Loader2, Plus, Receipt, Settings, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -32,6 +32,45 @@ function suggestNumber(client: Client | undefined, invoices: Invoice[]) {
   return `${prefix}-${String(count).padStart(2, '0')}`
 }
 
+/** "Alif Mahmud - Lagoon Media - invoice - Aug 8, 2026.pdf" — strips characters Windows/macOS
+ *  reject in filenames (colons, slashes, etc.) since business/client names are free text. */
+function exportFilename(senderName: string | null | undefined, client: Client | undefined, issueDate: string, number: string) {
+  const parts = [senderName?.trim(), client ? clientDisplayName(client) : undefined, 'invoice', issueDate ? formatDate(issueDate) : undefined].filter(
+    (p): p is string => Boolean(p),
+  )
+  const base = parts.length > 0 ? parts.join(' - ') : `Invoice-${number || 'draft'}`
+  return `${base.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim()}.pdf`
+}
+
+/**
+ * Tracks an element's content-box size (padding/border excluded), live across resizes.
+ * Uses a callback ref (not a plain useRef) so the observer attaches whenever the node
+ * actually mounts — including when it mounts later than the component itself, e.g. behind
+ * a loading skeleton that swaps in after the initial render.
+ */
+function useElementSize<T extends HTMLElement>() {
+  const nodeRef = useRef<T | null>(null)
+  const [size, setSize] = useState({ width: 0, height: 0 })
+  const [mountTick, setMountTick] = useState(0)
+
+  const setRef = useCallback((node: T | null) => {
+    nodeRef.current = node
+    setMountTick((t) => t + 1)
+  }, [])
+
+  useEffect(() => {
+    const el = nodeRef.current
+    if (!el) return
+    const observer = new ResizeObserver(([entry]) => {
+      setSize({ width: entry.contentRect.width, height: entry.contentRect.height })
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [mountTick])
+
+  return [setRef, size, nodeRef] as const
+}
+
 function emptyForm(client?: Client) {
   return {
     id: undefined as string | undefined,
@@ -61,6 +100,22 @@ export function InvoicesPage() {
   const [deleting, setDeleting] = useState<Invoice>()
   const [exporting, setExporting] = useState(false)
   const previewRef = useRef<HTMLDivElement>(null)
+  // Scale the A4 page to fit the available width instead of overflowing/needing a scrollbar.
+  // Transform doesn't affect layout size, so these two measurements stay independent of
+  // each other and of the scale itself — no circular sizing.
+  const [frameRef, frameSize] = useElementSize<HTMLDivElement>()
+  const [contentRef, contentSize, contentNodeRef] = useElementSize<HTMLDivElement>()
+  const previewScale = frameSize.width > 0 && contentSize.width > 0 ? Math.min(1, frameSize.width / contentSize.width) : 1
+
+  // Business settings load asynchronously, after this component's first render — pick up the
+  // default note once it arrives, but only onto a fresh, still-blank invoice (never overwrite
+  // something the admin already typed or a saved invoice's own note).
+  useEffect(() => {
+    if (!form.id && !form.notes && invoiceSettings?.default_note) {
+      setForm((f) => (f.notes ? f : { ...f, notes: invoiceSettings.default_note ?? '' }))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoiceSettings])
 
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [key]: value }))
@@ -152,11 +207,20 @@ export function InvoicesPage() {
   async function exportPdf() {
     if (!previewRef.current) return
     setExporting(true)
+    // The on-screen page is visually scaled down to fit the panel — export the real,
+    // full-size document, not whatever fraction is currently showing.
+    const scaledEl = contentNodeRef.current
+    const prevTransform = scaledEl?.style.transform
+    if (scaledEl) scaledEl.style.transform = 'none'
     try {
-      await exportElementToPdf(previewRef.current, `Invoice-${form.number || 'draft'}.pdf`)
+      await exportElementToPdf(
+        previewRef.current,
+        exportFilename(invoiceSettings?.business_name, client, form.issue_date, form.number),
+      )
     } catch {
       toast.error('Could not export PDF', { description: 'Try again in a moment.' })
     } finally {
+      if (scaledEl) scaledEl.style.transform = prevTransform ?? ''
       setExporting(false)
     }
   }
@@ -338,25 +402,34 @@ export function InvoicesPage() {
             )}
           </div>
 
-          {/* ---- Right: live preview ---- */}
-          <div className="min-w-0 overflow-x-auto rounded-xl border bg-surface-hover p-6 shadow-sm sm:p-10">
-            {/* The shadow lives on this wrapper, not the page itself, so html2canvas never
-                bakes it into the exported PDF. */}
-            <div className="mx-auto w-fit rounded-sm shadow-xl">
-              <InvoicePreview
-                ref={previewRef}
-                number={form.number}
-                issueDate={form.issue_date}
-                dueDate={form.due_date}
-                currency={form.currency}
-                lineItems={form.line_items}
-                taxRate={form.tax_rate}
-                notes={form.notes}
-                brandColor={form.brand_color}
-                client={client}
-                settings={invoiceSettings}
-                paymentFields={form.payment_fields}
-              />
+          {/* ---- Right: live preview, scaled to fit the panel ---- */}
+          <div ref={frameRef} className="min-w-0 overflow-hidden rounded-xl border bg-surface-hover p-6 shadow-sm sm:p-10">
+            <div
+              className="mx-auto"
+              style={{ width: contentSize.width * previewScale || undefined, height: contentSize.height * previewScale || undefined }}
+            >
+              {/* The shadow lives on this wrapper, not the page itself, so html2canvas never
+                  bakes it into the exported PDF. */}
+              <div
+                ref={contentRef}
+                className="w-fit rounded-sm shadow-xl"
+                style={{ transform: `scale(${previewScale})`, transformOrigin: 'top left' }}
+              >
+                <InvoicePreview
+                  ref={previewRef}
+                  number={form.number}
+                  issueDate={form.issue_date}
+                  dueDate={form.due_date}
+                  currency={form.currency}
+                  lineItems={form.line_items}
+                  taxRate={form.tax_rate}
+                  notes={form.notes}
+                  brandColor={form.brand_color}
+                  client={client}
+                  settings={invoiceSettings}
+                  paymentFields={form.payment_fields}
+                />
+              </div>
             </div>
           </div>
         </div>

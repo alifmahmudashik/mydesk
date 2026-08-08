@@ -23,6 +23,7 @@ const FONT_STACK = "'Inter Variable', ui-sans-serif, system-ui, -apple-system, '
 const money = (n: number, currency: string) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 2 }).format(n)
 
+/** Compact "Label: value" inline rows — used inside the tight invoice-to address block. */
 function FieldRows({ fields }: { fields: InvoiceField[] }) {
   if (fields.length === 0) return null
   return (
@@ -36,6 +37,23 @@ function FieldRows({ fields }: { fields: InvoiceField[] }) {
           </p>
         ))}
     </>
+  )
+}
+
+/** Label on its own bold line, value on the line below, with real breathing room between
+ *  entries — used for Payment Method, where each field needs to read as its own block. */
+function StackedFieldRows({ fields }: { fields: InvoiceField[] }) {
+  const visible = fields.filter((f) => f.label.trim() || f.value.trim())
+  if (visible.length === 0) return null
+  return (
+    <div className="space-y-3">
+      {visible.map((f, i) => (
+        <div key={i}>
+          <p className="font-bold">{f.label}</p>
+          <p>{f.value}</p>
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -57,21 +75,21 @@ export const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(fu
     <div
       ref={ref}
       style={{ background: '#ffffff', color: '#18181b', fontFamily: FONT_STACK }}
-      className="w-[210mm] min-h-[297mm] max-w-full p-12 text-[13px] leading-relaxed"
+      className="flex w-[210mm] min-h-[297mm] max-w-full flex-col p-12 text-base leading-relaxed"
     >
       <div className="flex items-start justify-between gap-6">
         <div>
-          <p className="text-base font-bold">{settings?.business_name || 'Your Business Name'}</p>
+          <p className="mb-2 text-4xl font-extrabold tracking-tight">{settings?.business_name || 'Your Business Name'}</p>
           {settings?.business_address?.split('\n').map((line, i) => <p key={i}>{line}</p>)}
         </div>
-        <h1 className="text-3xl font-bold tracking-tight" style={{ color }}>
+        <h1 className="text-5xl font-bold tracking-tight" style={{ color }}>
           INVOICE
         </h1>
       </div>
 
       <div className="mt-8 flex items-start justify-between gap-6">
         <div className="min-w-0">
-          <p className="mb-1 text-xs font-bold uppercase tracking-wider text-zinc-500">Invoice to</p>
+          <p className="mb-1 text-base font-bold uppercase tracking-wider text-zinc-500">Invoice to</p>
           <p className="font-bold">{client?.use_company_name && client.company_name ? client.company_name : (client?.name ?? '—')}</p>
           {client?.company_address ? (
             client.company_address.split('\n').map((line, i) => <p key={i}>{line}</p>)
@@ -100,45 +118,52 @@ export const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(fu
         </div>
       </div>
 
-      <table className="mt-8 w-full border-collapse text-left">
+      {/* border-separate (not the usual border-collapse) is what lets the header's rounded
+          corners actually render — collapsed borders clip a cell's own border-radius. */}
+      <table className="mt-8 w-full text-left" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
         <thead>
           <tr style={{ background: color }} className="text-white">
-            <th className="px-3 py-2 text-xs font-bold uppercase tracking-wider">Product</th>
-            <th className="px-3 py-2 text-right text-xs font-bold uppercase tracking-wider">Price</th>
-            <th className="px-3 py-2 text-right text-xs font-bold uppercase tracking-wider">Qty</th>
-            <th className="px-3 py-2 text-right text-xs font-bold uppercase tracking-wider">Total</th>
+            <th className="rounded-l-lg px-4 py-3 text-base font-bold uppercase tracking-wider">Product</th>
+            <th className="px-4 py-3 text-right text-base font-bold uppercase tracking-wider">Price</th>
+            <th className="px-4 py-3 text-right text-base font-bold uppercase tracking-wider">Qty</th>
+            <th className="rounded-r-lg px-4 py-3 text-right text-base font-bold uppercase tracking-wider">Total</th>
           </tr>
         </thead>
         <tbody>
           {lineItems.length === 0 ? (
             <tr>
-              <td colSpan={4} className="px-3 py-4 text-center text-zinc-400">
+              <td colSpan={4} className="px-4 py-4 text-center text-zinc-400">
                 No line items yet.
               </td>
             </tr>
           ) : (
+            // The border lives on each <td>, not the <tr>: under border-collapse: separate
+            // (needed above for the header's rounded corners), row-level borders on a <tr>
+            // aren't reliably painted — cell borders are the only ones guaranteed to render.
             lineItems.map((li, i) => (
-              <tr key={i} className="border-b border-zinc-200">
-                <td className="px-3 py-2.5">{li.description || '—'}</td>
-                <td className="tnum px-3 py-2.5 text-right">{money(li.price, currency)}</td>
-                <td className="tnum px-3 py-2.5 text-right">{li.qty}</td>
-                <td className="tnum px-3 py-2.5 text-right">{money(li.price * li.qty, currency)}</td>
+              <tr key={i}>
+                <td className="border-b border-zinc-300 px-4 py-3">{li.description || '—'}</td>
+                <td className="tnum border-b border-zinc-300 px-4 py-3 text-right">{money(li.price, currency)}</td>
+                <td className="tnum border-b border-zinc-300 px-4 py-3 text-right">{li.qty}</td>
+                <td className="tnum border-b border-zinc-300 px-4 py-3 text-right">{money(li.price * li.qty, currency)}</td>
               </tr>
             ))
           )}
         </tbody>
       </table>
 
-      <div className="mt-6 flex items-start justify-between gap-8">
+      {/* Payment method sits level with the totals — both start right after the table,
+          instead of one being stranded near the bottom of the page. */}
+      <div className="mt-8 flex items-start justify-between gap-8">
         <div className="min-w-0 flex-1">
           {paymentFields.length > 0 && (
             <>
-              <p className="mb-1 font-bold">Payment Method</p>
-              <FieldRows fields={paymentFields} />
+              <p className="mb-3 text-base font-bold uppercase tracking-wider text-zinc-500">Payment Method</p>
+              <StackedFieldRows fields={paymentFields} />
             </>
           )}
         </div>
-        <div className="w-56 shrink-0 space-y-1.5">
+        <div className="w-64 shrink-0 space-y-2">
           <div className="flex justify-between">
             <span className="text-zinc-500">Sub-total</span>
             <span className="tnum">{money(subtotal, currency)}</span>
@@ -148,7 +173,7 @@ export const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(fu
             <span className="tnum">{money(tax, currency)}</span>
           </div>
           <div
-            className="flex justify-between px-3 py-2 font-bold text-white"
+            className="flex justify-between rounded-md px-4 py-2.5 font-bold text-white"
             style={{ background: color }}
           >
             <span>Total</span>
@@ -158,8 +183,8 @@ export const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(fu
       </div>
 
       {notes && (
-        <div className="mt-8">
-          <p className="mb-1 font-bold uppercase tracking-wider text-zinc-500">Note</p>
+        <div className="mt-auto pt-8">
+          <p className="mb-1 text-base font-bold uppercase tracking-wider text-zinc-500">Note</p>
           <p>{notes}</p>
         </div>
       )}

@@ -45,6 +45,16 @@ const statusFilter: SelectOption<PaymentFilter>[] = [
   ...options(paymentStatus),
 ]
 
+/** Compact label/value row, matching the properties rail used on the project detail page. */
+function Prop({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex min-h-11 items-center justify-between gap-6 py-1.5">
+      <dt className="shrink-0 text-[13px] text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 text-right text-sm">{children}</dd>
+    </div>
+  )
+}
+
 export function PaymentsPage() {
   const { ready, payments, clients, projects, updateRow, deleteRow } = useData()
   const isAdmin = useIsAdmin()
@@ -146,6 +156,7 @@ export function PaymentsPage() {
             value={sumByCurrency(open)}
             hint={`${open.length} open payment${open.length === 1 ? '' : 's'}`}
             tone="amber"
+            onClick={() => setStatus('open')}
           />
           <StatCard
             icon={AlertTriangle}
@@ -153,6 +164,7 @@ export function PaymentsPage() {
             value={sumByCurrency(overdue)}
             hint={overdue.length ? `${overdue.length} need chasing` : 'Nothing late'}
             tone={overdue.length ? 'red' : 'green'}
+            onClick={() => setStatus('overdue')}
           />
           <StatCard
             icon={CircleDollarSign}
@@ -160,6 +172,7 @@ export function PaymentsPage() {
             value={sumByCurrency(paidThisMonth)}
             hint={`${paidThisMonth.length} payment${paidThisMonth.length === 1 ? '' : 's'}`}
             tone="green"
+            onClick={() => setStatus('paid')}
           />
         </motion.div>
       )}
@@ -219,7 +232,7 @@ export function PaymentsPage() {
                     <TD className="hidden max-w-56 truncate text-muted-foreground md:table-cell">
                       {projectTitles(payment) || '—'}
                     </TD>
-                    <TD className="tnum text-right font-medium">
+                    <TD className="tnum text-right font-semibold">
                       {formatMoney(payment.amount, payment.currency)}
                     </TD>
                     <TD>
@@ -229,7 +242,7 @@ export function PaymentsPage() {
                       {payment.status === 'paid' ? formatDate(payment.payment_date) : formatDate(payment.due_date)}
                     </TD>
                     <TD>
-                      <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                         {isOpenPayment(payment) && (
                           <Button
                             variant="secondary"
@@ -278,50 +291,40 @@ export function PaymentsPage() {
         {openPayment && (
           <>
             <PanelSection title="Details">
-              <dl className="grid grid-cols-2 gap-4 rounded-lg border bg-background p-4">
-                <div>
-                  <dt className="text-xs font-medium text-muted-foreground">Status</dt>
-                  <dd className="mt-1"><StatusPill meta={paymentStatus[effectivePaymentStatus(openPayment)]} /></dd>
-                </div>
-                <div>
-                  <dt className="text-xs font-medium text-muted-foreground">
-                    {(openPayment.project_ids ?? []).length > 1 ? 'Projects' : 'Project'}
-                  </dt>
-                  <dd className="mt-1 text-sm">{projectTitles(openPayment) || '—'}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs font-medium text-muted-foreground">Due</dt>
-                  <dd className="tnum mt-1 text-sm">{formatDate(openPayment.due_date)}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs font-medium text-muted-foreground">Paid</dt>
-                  <dd className="tnum mt-1 text-sm">{formatDate(openPayment.payment_date)}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs font-medium text-muted-foreground">Method</dt>
-                  <dd className="mt-1 text-sm">{openPayment.payment_method ?? '—'}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs font-medium text-muted-foreground">Invoice</dt>
-                  <dd className="mt-1 text-sm">
-                    {openPayment.invoice_url ? (
-                      <a
-                        href={openPayment.invoice_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-primary hover:underline"
-                      >
-                        Open invoice
-                        <ExternalLink className="size-3.5" strokeWidth={1.75} aria-hidden />
-                      </a>
-                    ) : (
-                      '—'
-                    )}
-                  </dd>
-                </div>
+              <dl className="divide-y">
+                <Prop label="Status">
+                  <StatusPill meta={paymentStatus[effectivePaymentStatus(openPayment)]} animate={false} />
+                </Prop>
+                <Prop label={(openPayment.project_ids ?? []).length > 1 ? 'Projects' : 'Project'}>
+                  {projectTitles(openPayment) || '—'}
+                </Prop>
+                <Prop label="Due">
+                  <span className="tnum">{formatDate(openPayment.due_date)}</span>
+                </Prop>
+                <Prop label="Paid">
+                  <span className="tnum">{formatDate(openPayment.payment_date)}</span>
+                </Prop>
+                <Prop label="Method">{openPayment.payment_method ?? '—'}</Prop>
+                <Prop label="Invoice">
+                  {openPayment.invoice_url ? (
+                    <a
+                      href={openPayment.invoice_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-primary hover:underline"
+                    >
+                      Open invoice
+                      <ExternalLink className="size-3.5" strokeWidth={1.75} aria-hidden />
+                    </a>
+                  ) : (
+                    '—'
+                  )}
+                </Prop>
               </dl>
               {openPayment.notes && (
-                <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">{openPayment.notes}</p>
+                <p className="mt-4 rounded-lg bg-surface-hover px-3 py-2.5 text-[13px] leading-relaxed text-muted-foreground">
+                  {openPayment.notes}
+                </p>
               )}
             </PanelSection>
             {isOpenPayment(openPayment) && (
