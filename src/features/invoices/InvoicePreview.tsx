@@ -118,39 +118,44 @@ export const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(fu
         </div>
       </div>
 
-      {/* border-separate (not the usual border-collapse) is what lets the header's rounded
-          corners actually render — collapsed borders clip a cell's own border-radius. */}
-      <table className="mt-8 w-full text-left" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
-        <thead>
-          <tr style={{ background: color }} className="text-white">
-            <th className="rounded-l-lg px-4 py-3 text-base font-bold uppercase tracking-wider">Product</th>
-            <th className="px-4 py-3 text-right text-base font-bold uppercase tracking-wider">Price</th>
-            <th className="px-4 py-3 text-right text-base font-bold uppercase tracking-wider">Qty</th>
-            <th className="rounded-r-lg px-4 py-3 text-right text-base font-bold uppercase tracking-wider">Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {lineItems.length === 0 ? (
-            <tr>
-              <td colSpan={4} className="px-4 py-4 text-center text-zinc-400">
-                No line items yet.
-              </td>
+      {/* html2canvas doesn't reliably rasterize border-radius combined with a background
+          color (confirmed: it silently squares off both this header and the Total pill
+          below) — overflow-hidden on a wrapper clips it instead, which canvas renderers
+          handle correctly since it's a real clip path, not a rounded-rect fill. */}
+      <div className="mt-8 overflow-hidden rounded-t-lg">
+        <table className="w-full text-left" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
+          <thead>
+            <tr style={{ background: color }} className="text-white">
+              <th className="px-4 py-3 text-base font-bold uppercase tracking-wider">Product</th>
+              <th className="px-4 py-3 text-right text-base font-bold uppercase tracking-wider">Price</th>
+              <th className="px-4 py-3 text-right text-base font-bold uppercase tracking-wider">Qty</th>
+              <th className="px-4 py-3 text-right text-base font-bold uppercase tracking-wider">Total</th>
             </tr>
-          ) : (
-            // The border lives on each <td>, not the <tr>: under border-collapse: separate
-            // (needed above for the header's rounded corners), row-level borders on a <tr>
-            // aren't reliably painted — cell borders are the only ones guaranteed to render.
-            lineItems.map((li, i) => (
-              <tr key={i}>
-                <td className="border-b border-zinc-300 px-4 py-3">{li.description || '—'}</td>
-                <td className="tnum border-b border-zinc-300 px-4 py-3 text-right">{money(li.price, currency)}</td>
-                <td className="tnum border-b border-zinc-300 px-4 py-3 text-right">{li.qty}</td>
-                <td className="tnum border-b border-zinc-300 px-4 py-3 text-right">{money(li.price * li.qty, currency)}</td>
+          </thead>
+          <tbody>
+            {lineItems.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="px-4 py-4 text-center text-zinc-400">
+                  No line items yet.
+                </td>
               </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+            ) : (
+              // The border lives on each <td>, not the <tr>: under border-collapse: separate
+              // (needed above so the wrapper's rounded corners don't get clipped by collapsed
+              // borders), row-level borders on a <tr> aren't reliably painted — cell borders
+              // are the only ones guaranteed to render.
+              lineItems.map((li, i) => (
+                <tr key={i}>
+                  <td className="border-b border-zinc-300 px-4 py-3">{li.description || '—'}</td>
+                  <td className="tnum border-b border-zinc-300 px-4 py-3 text-right">{money(li.price, currency)}</td>
+                  <td className="tnum border-b border-zinc-300 px-4 py-3 text-right">{li.qty}</td>
+                  <td className="tnum border-b border-zinc-300 px-4 py-3 text-right">{money(li.price * li.qty, currency)}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
 
       {/* Payment method sits level with the totals — both start right after the table,
           instead of one being stranded near the bottom of the page. */}
@@ -172,12 +177,11 @@ export const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(fu
             <span className="text-zinc-500">Tax ({taxRate}%)</span>
             <span className="tnum">{money(tax, currency)}</span>
           </div>
-          <div
-            className="flex justify-between rounded-md px-4 py-2.5 font-bold text-white"
-            style={{ background: color }}
-          >
-            <span>Total</span>
-            <span className="tnum">{money(total, currency)}</span>
+          <div className="overflow-hidden rounded-md">
+            <div className="flex justify-between px-4 py-2.5 font-bold text-white" style={{ background: color }}>
+              <span>Total</span>
+              <span className="tnum">{money(total, currency)}</span>
+            </div>
           </div>
         </div>
       </div>
