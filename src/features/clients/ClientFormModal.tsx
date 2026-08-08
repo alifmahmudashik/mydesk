@@ -189,11 +189,14 @@ export function ClientFormModal({ open, onClose, client }: ClientFormModalProps)
       <div className="mt-4 border-t pt-1">
         <FormSection title="Invoicing">
           <div className="space-y-4">
-            <Field label="Company address" hint="Shown as the “Invoice to” address on this client's invoices.">
+            <Field
+              label="Company address"
+              hint="Shown as the “Invoice to” block on this client's invoices — the first line is used as the company name there (their legal invoicing name is often different from the short name above), the rest as the address."
+            >
               <Textarea
                 value={form.company_address}
                 onChange={(e) => set('company_address', e.target.value)}
-                placeholder={'123 Commercial Road\nCity, Postcode\nCountry'}
+                placeholder={'Segments Digital Pty Ltd\n123 Commercial Road\nCity, Postcode\nCountry'}
               />
             </Field>
             <Field label="Brand color" hint="Accent color used on this client's invoices.">

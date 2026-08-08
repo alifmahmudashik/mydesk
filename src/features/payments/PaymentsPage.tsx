@@ -31,7 +31,8 @@ import { SearchInput, Toolbar } from '@/components/ui/toolbar'
 import { useData } from '@/data/store'
 import { useIsAdmin } from '@/hooks/usePermissions'
 import { celebrateFrom } from '@/lib/confetti'
-import { clientDisplayName, effectivePaymentStatus, isOpenPayment, sumByCurrency } from '@/lib/derive'
+import { sumUSD, useUsdRates } from '@/lib/currency'
+import { clientDisplayName, effectivePaymentStatus, isOpenPayment } from '@/lib/derive'
 import { formatDate, formatMoney } from '@/lib/format'
 import { listContainer } from '@/lib/motion'
 import { options, paymentStatus } from '@/lib/status'
@@ -58,6 +59,7 @@ function Prop({ label, children }: { label: string; children: React.ReactNode })
 export function PaymentsPage() {
   const { ready, payments, clients, projects, updateRow, deleteRow } = useData()
   const isAdmin = useIsAdmin()
+  const usdRates = useUsdRates()
   const [searchParams, setSearchParams] = useSearchParams()
   const [search, setSearch] = useState('')
   // "What am I owed" is the default question — open payments first.
@@ -153,7 +155,7 @@ export function PaymentsPage() {
           <StatCard
             icon={Wallet}
             label="Outstanding"
-            value={sumByCurrency(open)}
+            value={formatMoney(sumUSD(open, usdRates), 'USD')}
             hint={`${open.length} open payment${open.length === 1 ? '' : 's'}`}
             tone="amber"
             onClick={() => setStatus('open')}
@@ -161,7 +163,7 @@ export function PaymentsPage() {
           <StatCard
             icon={AlertTriangle}
             label="Overdue"
-            value={sumByCurrency(overdue)}
+            value={formatMoney(sumUSD(overdue, usdRates), 'USD')}
             hint={overdue.length ? `${overdue.length} need chasing` : 'Nothing late'}
             tone={overdue.length ? 'red' : 'green'}
             onClick={() => setStatus('overdue')}
@@ -169,7 +171,7 @@ export function PaymentsPage() {
           <StatCard
             icon={CircleDollarSign}
             label="Paid this month"
-            value={sumByCurrency(paidThisMonth)}
+            value={formatMoney(sumUSD(paidThisMonth, usdRates), 'USD')}
             hint={`${paidThisMonth.length} payment${paidThisMonth.length === 1 ? '' : 's'}`}
             tone="green"
             onClick={() => setStatus('paid')}

@@ -71,6 +71,14 @@ export const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(fu
   const total = subtotal + tax
   const color = brandColor || '#111111'
 
+  // The company address's first line is the client's actual legal/invoicing name — often
+  // different from the short display name used elsewhere in the app (e.g. "Segments" vs.
+  // "Segments Digital Pty Ltd") — so that's what belongs on the invoice, not the short one.
+  const addressLines = (client?.company_address ?? '').split('\n').map((l) => l.trim()).filter(Boolean)
+  const [invoiceCompanyName, ...invoiceAddressLines] = addressLines
+  const invoiceToName =
+    invoiceCompanyName || (client?.use_company_name && client.company_name ? client.company_name : (client?.name ?? '—'))
+
   return (
     <div
       ref={ref}
@@ -90,9 +98,9 @@ export const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(fu
       <div className="mt-8 flex items-start justify-between gap-6">
         <div className="min-w-0">
           <p className="mb-1 text-base font-bold uppercase tracking-wider text-zinc-500">Invoice to</p>
-          <p className="font-bold">{client?.use_company_name && client.company_name ? client.company_name : (client?.name ?? '—')}</p>
-          {client?.company_address ? (
-            client.company_address.split('\n').map((line, i) => <p key={i}>{line}</p>)
+          <p className="font-bold">{invoiceToName}</p>
+          {invoiceAddressLines.length > 0 ? (
+            invoiceAddressLines.map((line, i) => <p key={i}>{line}</p>)
           ) : (
             <>
               {client?.email && <p>{client.email}</p>}
