@@ -203,26 +203,43 @@ export const useData = create<DataState>((set, get) => {
         set({ ...view, me, ready: true })
         return
       }
-      const [
+      const sb = supabase
+      const fetchAll = () =>
+        Promise.all([
+          sb.from('clients').select('*').order('created_at', { ascending: false }),
+          sb.from('projects').select('*').order('created_at', { ascending: false }),
+          sb.from('tasks').select('*').order('created_at', { ascending: false }),
+          sb.from('access_items').select('*').order('created_at', { ascending: true }),
+          sb.from('payments').select('*').order('created_at', { ascending: false }),
+          sb.from('project_notes').select('*').order('created_at', { ascending: false }),
+          sb.from('activity_log').select('*').order('created_at', { ascending: false }).limit(300),
+          sb.from('profiles').select('*').order('created_at', { ascending: true }),
+          sb.from('client_members').select('*'),
+          sb.from('invoices').select('*').order('created_at', { ascending: false }),
+          sb.from('invoice_settings').select('*').limit(1).maybeSingle(),
+          sb.auth.getUser(),
+        ])
+
+      let [
         clients, projects, tasks, accessItems, payments, notes, activity, profiles, members,
         invoices, invoiceSettings, user,
-      ] = await Promise.all([
-        supabase.from('clients').select('*').order('created_at', { ascending: false }),
-        supabase.from('projects').select('*').order('created_at', { ascending: false }),
-        supabase.from('tasks').select('*').order('created_at', { ascending: false }),
-        supabase.from('access_items').select('*').order('created_at', { ascending: true }),
-        supabase.from('payments').select('*').order('created_at', { ascending: false }),
-        supabase.from('project_notes').select('*').order('created_at', { ascending: false }),
-        supabase.from('activity_log').select('*').order('created_at', { ascending: false }).limit(300),
-        supabase.from('profiles').select('*').order('created_at', { ascending: true }),
-        supabase.from('client_members').select('*'),
-        supabase.from('invoices').select('*').order('created_at', { ascending: false }),
-        supabase.from('invoice_settings').select('*').limit(1).maybeSingle(),
-        supabase.auth.getUser(),
-      ])
+      ] = await fetchAll()
+
       // Members are denied on payments/invoices by RLS — errors there are expected; only
-      // surface failures on the core tables a member is allowed to read.
-      const failed = [clients, projects, tasks, notes].find((r) => r.error)
+      // treat failures on the core tables a member is allowed to read as real.
+      let failed = [clients, projects, tasks, notes].find((r) => r.error)
+      if (failed?.error) {
+        // Right after a page load the auth client can still be settling its session/token
+        // (e.g. a clock-skew "JWT issued at future" hiccup on first request) — that clears
+        // up within about a second, which a reload effectively waits out. Do the same wait
+        // automatically instead of leaving the user to hit reload themselves.
+        await new Promise((r) => setTimeout(r, 900))
+        ;[
+          clients, projects, tasks, accessItems, payments, notes, activity, profiles, members,
+          invoices, invoiceSettings, user,
+        ] = await fetchAll()
+        failed = [clients, projects, tasks, notes].find((r) => r.error)
+      }
       if (failed?.error) {
         toast.error('Failed to load data', { description: failed.error.message })
       }

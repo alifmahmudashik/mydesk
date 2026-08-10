@@ -1,10 +1,11 @@
 import { useState } from 'react'
+import { Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CheckboxRow } from '@/components/ui/checkbox'
 import { Combobox } from '@/components/ui/combobox'
 import { Field, FormSection } from '@/components/ui/field'
 import { Input, Textarea } from '@/components/ui/input'
-import { Modal } from '@/components/ui/modal'
+import { ConfirmDialog, Modal } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
 import { useData } from '@/data/store'
 import { allTimezones, COUNTRIES, timezoneForCountry } from '@/lib/geo'
@@ -21,12 +22,16 @@ interface ClientFormModalProps {
   onClose: () => void
   /** When set, the modal edits this client instead of creating one. */
   client?: Client
+  /** Called after the client is deleted, e.g. to navigate away from its now-gone workspace. */
+  onDeleted?: () => void
 }
 
 /** Mount with key={client?.id ?? 'new'} so fields re-initialize per client. */
-export function ClientFormModal({ open, onClose, client }: ClientFormModalProps) {
+export function ClientFormModal({ open, onClose, client, onDeleted }: ClientFormModalProps) {
   const createRow = useData((s) => s.createRow)
   const updateRow = useData((s) => s.updateRow)
+  const deleteRow = useData((s) => s.deleteRow)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [form, setForm] = useState({
     name: client?.name ?? '',
     company_name: client?.company_name ?? '',
@@ -92,6 +97,16 @@ export function ClientFormModal({ open, onClose, client }: ClientFormModalProps)
       size="lg"
       footer={
         <>
+          {client && (
+            <Button
+              variant="ghost"
+              className="mr-auto text-danger hover:bg-danger/10 hover:text-danger"
+              onClick={() => setConfirmDelete(true)}
+            >
+              <Trash2 strokeWidth={1.75} />
+              Delete client
+            </Button>
+          )}
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
@@ -224,6 +239,25 @@ export function ClientFormModal({ open, onClose, client }: ClientFormModalProps)
           </div>
         </FormSection>
       </div>
+
+      {client && (
+        <ConfirmDialog
+          open={confirmDelete}
+          onClose={() => setConfirmDelete(false)}
+          onConfirm={() => {
+            deleteRow('clients', client.id, {
+              entity: 'client',
+              entityId: client.id,
+              action: 'deleted',
+              message: `Deleted client "${client.name}"`,
+            })
+            onClose()
+            onDeleted?.()
+          }}
+          title={`Delete ${client.name}?`}
+          description="This removes the client and everything under them — projects, tasks, payments, and notes. This can’t be undone."
+        />
+      )}
     </Modal>
   )
 }

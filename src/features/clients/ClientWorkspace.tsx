@@ -418,7 +418,13 @@ export function ClientWorkspace() {
         </main>
       </div>
 
-      <ClientFormModal key={client.id} open={editOpen} onClose={() => setEditOpen(false)} client={client} />
+      <ClientFormModal
+        key={client.id}
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        client={client}
+        onDeleted={() => navigate('/clients')}
+      />
       <ProjectFormModal
         key={projectFormOpen ? 'open' : 'closed'}
         open={projectFormOpen}
