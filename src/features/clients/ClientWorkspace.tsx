@@ -38,15 +38,20 @@ import { ClientFormModal } from '@/features/clients/ClientFormModal'
 import { ProjectDetail } from '@/features/projects/ProjectDetail'
 import { ProjectFormModal } from '@/features/projects/ProjectFormModal'
 
-/** "1. Title — $30" lines plus a per-currency total, ready to paste into a chat. */
+/** "1. Title — $30" lines plus a per-currency total, formatted cleanly for client messaging. */
 function buildChatSummary(clientName: string, selected: Project[]) {
   const lines = selected.map((p, i) => `${i + 1}. ${p.title} — ${formatMoney(p.amount, p.currency)}`)
+  const total = sumByCurrency(selected)
   return [
-    `${clientName} — ${selected.length} project${selected.length === 1 ? '' : 's'}`,
+    `Hi ${clientName},`,
+    '',
+    `Here is the summary of projects worked on:`,
     '',
     ...lines,
     '',
-    `Total: ${sumByCurrency(selected)}`,
+    `Total: ${total}`,
+    '',
+    `Thank you!`,
   ].join('\n')
 }
 
@@ -155,6 +160,11 @@ export function ClientWorkspace() {
     setSelectedIds(new Set())
   }
 
+  const enterSelectMode = () => {
+    setSelectMode(true)
+    if (finishedProjects.length > 0) setFinishedOpen(true)
+  }
+
   const toggleSelected = (projectId: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev)
@@ -163,6 +173,25 @@ export function ClientWorkspace() {
       return next
     })
   }
+
+  const selectCompletedOnly = () => {
+    const completedOrFinished = clientProjects
+      .filter((p) => p.status === 'completed' || p.status === 'finished')
+      .map((p) => p.id)
+    setSelectedIds(new Set(completedOrFinished))
+    if (finishedProjects.length > 0) setFinishedOpen(true)
+  }
+
+  const selectAll = () => {
+    setSelectedIds(new Set(clientProjects.map((p) => p.id)))
+    if (finishedProjects.length > 0) setFinishedOpen(true)
+  }
+
+  const selectedProjects = useMemo(
+    () => clientProjects.filter((p) => selectedIds.has(p.id)),
+    [clientProjects, selectedIds],
+  )
+  const selectedTotal = useMemo(() => sumByCurrency(selectedProjects), [selectedProjects])
 
   if (!ready) {
     return (
@@ -294,14 +323,15 @@ export function ClientWorkspace() {
             <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Projects · {clientProjects.length}
             </h2>
-            <div className="flex items-center gap-0.5">
-              {isAdmin && clientProjects.length > 0 && (
+            <div className="flex items-center gap-1">
+              {clientProjects.length > 0 && (
                 <Button
-                  variant="ghost"
+                  variant={selectMode ? 'secondary' : 'ghost'}
                   size="iconSm"
-                  aria-label={selectMode ? 'Cancel selection' : 'Select projects to export'}
+                  title={selectMode ? 'Cancel selection' : 'Select projects to export message'}
+                  aria-label={selectMode ? 'Cancel selection' : 'Select projects to export message'}
                   aria-pressed={selectMode}
-                  onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+                  onClick={() => (selectMode ? exitSelectMode() : enterSelectMode())}
                 >
                   {selectMode ? <X strokeWidth={1.75} /> : <CheckSquare strokeWidth={1.75} />}
                 </Button>
@@ -311,6 +341,25 @@ export function ClientWorkspace() {
               </Button>
             </div>
           </div>
+
+          {selectMode && (
+            <div className="mb-3 flex items-center gap-1.5 text-xs">
+              <button
+                type="button"
+                onClick={selectCompletedOnly}
+                className="cursor-pointer rounded-md bg-surface-hover px-2 py-1 font-medium text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Select completed
+              </button>
+              <button
+                type="button"
+                onClick={selectedIds.size === clientProjects.length ? exitSelectMode : selectAll}
+                className="cursor-pointer rounded-md bg-surface-hover px-2 py-1 font-medium text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {selectedIds.size === clientProjects.length ? 'Clear' : 'Select all'}
+              </button>
+            </div>
+          )}
 
           <motion.div variants={listContainer} initial="initial" animate="animate" className="space-y-2">
             <AnimatePresence initial={false}>
@@ -377,18 +426,22 @@ export function ClientWorkspace() {
           )}
 
           {selectMode && (
-            <div className="sticky bottom-4 mt-4 flex items-center justify-between gap-2 rounded-xl border bg-surface px-3.5 py-2.5 shadow-lg">
-              <span className="text-[13px] font-medium">{selectedIds.size} selected</span>
+            <div className="sticky bottom-4 mt-4 flex items-center justify-between gap-2 rounded-xl border bg-surface p-3 shadow-lg">
+              <div className="min-w-0">
+                <p className="text-[13px] font-medium leading-tight">{selectedIds.size} selected</p>
+                {selectedProjects.length > 0 && (
+                  <p className="tnum mt-0.5 text-xs text-muted-foreground">Total: {selectedTotal}</p>
+                )}
+              </div>
               <Button
                 size="sm"
                 disabled={selectedIds.size === 0}
                 onClick={() => {
-                  const selectedProjects = clientProjects.filter((p) => selectedIds.has(p.id))
-                  setExportText(buildChatSummary(clientDisplayName(client), selectedProjects))
+                  setExportText(buildChatSummary(client.name, selectedProjects))
                 }}
               >
                 <MessageSquareText strokeWidth={1.75} />
-                Export as chat
+                Export message
               </Button>
             </div>
           )}

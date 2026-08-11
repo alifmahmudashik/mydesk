@@ -121,7 +121,12 @@ export function InvoicesPage() {
     setForm((f) => ({ ...f, [key]: value }))
 
   const client = clients.find((c) => c.id === form.client_id)
-  const clientProjects = useMemo(() => projects.filter((p) => p.client_id === form.client_id), [projects, form.client_id])
+  // Only "completed" is billable here — "finished" projects are already paid (that's what
+  // finishing one does), and anything else isn't done yet.
+  const clientProjects = useMemo(
+    () => projects.filter((p) => p.client_id === form.client_id && p.status === 'completed'),
+    [projects, form.client_id],
+  )
 
   const clientOptions = clients.map((c) => ({ value: c.id, label: clientDisplayName(c) }))
 
