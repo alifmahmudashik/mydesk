@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
@@ -17,6 +17,7 @@ import {
   Pencil,
   Phone,
   Plus,
+  RefreshCw,
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -31,6 +32,7 @@ import { useIsAdmin } from '@/hooks/usePermissions'
 import { clientDisplayName, clientSecondaryName, isOpenPayment, sumByCurrency } from '@/lib/derive'
 import { formatDate, formatMoney } from '@/lib/format'
 import { EASE_OUT_EXPO, listContainer, listItem } from '@/lib/motion'
+import { isSegmentsClient, syncSegmentsClient } from '@/lib/segmentsSync'
 import { clientStatus, projectStatus } from '@/lib/status'
 import { cn } from '@/lib/utils'
 import type { Project } from '@/types'
@@ -136,7 +138,7 @@ export function ClientWorkspace() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const { ready, clients, projects, payments, updateRow } = useData()
+  const { ready, clients, projects, payments, notes, createRow, updateRow } = useData()
   const isAdmin = useIsAdmin()
   const [editOpen, setEditOpen] = useState(false)
   const [projectFormOpen, setProjectFormOpen] = useState(false)
@@ -146,6 +148,36 @@ export function ClientWorkspace() {
   const [exportText, setExportText] = useState<string | null>(null)
 
   const client = clients.find((c) => c.id === id)
+  const isSegments = isSegmentsClient(client)
+  const [syncingSegments, setSyncingSegments] = useState(false)
+  const hasAutoSynced = useRef<string | null>(null)
+
+  const handleSyncSegments = async (manual = false) => {
+    if (!client || !isSegments || syncingSegments) return
+    setSyncingSegments(true)
+    try {
+      await syncSegmentsClient({
+        client,
+        projects,
+        notes,
+        createRow,
+        updateRow,
+        showToast: manual,
+      })
+    } catch {
+      // Error is handled inside syncSegmentsClient
+    } finally {
+      setSyncingSegments(false)
+    }
+  }
+
+  useEffect(() => {
+    if (ready && client && isSegments && hasAutoSynced.current !== client.id) {
+      hasAutoSynced.current = client.id
+      void handleSyncSegments(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, client?.id, isSegments])
   const clientProjects = useMemo(() => projects.filter((p) => p.client_id === id), [projects, id])
   // Finished projects are settled and paid — tuck them away like archived clients.
   const activeProjects = useMemo(() => clientProjects.filter((p) => p.status !== 'finished'), [clientProjects])
@@ -324,6 +356,21 @@ export function ClientWorkspace() {
               Projects · {clientProjects.length}
             </h2>
             <div className="flex items-center gap-1">
+              {isSegments && (
+                <Button
+                  variant="ghost"
+                  size="iconSm"
+                  title={syncingSegments ? 'Syncing with Segments sheet…' : 'Sync tasks from Segments Google Sheet'}
+                  aria-label="Sync tasks from Segments Google Sheet"
+                  disabled={syncingSegments}
+                  onClick={() => void handleSyncSegments(true)}
+                >
+                  <RefreshCw
+                    className={cn('size-3.5', syncingSegments && 'animate-spin text-primary')}
+                    strokeWidth={1.75}
+                  />
+                </Button>
+              )}
               {clientProjects.length > 0 && (
                 <Button
                   variant={selectMode ? 'secondary' : 'ghost'}
