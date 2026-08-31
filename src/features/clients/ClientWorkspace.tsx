@@ -138,7 +138,7 @@ export function ClientWorkspace() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const { ready, clients, projects, payments, notes, createRow, updateRow } = useData()
+  const { ready, clients, projects, payments, notes, createRow, updateRow, deleteRow } = useData()
   const isAdmin = useIsAdmin()
   const [editOpen, setEditOpen] = useState(false)
   const [projectFormOpen, setProjectFormOpen] = useState(false)
@@ -162,6 +162,7 @@ export function ClientWorkspace() {
         notes,
         createRow,
         updateRow,
+        deleteRow,
         showToast: manual,
       })
     } catch {

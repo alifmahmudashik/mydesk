@@ -1,4 +1,5 @@
 import type { Client, Project, ProjectNote, ProjectStatus } from '@/types'
+import type { LogInput, Table } from '@/data/store'
 import { toast } from 'sonner'
 
 export const SEGMENTS_API_URL =
@@ -78,22 +79,19 @@ export interface SyncSegmentsOptions {
   projects: Project[]
   notes: ProjectNote[]
   createRow: <T extends { id: string; created_at: string }>(
-    table: 'projects' | 'project_notes',
+    table: Table,
     data: Omit<T, 'id' | 'created_at'>,
-    log?: { entity: 'project' | 'note'; action: 'created' | 'updated'; message: string },
+    log?: Omit<LogInput, 'entityId'>,
   ) => T
-  updateRow: (
-    table: 'projects' | 'project_notes',
-    id: string,
-    patch: Record<string, unknown>,
-    log?: { entity: 'project' | 'note'; entityId: string; action: 'updated'; message: string },
-  ) => void
+  updateRow: (table: Table, id: string, patch: Record<string, unknown>, log?: LogInput) => void
+  deleteRow: (table: Table, id: string, log?: LogInput) => void
   showToast?: boolean
 }
 
 /**
  * Main sync routine for Segments client:
- * Fetches the Google Sheet tasks, filters for Alif, creates missing projects, and updates status/notes on existing ones.
+ * Fetches the Google Sheet tasks, filters for Alif, creates missing projects, updates status/notes on existing ones,
+ * and removes projects that were deleted from the sheet.
  */
 export async function syncSegmentsClient({
   client,
@@ -101,8 +99,9 @@ export async function syncSegmentsClient({
   notes,
   createRow,
   updateRow,
+  deleteRow,
   showToast = false,
-}: SyncSegmentsOptions): Promise<{ created: number; updated: number; total: number }> {
+}: SyncSegmentsOptions): Promise<{ created: number; updated: number; deleted: number; total: number }> {
   try {
     const sheetTasks = await fetchSegmentsTasks()
     const alifTasks = sheetTasks.filter(isTaskForAlif)
@@ -111,7 +110,35 @@ export async function syncSegmentsClient({
 
     let created = 0
     let updated = 0
+    let deleted = 0
 
+    // Set of normalized project titles currently on the sheet for Alif
+    const currentSheetTitles = new Set(
+      alifTasks.map((t) => formatProjectTitle(t.project, t.task).trim().toLowerCase()),
+    )
+
+    // 1. Delete projects that are no longer present on the sheet
+    for (const p of clientProjects) {
+      const normalizedTitle = p.title.trim().toLowerCase()
+      if (!currentSheetTitles.has(normalizedTitle)) {
+        // Clean up any notes for this project
+        notes
+          .filter((n) => n.project_id === p.id)
+          .forEach((n) => {
+            deleteRow('project_notes', n.id)
+          })
+
+        deleteRow('projects', p.id, {
+          entity: 'project',
+          entityId: p.id,
+          action: 'deleted',
+          message: `Removed project "${p.title}" (removed from Segments sheet)`,
+        })
+        deleted++
+      }
+    }
+
+    // 2. Create or update projects from the sheet
     for (const item of alifTasks) {
       const title = formatProjectTitle(item.project, item.task)
       const targetStatus = mapSheetStatus(item.status)
@@ -213,14 +240,19 @@ export async function syncSegmentsClient({
     }
 
     if (showToast) {
-      if (created > 0 || updated > 0) {
-        toast.success(`Segments synced: ${created} added, ${updated} updated`)
+      const parts: string[] = []
+      if (created > 0) parts.push(`${created} added`)
+      if (updated > 0) parts.push(`${updated} updated`)
+      if (deleted > 0) parts.push(`${deleted} removed`)
+
+      if (parts.length > 0) {
+        toast.success(`Segments synced: ${parts.join(', ')}`)
       } else {
         toast.info('Segments projects are up to date')
       }
     }
 
-    return { created, updated, total: alifTasks.length }
+    return { created, updated, deleted, total: alifTasks.length }
   } catch (err) {
     console.error('Segments sheet sync error:', err)
     if (showToast) {
