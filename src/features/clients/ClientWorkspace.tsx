@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
+  Archive,
+  ArchiveRestore,
   ArrowLeft,
   CalendarDays,
   Check,
@@ -14,10 +16,10 @@ import {
   Mail,
   MapPin,
   MessageSquareText,
-  Pencil,
   Phone,
   Plus,
   RefreshCw,
+  Settings,
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -278,34 +280,100 @@ export function ClientWorkspace() {
               </div>
             </div>
             {isAdmin && (
-              <Button variant="ghost" size="iconSm" aria-label="Edit client" onClick={() => setEditOpen(true)}>
-                <Pencil strokeWidth={1.75} />
-              </Button>
+              <div className="flex items-center gap-0.5">
+                <Button
+                  variant="ghost"
+                  size="iconSm"
+                  title={client.status === 'archived' ? 'Reactivate / Unarchive client' : 'Quick archive client'}
+                  aria-label={client.status === 'archived' ? 'Reactivate / Unarchive client' : 'Quick archive client'}
+                  onClick={() => {
+                    const nextStatus = client.status === 'archived' ? 'active' : 'archived'
+                    updateRow(
+                      'clients',
+                      client.id,
+                      { status: nextStatus },
+                      {
+                        entity: 'client',
+                        entityId: client.id,
+                        action: 'status_changed',
+                        message: `${nextStatus === 'archived' ? 'Archived' : 'Reactivated'} client "${clientDisplayName(client)}"`,
+                      },
+                    )
+                    toast.success(
+                      nextStatus === 'archived'
+                        ? `Archived "${clientDisplayName(client)}"`
+                        : `Reactivated "${clientDisplayName(client)}"`,
+                    )
+                  }}
+                >
+                  {client.status === 'archived' ? (
+                    <ArchiveRestore className="size-4 text-emerald-600 dark:text-emerald-400" strokeWidth={1.75} />
+                  ) : (
+                    <Archive className="size-4 text-muted-foreground hover:text-foreground" strokeWidth={1.75} />
+                  )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="iconSm"
+                  title="Client settings"
+                  aria-label="Client settings"
+                  onClick={() => navigate(`/clients/${client.id}/settings`)}
+                >
+                  <Settings strokeWidth={1.75} />
+                </Button>
+              </div>
             )}
           </div>
 
           <div className="mt-3 flex items-center gap-2">
             <StatusPill meta={clientStatus[client.status]} />
-            {isAdmin && client.status !== 'active' && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() =>
-                  updateRow(
-                    'clients',
-                    client.id,
-                    { status: 'active' },
-                    {
-                      entity: 'client',
-                      entityId: client.id,
-                      action: 'status_changed',
-                      message: `Reactivated client "${clientDisplayName(client)}"`,
-                    },
-                  )
-                }
-              >
-                Reactivate
-              </Button>
+            {isAdmin && (
+              client.status === 'archived' ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    updateRow(
+                      'clients',
+                      client.id,
+                      { status: 'active' },
+                      {
+                        entity: 'client',
+                        entityId: client.id,
+                        action: 'status_changed',
+                        message: `Reactivated client "${clientDisplayName(client)}"`,
+                      },
+                    )
+                    toast.success(`Reactivated "${clientDisplayName(client)}"`)
+                  }}
+                >
+                  <ArchiveRestore className="size-3.5" strokeWidth={1.75} />
+                  Reactivate
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+                  onClick={() => {
+                    updateRow(
+                      'clients',
+                      client.id,
+                      { status: 'archived' },
+                      {
+                        entity: 'client',
+                        entityId: client.id,
+                        action: 'status_changed',
+                        message: `Archived client "${clientDisplayName(client)}"`,
+                      },
+                    )
+                    toast.success(`Archived "${clientDisplayName(client)}"`)
+                  }}
+                >
+                  <Archive className="size-3.5" strokeWidth={1.75} />
+                  Archive
+                </Button>
+              )
             )}
           </div>
 

@@ -9,6 +9,7 @@ import { LoginPage } from '@/features/auth/LoginPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { ClientsPage } from '@/features/clients/ClientsPage'
 import { ClientWorkspace } from '@/features/clients/ClientWorkspace'
+import { ClientSettingsPage } from '@/features/clients/ClientSettingsPage'
 import { ProjectsPage } from '@/features/projects/ProjectsPage'
 import { TasksPage } from '@/features/tasks/TasksPage'
 import { PaymentsPage } from '@/features/payments/PaymentsPage'
@@ -24,6 +25,7 @@ function AnimatedRoutes() {
         <Route path="/" element={<Page><DashboardPage /></Page>} />
         <Route path="/clients" element={<Page><ClientsPage /></Page>} />
         <Route path="/clients/:id" element={<Page><ClientWorkspace /></Page>} />
+        <Route path="/clients/:id/settings" element={<Page><ClientSettingsPage /></Page>} />
         <Route path="/projects" element={<Page><ProjectsPage /></Page>} />
         <Route path="/tasks" element={<Page><TasksPage /></Page>} />
         <Route path="/payments" element={<Page><PaymentsPage /></Page>} />

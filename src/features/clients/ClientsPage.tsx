@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { MoreHorizontal, Pencil, Plus, Trash2, Users } from 'lucide-react'
+import { Archive, ArchiveRestore, MoreHorizontal, Plus, Settings, Trash2, Users } from 'lucide-react'
+import { toast } from 'sonner'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Dropdown } from '@/components/ui/dropdown'
@@ -29,7 +30,7 @@ const statusFilterOptions: SelectOption<'all' | ClientStatus>[] = [
 
 export function ClientsPage() {
   const navigate = useNavigate()
-  const { ready, clients, projects, payments, deleteRow } = useData()
+  const { ready, clients, projects, payments, updateRow, deleteRow } = useData()
   const isAdmin = useIsAdmin()
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<'all' | ClientStatus>('active')
@@ -157,9 +158,32 @@ export function ClientsPage() {
                           }
                           items={[
                             {
-                              label: 'Edit',
-                              icon: Pencil,
-                              onSelect: () => { setEditing(client); setFormOpen(true) },
+                              label: 'Settings',
+                              icon: Settings,
+                              onSelect: () => navigate(`/clients/${client.id}/settings`),
+                            },
+                            {
+                              label: client.status === 'archived' ? 'Reactivate' : 'Archive',
+                              icon: client.status === 'archived' ? ArchiveRestore : Archive,
+                              onSelect: () => {
+                                const nextStatus = client.status === 'archived' ? 'active' : 'archived'
+                                updateRow(
+                                  'clients',
+                                  client.id,
+                                  { status: nextStatus },
+                                  {
+                                    entity: 'client',
+                                    entityId: client.id,
+                                    action: 'status_changed',
+                                    message: `${nextStatus === 'archived' ? 'Archived' : 'Reactivated'} client "${clientDisplayName(client)}"`,
+                                  },
+                                )
+                                toast.success(
+                                  nextStatus === 'archived'
+                                    ? `Archived "${clientDisplayName(client)}"`
+                                    : `Reactivated "${clientDisplayName(client)}"`,
+                                )
+                              },
                             },
                             {
                               label: 'Delete',
