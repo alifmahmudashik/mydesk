@@ -10,10 +10,10 @@ import { useData } from '@/data/store'
 import { clientDisplayName } from '@/lib/derive'
 import { formatMoney } from '@/lib/format'
 import { options, paymentStatus } from '@/lib/status'
+import { getCurrencyOptions } from '@/lib/currency'
 import type { Payment, PaymentStatus } from '@/types'
 
 const statusOptions = options(paymentStatus)
-const currencyOptions = ['USD', 'EUR', 'GBP', 'BDT'].map((c) => ({ value: c, label: c }))
 
 interface PaymentFormModalProps {
   open: boolean
@@ -43,12 +43,21 @@ export function PaymentFormModal({ open, onClose, payment }: PaymentFormModalPro
 
   const clientOptions = clients.map((c) => ({ value: c.id, label: clientDisplayName(c) }))
   const clientProjects = projects.filter((p) => p.client_id === form.client_id)
+  const currencyOptions = getCurrencyOptions(form.currency)
 
-  const toggleProject = (id: string, on: boolean) =>
-    setForm((f) => ({
-      ...f,
-      project_ids: on ? [...f.project_ids, id] : f.project_ids.filter((p) => p !== id),
-    }))
+  const toggleProject = (id: string, on: boolean) => {
+    const proj = projects.find((p) => p.id === id)
+    setForm((f) => {
+      const nextIds = on ? [...f.project_ids, id] : f.project_ids.filter((p) => p !== id)
+      const nextCurrency =
+        on && proj?.currency && (!f.currency || f.currency === 'USD') ? proj.currency : f.currency
+      return {
+        ...f,
+        project_ids: nextIds,
+        currency: nextCurrency,
+      }
+    })
+  }
 
   function submit() {
     const next: typeof errors = {}

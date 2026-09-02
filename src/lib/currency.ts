@@ -1,5 +1,48 @@
 import { useEffect, useState } from 'react'
 
+export const SUPPORTED_CURRENCIES = [
+  'USD',
+  'EUR',
+  'GBP',
+  'AUD',
+  'CAD',
+  'BDT',
+  'INR',
+  'SGD',
+  'NZD',
+  'AED',
+  'SAR',
+  'CHF',
+  'JPY',
+  'SEK',
+  'NOK',
+  'DKK',
+  'BRL',
+  'MXN',
+  'PLN',
+  'ZAR',
+  'TRY',
+  'HKD',
+  'MYR',
+  'PHP',
+  'PKR',
+  'ILS',
+] as const
+
+export type SupportedCurrency = (typeof SUPPORTED_CURRENCIES)[number]
+
+export const currencyOptions = SUPPORTED_CURRENCIES.map((c) => ({
+  value: c,
+  label: c,
+}))
+
+export function getCurrencyOptions(currentCurrency?: string | null) {
+  if (currentCurrency && !SUPPORTED_CURRENCIES.includes(currentCurrency as never)) {
+    return [...currencyOptions, { value: currentCurrency, label: currentCurrency }]
+  }
+  return currencyOptions
+}
+
 const RATES_CACHE_KEY = 'mydesk-usd-rates-v1'
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000 // 12h — free API, no need to hit it more than that
 

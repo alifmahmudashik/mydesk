@@ -13,6 +13,7 @@ import { Select } from '@/components/ui/select'
 import { ListSkeleton } from '@/components/ui/skeleton'
 import { useData } from '@/data/store'
 import { useIsAdmin } from '@/hooks/usePermissions'
+import { getCurrencyOptions } from '@/lib/currency'
 import { clientDisplayName } from '@/lib/derive'
 import { formatDate, formatMoney } from '@/lib/format'
 import type { Client, Invoice, InvoiceField, InvoiceLineItem } from '@/types'
@@ -20,7 +21,6 @@ import { InvoicePreview } from '@/features/invoices/InvoicePreview'
 import { InvoiceSettingsModal } from '@/features/invoices/InvoiceSettingsModal'
 import { exportElementToPdf } from '@/features/invoices/pdf'
 
-const currencyOptions = ['USD', 'EUR', 'GBP', 'AUD', 'BDT'].map((c) => ({ value: c, label: c }))
 const today = () => new Date().toISOString().slice(0, 10)
 const plusDays = (n: number) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10)
 
@@ -274,7 +274,7 @@ export function InvoicesPage() {
                       <Input value={form.number} onChange={(e) => set('number', e.target.value)} placeholder="e.g. NW-01" />
                     </Field>
                     <Field label="Currency">
-                      <Select value={form.currency} onChange={(v) => set('currency', v)} options={currencyOptions} />
+                      <Select value={form.currency} onChange={(v) => set('currency', v)} options={getCurrencyOptions(form.currency)} />
                     </Field>
                     <Field label="Issue date">
                       <DatePicker value={form.issue_date} onChange={(v) => set('issue_date', v)} />

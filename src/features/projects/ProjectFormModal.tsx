@@ -8,6 +8,7 @@ import { Select } from '@/components/ui/select'
 import { useData } from '@/data/store'
 import { useIsAdmin } from '@/hooks/usePermissions'
 import { clientDisplayName, clientSecondaryName } from '@/lib/derive'
+import { getCurrencyOptions } from '@/lib/currency'
 import { options, paymentStatus, priorityMeta, projectStatus } from '@/lib/status'
 import type { Payment, PaymentStatus, Priority, Project, ProjectStatus } from '@/types'
 import { ClientAccessEditor } from '@/features/team/ClientAccessEditor'
@@ -15,7 +16,6 @@ import { ClientAccessEditor } from '@/features/team/ClientAccessEditor'
 const statusOptions = options(projectStatus)
 const priorityOptions = options(priorityMeta)
 const paymentOptions = options(paymentStatus)
-const currencyOptions = ['USD', 'EUR', 'GBP', 'AUD', 'BDT'].map((c) => ({ value: c, label: c }))
 
 interface ProjectFormModalProps {
   open: boolean
@@ -50,6 +50,8 @@ export function ProjectFormModal({ open, onClose, project, clientId }: ProjectFo
 
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [key]: value }))
+
+  const currencyOptions = getCurrencyOptions(form.currency)
 
   const clientOptions = clients
     .filter((c) => c.status !== 'archived' || c.id === form.client_id)
