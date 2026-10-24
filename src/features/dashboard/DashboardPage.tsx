@@ -1,342 +1,314 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { format } from 'date-fns'
-import { AnimatePresence, motion } from 'framer-motion'
-import {
-  AlertTriangle,
-  CheckCircle2,
-  CircleDollarSign,
-  FolderKanban,
-  KeyRound,
-  ListTodo,
-  Pencil,
-  Plus,
-  StickyNote,
-  Trash2,
-  Users,
-  Zap,
-} from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Card, CardHeader } from '@/components/ui/card'
-import { EmptyState } from '@/components/ui/empty-state'
-import { PageHeader } from '@/components/ui/page-header'
-import { CardSkeleton, ListSkeleton } from '@/components/ui/skeleton'
-import { StatCard } from '@/components/ui/stat-card'
+import { Link, useNavigate } from 'react-router-dom'
+import { addDays, endOfWeek, format, isSameDay, parseISO, startOfMonth, startOfWeek, startOfYear, subMonths } from 'date-fns'
+import { Briefcase, Calendar, ChevronDown, ChevronRight, CreditCard, FileText, Folder, ListChecks, Plus } from 'lucide-react'
 import { useData } from '@/data/store'
+import { useUI } from '@/data/ui'
+import { paymentTitle } from '@/data/actions'
 import { useIsAdmin } from '@/hooks/usePermissions'
-import { effectivePaymentStatus, sumByCurrency } from '@/lib/derive'
-import { daysUntil, formatAgo } from '@/lib/format'
-import { listContainer, listItem } from '@/lib/motion'
-import { toneDot, type Tone } from '@/lib/status'
-import { cn } from '@/lib/utils'
-import type { ActivityEvent } from '@/types'
-import { TaskItem } from '@/features/tasks/TaskItem'
-import { TaskFormModal } from '@/features/tasks/TaskFormModal'
-import { ProjectFormModal } from '@/features/projects/ProjectFormModal'
-import { ClientFormModal } from '@/features/clients/ClientFormModal'
+import { Topbar, Content, Empty } from '@/components/ui/layout'
+import { Menu, MenuItem, MenuSep } from '@/components/ui/menu'
+import { Tabs } from '@/components/ui/tabs'
+import { Avatar, AvatarStack, ClientMark } from '@/components/ui/avatar'
+import { TaskRow } from '@/components/domain/TaskRow'
+import { RevenueChart, Spark, monthlyBuckets } from '@/components/domain/RevenueChart'
+import { ActivityItem } from '@/components/domain/ActivityItem'
+import { RemindModal } from '@/features/payments/RemindModal'
+import { sumUSD, useUsdRates } from '@/lib/currency'
+import { clientDisplayName, effectivePaymentStatus, isOpenPayment, OPEN_PROJECT, OPEN_TASK, profileDisplayName, shortProjectTitle } from '@/lib/derive'
+import { daysUntil, formatFeedAgo, formatMoney, lateLabel } from '@/lib/format'
+import type { Payment } from '@/types'
 
-function getDynamicGreeting(displayName?: string | null) {
+type Period = 'week' | 'month' | '3m' | 'year'
+const periodLabel: Record<Period, string> = { week: 'This week', month: 'This month', '3m': 'Last 3 months', year: 'This year' }
+
+function periodStart(p: Period) {
+  const now = new Date()
+  if (p === 'week') return startOfWeek(now, { weekStartsOn: 1 })
+  if (p === 'month') return startOfMonth(now)
+  if (p === '3m') return startOfMonth(subMonths(now, 2))
+  return startOfYear(now)
+}
+
+function greeting() {
   const h = new Date().getHours()
-  const firstName = displayName && displayName !== 'You' ? displayName.trim().split(' ')[0] : null
-  const greetingName = firstName ? `, ${firstName}` : ''
-
-  const sparkle = '✨'
-  if (h < 5) {
-    return {
-      title: `Working late${greetingName} ${sparkle}`,
-      sub: 'Night owl session — stay focused and take breaks when needed.',
-    }
-  }
-  if (h < 12) {
-    return {
-      title: `Good morning${greetingName} ${sparkle}`,
-      sub: 'Here is your daily snapshot and priorities for today.',
-    }
-  }
-  if (h < 18) {
-    return {
-      title: `Good afternoon${greetingName} ${sparkle}`,
-      sub: 'Keep up the steady momentum on your ongoing work.',
-    }
-  }
-  return {
-    title: `Good evening${greetingName} ${sparkle}`,
-    sub: 'Review today’s updates and progress across your projects.',
-  }
-}
-
-const ENTITY_ICON: Record<ActivityEvent['entity'], LucideIcon> = {
-  client: Users,
-  project: FolderKanban,
-  task: ListTodo,
-  access_item: KeyRound,
-  payment: CircleDollarSign,
-  note: StickyNote,
-}
-
-const ACTION_META: Record<ActivityEvent['action'], { tone: Tone; icon?: LucideIcon }> = {
-  created: { tone: 'neutral', icon: Plus },
-  updated: { tone: 'neutral', icon: Pencil },
-  status_changed: { tone: 'accent' },
-  completed: { tone: 'green', icon: CheckCircle2 },
-  paid: { tone: 'green', icon: CircleDollarSign },
-  deleted: { tone: 'red', icon: Trash2 },
+  return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
 }
 
 export function DashboardPage() {
-  const navigate = useNavigate()
-  const { ready, projects, tasks, accessItems, payments, activity, me } = useData()
   const isAdmin = useIsAdmin()
+  const navigate = useNavigate()
+  const { openCreate } = useUI()
+  const { me, tasks, projects, clients, payments, profiles, notifications, activity, onlineIds } = useData()
+  const rates = useUsdRates()
+  const [period, setPeriod] = useState<Period>('month')
+  const [tab, setTab] = useState<'open' | 'mine' | 'mentions'>('open')
+  const [remind, setRemind] = useState<Payment | null>(null)
 
-  const [taskModalOpen, setTaskModalOpen] = useState(false)
-  const [projectModalOpen, setProjectModalOpen] = useState(false)
-  const [clientModalOpen, setClientModalOpen] = useState(false)
+  const open = payments.filter(isOpenPayment)
+  const overdue = payments.filter((p) => effectivePaymentStatus(p) === 'overdue').sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? ''))
+  const since = format(periodStart(period), 'yyyy-MM-dd')
+  const paidInPeriod = payments.filter((p) => p.status === 'paid' && (p.payment_date ?? '') >= since)
+  const activeProjects = projects.filter(OPEN_PROJECT)
+  const completedProjects = projects.filter((p) => p.status === 'completed' || p.status === 'finished')
+  const inProgress = activeProjects.filter((p) => p.status === 'in_progress').length
 
-  const greetingInfo = useMemo(() => getDynamicGreeting(me?.display_name), [me?.display_name])
+  const openTasks = tasks.filter(OPEN_TASK)
+  const myTasks = openTasks.filter((t) => t.assignee_id === me?.id)
+  const mentions = notifications.filter((n) => n.type === 'mentioned' || n.type === 'mentioned_note')
+  const sortTasks = (list: typeof tasks) =>
+    [...list].sort((a, b) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999') || b.created_at.localeCompare(a.created_at))
 
-  const overduePayments = useMemo(
-    () => payments.filter((p) => effectivePaymentStatus(p) === 'overdue'),
-    [payments],
-  )
-  const attentionProjects = useMemo(
-    () =>
-      projects.filter(
-        (p) =>
-          p.status === 'blocked' ||
-          (p.priority === 'urgent' && !['completed', 'finished', 'cancelled'].includes(p.status)),
-      ),
-    [projects],
-  )
-  const dueThisWeek = useMemo(
-    () =>
-      tasks.filter((t) => {
-        if (t.status === 'done' || t.status === 'cancelled') return false
-        const d = daysUntil(t.due_date)
-        return d !== null && d <= 7
-      }),
-    [tasks],
-  )
-  const pendingAccess = useMemo(
-    () => accessItems.filter((a) => a.status === 'needed' || a.status === 'requested'),
-    [accessItems],
-  )
-  const upNext = useMemo(
-    () =>
-      tasks
-        .filter((t) => t.status !== 'done' && t.status !== 'cancelled')
-        .sort((a, b) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999'))
-        .slice(0, 6),
-    [tasks],
-  )
+  const nextWeekEnd = format(addDays(endOfWeek(new Date(), { weekStartsOn: 1 }), 7), 'yyyy-MM-dd')
+  const closingSoon = activeProjects.filter((p) => p.due_date && p.due_date <= nextWeekEnd).length
 
-  const dateDescription = useMemo(() => {
-    const formattedDate = format(new Date(), 'EEEE, MMMM d, yyyy')
-    return formattedDate
-  }, [])
+  const buckets = useMemo(() => monthlyBuckets(payments, rates, 6), [payments, rates])
+  const collected6 = buckets.reduce((s, b) => s + b.collected, 0)
+
+  // Next 7 days agenda: my tasks (or all open tasks for admins) + project due dates.
+  const days = Array.from({ length: 7 }, (_, i) => addDays(new Date(), i))
+  const agenda = [
+    ...(isAdmin ? openTasks : myTasks).filter((t) => t.due_date).map((t) => ({ kind: 'task' as const, id: t.id, title: t.title, date: t.due_date!, to: `/tasks/${t.id}` })),
+    ...activeProjects.filter((p) => p.due_date).map((p) => ({ kind: 'project' as const, id: p.id, title: shortProjectTitle(p.title), date: p.due_date!, to: `/projects/${p.id}` })),
+  ]
+    .filter((a) => {
+      const d = daysUntil(a.date)!
+      return d >= 0 && d < 7
+    })
+    .sort((a, b) => a.date.localeCompare(b.date))
+
+  const online = profiles.filter((p) => onlineIds.includes(p.id) && p.id !== me?.id)
+  const recentActivity = activity.filter((a) => isAdmin || a.actor_id === me?.id).slice(0, 4)
+
+  const overdueTotal = sumUSD(overdue, rates)
+  const tabs = [
+    { id: 'open' as const, label: 'All open', count: openTasks.length },
+    { id: 'mine' as const, label: 'Assigned to me', count: myTasks.length },
+    { id: 'mentions' as const, label: 'Mentions', count: mentions.length },
+  ]
+  const listed = tab === 'open' ? sortTasks(isAdmin ? openTasks : openTasks).slice(0, 6) : tab === 'mine' ? sortTasks(myTasks).slice(0, 6) : []
 
   return (
     <>
-      <PageHeader
-        title={greetingInfo.title}
-        description={dateDescription}
-        actions={
-          <div className="flex flex-wrap items-center gap-2.5">
-            <Button
-              variant="secondary"
-              onClick={() => setTaskModalOpen(true)}
-              className="bg-surface hover:bg-surface-hover border shadow-2xs transition-all duration-150 active:scale-95 text-foreground"
-            >
-              <Plus strokeWidth={1.75} className="size-4" />
-              <span>New Task</span>
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => setProjectModalOpen(true)}
-              className="bg-surface hover:bg-surface-hover border shadow-2xs transition-all duration-150 active:scale-95 text-foreground"
-            >
-              <FolderKanban strokeWidth={1.75} className="size-4" />
-              <span>New Project</span>
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => setClientModalOpen(true)}
-              className="shadow-sm transition-all duration-150 active:scale-95"
-            >
-              <Plus strokeWidth={2} className="size-4" />
-              <span>Add Client</span>
-            </Button>
-          </div>
-        }
-      />
-
-      {!ready ? (
-        <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <CardSkeleton key={i} />
-            ))}
-          </div>
-          <div className="mt-6">
-            <ListSkeleton rows={5} />
-          </div>
-        </>
-      ) : (
-        <>
-          {/* Quick Actions toolbar banner for small screens or extra accessibility */}
-          <div className="mb-5 flex items-center justify-between gap-3 rounded-xl border bg-surface/60 p-3.5 backdrop-blur-sm sm:hidden">
-            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-              <Zap className="size-3.5 text-primary" strokeWidth={2} />
-              <span>Quick actions</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button size="sm" onClick={() => setTaskModalOpen(true)}>
-                <Plus strokeWidth={2} className="size-3.5" />
-                <span>Task</span>
-              </Button>
-              <Button size="sm" variant="secondary" onClick={() => setProjectModalOpen(true)}>
-                <Plus strokeWidth={2} className="size-3.5" />
-                <span>Project</span>
-              </Button>
-            </div>
-          </div>
-
-          {/* At-a-glance: each card answers one question and jumps to the list behind it */}
-          <motion.div
-            variants={listContainer}
-            initial="initial"
-            animate="animate"
-            className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
-          >
-            {isAdmin && (
-              <StatCard
-                icon={AlertTriangle}
-                label="Overdue payments"
-                value={String(overduePayments.length)}
-                hint={overduePayments.length ? `${sumByCurrency(overduePayments)} to chase` : 'All caught up'}
-                tone={overduePayments.length ? 'red' : 'green'}
-                onClick={() => navigate('/payments')}
-              />
+      <Topbar crumbs={[{ label: 'Home' }, { label: 'Dashboard' }]}>
+        {isAdmin && (
+          <Menu
+            trigger={({ toggle }) => (
+              <button type="button" className="btn" onClick={toggle}>
+                <Calendar className="i" />
+                {periodLabel[period]}
+                <ChevronDown className="i i-sm" />
+              </button>
             )}
-            <StatCard
-              icon={FolderKanban}
-              label="Needs attention"
-              value={String(attentionProjects.length)}
-              hint={attentionProjects.length ? 'Blocked or urgent projects' : 'No fires burning'}
-              tone={attentionProjects.length ? 'amber' : 'green'}
-              onClick={() => navigate('/projects')}
-            />
-            <StatCard
-              icon={ListTodo}
-              label="Tasks due this week"
-              value={String(dueThisWeek.length)}
-              hint={
-                dueThisWeek.filter((t) => (daysUntil(t.due_date) ?? 1) < 0).length
-                  ? `${dueThisWeek.filter((t) => (daysUntil(t.due_date) ?? 1) < 0).length} already overdue`
-                  : 'On schedule'
-              }
-              tone={dueThisWeek.some((t) => (daysUntil(t.due_date) ?? 1) < 0) ? 'red' : 'accent'}
-              onClick={() => navigate('/tasks')}
-            />
-            <StatCard
-              icon={KeyRound}
-              label="Pending access"
-              value={String(pendingAccess.length)}
-              hint={pendingAccess.length ? 'Needed or requested items' : 'Everything received'}
-              tone={pendingAccess.length ? 'amber' : 'green'}
-              onClick={() => navigate('/projects')}
-            />
-          </motion.div>
-
-          <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
-            {/* Up next */}
-            <Card className="transition-all duration-200 hover:shadow-sm">
-              <CardHeader title="Up next" />
-              {upNext.length > 0 ? (
-                <motion.div
-                  variants={listContainer}
-                  initial="initial"
-                  animate="animate"
-                  className="mt-3 divide-y border-t"
-                >
-                  <AnimatePresence initial={false}>
-                    {upNext.map((task) => (
-                      <TaskItem key={task.id} task={task} showProject />
-                    ))}
-                  </AnimatePresence>
-                </motion.div>
-              ) : (
-                <div className="px-5 py-4">
-                  <EmptyState
-                    icon={CheckCircle2}
-                    title="Nothing queued"
-                    description="No open tasks — enjoy it while it lasts."
-                  />
-                </div>
+          >
+            {(Object.keys(periodLabel) as Period[]).map((p) => (
+              <MenuItem key={p} on={p === period} onSelect={() => setPeriod(p)}>{periodLabel[p]}</MenuItem>
+            ))}
+          </Menu>
+        )}
+        <Menu
+          trigger={({ toggle }) => (
+            <button type="button" className="btn btn-pri" onClick={toggle}>
+              <Plus className="i" />
+              Create
+            </button>
+          )}
+        >
+          <MenuItem icon={<ListChecks className="i" />} hint={<kbd>T</kbd>} onSelect={() => openCreate('task')}>New task</MenuItem>
+          <MenuItem icon={<Folder className="i" />} hint={<kbd>P</kbd>} onSelect={() => openCreate('project')}>New project</MenuItem>
+          {isAdmin && <MenuItem icon={<Briefcase className="i" />} onSelect={() => openCreate('client')}>New client</MenuItem>}
+          {isAdmin && (
+            <>
+              <MenuSep />
+              <MenuItem icon={<FileText className="i" />} onSelect={() => navigate('/invoices/new')}>New invoice</MenuItem>
+              <MenuItem icon={<CreditCard className="i" />} onSelect={() => openCreate('payment')}>Record payment</MenuItem>
+            </>
+          )}
+        </Menu>
+      </Topbar>
+      <Content>
+        <div className="ph">
+          <div>
+            <div className="eyebrow">{format(new Date(), 'EEEE, d MMMM yyyy')}</div>
+            <h1>{greeting()}, {me ? profileDisplayName(me) : 'there'}</h1>
+            <p className="greet">
+              You have{' '}
+              {isAdmin && overdue.length > 0 && (
+                <>
+                  <Link className="t-bad" to="/payments">{formatMoney(Math.round(overdueTotal))} overdue</Link> across {overdue.length} payment{overdue.length === 1 ? '' : 's'},{' '}
+                </>
               )}
-            </Card>
-
-            {/* Activity feed */}
-            <Card className="transition-all duration-200 hover:shadow-sm">
-              <CardHeader title="Recent activity" />
-              {activity.length > 0 ? (
-                <motion.ul
-                  variants={listContainer}
-                  initial="initial"
-                  animate="animate"
-                  className="mt-3 border-t px-5 py-3"
-                >
-                  {activity.slice(0, 12).map((event) => {
-                    const Icon = ACTION_META[event.action].icon ?? ENTITY_ICON[event.entity]
-                    return (
-                      <motion.li key={event.id} variants={listItem} className="relative flex gap-3 pb-4 last:pb-1">
-                        <div className="flex flex-col items-center">
-                          <span className="grid size-6 shrink-0 place-items-center rounded-full border bg-background shadow-2xs">
-                            <Icon className="size-3 text-muted-foreground" strokeWidth={1.75} aria-hidden />
-                          </span>
-                          <span className="mt-1 w-px flex-1 bg-border" aria-hidden />
-                        </div>
-                        <div className="min-w-0 pt-0.5">
-                          <p className="text-[13px] leading-snug">{event.message}</p>
-                          <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <span
-                              className={cn('size-1.5 rounded-full', toneDot[ACTION_META[event.action].tone])}
-                              aria-hidden
-                            />
-                            {formatAgo(event.created_at)}
-                          </p>
-                        </div>
-                      </motion.li>
-                    )
-                  })}
-                </motion.ul>
-              ) : (
-                <p className="mt-3 border-t px-5 py-6 text-[13px] text-muted-foreground">
-                  Activity across clients, projects, tasks, and payments shows up here.
-                </p>
-              )}
-            </Card>
+              <Link className="t-pri" to="/tasks">{myTasks.length} open task{myTasks.length === 1 ? '' : 's'}</Link>, and {closingSoon} project{closingSoon === 1 ? '' : 's'} closing out by next week.
+            </p>
           </div>
-        </>
-      )}
+          {online.length > 0 && (
+            <Link className="row-sm small muted" to="/team">
+              <AvatarStack profiles={online} size="md" />
+              <span className="live" style={{ marginLeft: 4 }} />
+              {online.length === 1 ? `${profileDisplayName(online[0])} is online` : `${online.length} teammates online`}
+            </Link>
+          )}
+        </div>
 
-      {/* Creation modals triggered from Quick Action buttons */}
-      <TaskFormModal
-        key={taskModalOpen ? 'task-open' : 'task-closed'}
-        open={taskModalOpen}
-        onClose={() => setTaskModalOpen(false)}
-      />
-      <ProjectFormModal
-        key={projectModalOpen ? 'project-open' : 'project-closed'}
-        open={projectModalOpen}
-        onClose={() => setProjectModalOpen(false)}
-      />
-      <ClientFormModal
-        key={clientModalOpen ? 'client-open' : 'client-closed'}
-        open={clientModalOpen}
-        onClose={() => setClientModalOpen(false)}
-      />
+        {isAdmin ? (
+          <div className="kpis">
+            <Link className="kpi lift" to="/payments">
+              <span className="lbl">Outstanding <span className="xs">{open.length} open</span></span>
+              <span className="val">{formatMoney(Math.round(sumUSD(open, rates)))}</span>
+              <Spark values={buckets.map((b) => b.open + b.overdue)} color="#4F46E5" />
+            </Link>
+            <Link className={`kpi lift${overdue.length ? ' alert' : ''}`} to="/payments?tab=overdue">
+              <span className="lbl">Overdue <span className="xs">{overdue.length} to chase</span></span>
+              <span className="val">{formatMoney(Math.round(overdueTotal))}</span>
+              {overdue.length > 0 ? (
+                <div className="seg-bar" style={{ height: 8, marginTop: 14 }} title={overdue.map((p) => lateLabel(p.due_date)).join(', ')}>
+                  {overdue.slice(0, 6).map((p, i) => (
+                    <i key={p.id} style={{ flex: Math.max(1, -(daysUntil(p.due_date) ?? 0)), background: ['#E5484D', '#F08A8D', '#F7C0C1', '#FAD4D5', '#FCE4E4', '#FDEEEE'][i] }} />
+                  ))}
+                </div>
+              ) : (
+                <span className="sub">Nothing late. Nice.</span>
+              )}
+            </Link>
+            <Link className="kpi lift" to="/analytics">
+              <span className="lbl">Paid {periodLabel[period].toLowerCase()} <span className="pill ok">{paidInPeriod.length} payment{paidInPeriod.length === 1 ? '' : 's'}</span></span>
+              <span className="val">{formatMoney(sumUSD(paidInPeriod, rates))}</span>
+              <Spark values={buckets.map((b) => b.collected)} color="#16A34A" />
+            </Link>
+            <Link className="kpi lift" to="/projects">
+              <span className="lbl">Active projects <span className="xs">{completedProjects.length} completed</span></span>
+              <span className="val">{activeProjects.length}</span>
+              <div className="seg-bar" style={{ height: 6, marginTop: 10 }}>
+                <i style={{ flex: inProgress || 0.0001, background: 'var(--pri)' }} />
+                <i style={{ flex: activeProjects.length - inProgress || 0.0001, background: 'var(--pri-mid)' }} />
+              </div>
+              <span className="sub">{inProgress} in progress · {activeProjects.length - inProgress} not started</span>
+            </Link>
+          </div>
+        ) : (
+          <div className="kpis">
+            <Link className="kpi lift" to="/tasks"><span className="lbl">My open tasks</span><span className="val">{myTasks.length}</span></Link>
+            <Link className="kpi lift" to="/tasks"><span className="lbl">Overdue</span><span className="val">{myTasks.filter((t) => (daysUntil(t.due_date) ?? 0) < 0).length}</span></Link>
+            <Link className="kpi lift" to="/projects"><span className="lbl">Active projects</span><span className="val">{activeProjects.length}</span></Link>
+            <Link className="kpi lift" to="/tasks"><span className="lbl">Done this month</span><span className="val">{tasks.filter((t) => t.assignee_id === me?.id && t.status === 'done' && (t.completed_at ?? '') >= format(startOfMonth(new Date()), 'yyyy-MM-dd')).length}</span></Link>
+          </div>
+        )}
+
+        <div className="dash">
+          {isAdmin && (
+            <section className="card card-b dash-a">
+              <div className="row between wrap" style={{ alignItems: 'flex-start' }}>
+                <div>
+                  <h2 className="h2">Revenue</h2>
+                  <div className="row" style={{ alignItems: 'baseline', marginTop: 6 }}>
+                    <span style={{ fontSize: 24, fontWeight: 600, letterSpacing: '-.02em' }}>{formatMoney(Math.round(collected6))}</span>
+                    <span className="small muted">collected, last 6 months</span>
+                  </div>
+                </div>
+                <div className="legend">
+                  <span><i className="c-col" />Collected</span>
+                  <span><i className="c-open" />Outstanding</span>
+                  <Link className="link" to="/analytics">Open analytics →</Link>
+                </div>
+              </div>
+              <RevenueChart buckets={buckets} />
+            </section>
+          )}
+          {isAdmin && (
+            <section className="card dash-b">
+              <div className="card-h">
+                <h2 className="h2">Needs chasing</h2>
+                <span className="b t-bad num">{formatMoney(Math.round(overdueTotal))}</span>
+              </div>
+              <div className="list">
+                {overdue.length === 0 && <Empty small title="All caught up">No overdue payments.</Empty>}
+                {overdue.slice(0, 4).map((p) => {
+                  const c = clients.find((x) => x.id === p.client_id)
+                  return (
+                    <div className="li" key={p.id}>
+                      <ClientMark client={c} />
+                      <Link className="grow cover" to={`/payments?p=${p.id}`} style={{ minWidth: 0 }}>
+                        <div className="t trunc" style={{ fontSize: 13.5 }}>{clientDisplayName(c)} · {formatMoney(p.amount, p.currency)}</div>
+                        <div className="s t-bad"><span className="trunc">{paymentTitle(p)} · {lateLabel(p.due_date)}</span></div>
+                      </Link>
+                      <button type="button" className="btn btn-sm above" onClick={() => setRemind(p)}>Remind</button>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="card-f">
+                <span className="muted">{overdue.length} payment{overdue.length === 1 ? '' : 's'} overdue</span>
+                <Link className="link" to="/payments">All payments</Link>
+              </div>
+            </section>
+          )}
+
+          <section className="card dash-c">
+            <Tabs pad tabs={tabs} value={tab} onChange={setTab} before={<h2 className="h2">Up next</h2>} after={<Link className="link small" to="/tasks">View all</Link>} />
+            <div className="list panel-in" key={tab}>
+              {tab !== 'mentions' && listed.length === 0 && <Empty small icon={<ListChecks className="i" />} title="Nothing open">Create a task with <kbd>T</kbd>.</Empty>}
+              {tab !== 'mentions' && listed.map((t) => <TaskRow key={t.id} task={t} />)}
+              {tab === 'mentions' && mentions.length === 0 && <Empty small title="No mentions yet">When someone @mentions you, it shows up here.</Empty>}
+              {tab === 'mentions' &&
+                mentions.slice(0, 6).map((n) => {
+                  const actor = profiles.find((p) => p.id === n.actor_id)
+                  return (
+                    <Link className="li" key={n.id} to={n.link ?? '/inbox'}>
+                      <Avatar profile={actor} />
+                      <div className="grow" style={{ minWidth: 0 }}>
+                        <div className="t trunc">{profileDisplayName(actor)} mentioned you {n.type === 'mentioned_note' ? 'in a note on' : 'on'} {shortProjectTitle(n.title)}</div>
+                        <div className="s"><span className="trunc">“{n.excerpt}” · {formatFeedAgo(n.created_at)}</span></div>
+                      </div>
+                      <ChevronRight className="i faint" />
+                    </Link>
+                  )
+                })}
+            </div>
+          </section>
+
+          <div className="dash-d stack-lg">
+            <section className="card card-b stack">
+              <h2 className="h2">Next 7 days</h2>
+              <div className="week">
+                {days.map((d, i) => {
+                  const items = agenda.filter((a) => isSameDay(parseISO(a.date), d))
+                  return (
+                    <div key={i} className={i === 0 ? 'today' : undefined} title={items.map((a) => a.title).join('\n')}>
+                      <small>{format(d, 'EEE')}</small>
+                      <b>{format(d, 'd')}</b>
+                      {items.length > 0 && <i style={{ background: items.some((a) => a.kind === 'task') ? 'var(--warn-dot)' : 'var(--pri)' }} />}
+                    </div>
+                  )
+                })}
+              </div>
+              {agenda.length === 0 && <span className="small muted">Nothing due this week.</span>}
+              {agenda.slice(0, 5).map((a) => (
+                <Link key={a.kind + a.id} className="ag" to={a.to} style={{ ['--c' as string]: a.kind === 'task' ? 'var(--warn-dot)' : 'var(--pri)' }}>
+                  <span>
+                    <b className="trunc">{a.title}</b>
+                    <small>{a.kind === 'task' ? 'Task' : 'Project due'} · {format(parseISO(a.date), 'EEE d')}</small>
+                  </span>
+                </Link>
+              ))}
+            </section>
+            <section className="card">
+              <div className="card-h">
+                <h2 className="h2">Activity</h2>
+                <span className="row-sm xs t-ok"><span className="live" />Live</span>
+              </div>
+              <div className="card-b stack" style={{ gap: 16 }}>
+                {recentActivity.length === 0 && <span className="small muted">No activity yet.</span>}
+                {recentActivity.map((ev) => <ActivityItem key={ev.id} ev={ev} />)}
+              </div>
+              <div className="card-f">
+                <span className="muted">Latest</span>
+                <Link className="link" to="/inbox">Open inbox</Link>
+              </div>
+            </section>
+          </div>
+        </div>
+      </Content>
+      <RemindModal payment={remind} onClose={() => setRemind(null)} />
     </>
   )
 }
-

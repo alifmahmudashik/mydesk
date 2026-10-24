@@ -3,16 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="MyDesk — client & project management for freelancers and small agencies" />
+    <meta name="description" content="MyDesk: clients, projects, tasks and money in one calm place for freelance work" />
     <title>MyDesk</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
     <script>
-      // Set theme before first paint to avoid flash
+      // Apply the saved theme before first paint to avoid a flash.
       try {
-        var t = localStorage.getItem('mydesk-theme')
-        var dark = t === 'dark' || (t !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        var t = localStorage.getItem('mydesk-theme') || 'system'
+        var dark = t === 'dark' || (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
         if (dark) document.documentElement.classList.add('dark')
         document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+        if (localStorage.getItem('mydesk-motion') === 'off') document.documentElement.classList.add('no-motion')
       } catch (e) {}
     </script>
   </head>

@@ -2,53 +2,25 @@ import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import LinkExtension from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
-import { Bold, Italic, Link2, List, ListOrdered, Strikethrough } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
+import { Bold, Heading, Italic, Link2, List, ListOrdered } from 'lucide-react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
-function ToolButton({
-  icon: Icon,
-  label,
-  active,
-  onClick,
-}: {
-  icon: LucideIcon
-  label: string
-  active?: boolean
-  onClick: () => void
-}) {
+function ToolButton({ label, active, onClick, children }: { label: string; active?: boolean; onClick: () => void; children: ReactNode }) {
   return (
     <button
       type="button"
       aria-label={label}
       aria-pressed={active}
       title={label}
-      // preventDefault so the editor keeps focus/selection while clicking toolbar buttons
+      className={cn(active && 'on')}
+      // keep focus/selection in the editor while clicking the toolbar
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
-      className={cn(
-        'grid size-7 cursor-pointer place-items-center rounded-md transition-colors duration-150',
-        active
-          ? 'bg-primary-soft text-primary'
-          : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground',
-      )}
     >
-      <Icon className="size-4" strokeWidth={1.75} aria-hidden />
+      {children}
     </button>
   )
-}
-
-/**
- * Runs a formatting command pinned to the exact selection visible when the button was
- * clicked. Needed because TipTap/ProseMirror can otherwise resolve `.focus()` against a
- * broader selection type (e.g. after a prior select-all) than what's actually highlighted,
- * which — for list toggles in particular — wraps far more content than intended
- * (see ueberdosis/tiptap#6260, #7398). Re-expressing the same range as a plain text
- * selection first sidesteps that path entirely.
- */
-function runOnSelection(editor: Editor, apply: (chain: ReturnType<Editor['chain']>) => ReturnType<Editor['chain']>) {
-  const { from, to } = editor.state.selection
-  apply(editor.chain().focus().setTextSelection({ from, to })).run()
 }
 
 function promptForLink(editor: Editor) {
@@ -62,101 +34,106 @@ function promptForLink(editor: Editor) {
   editor.chain().focus().extendMarkRange('link').setLink({ href: url.trim() }).run()
 }
 
-interface RichTextEditorProps {
+interface RichTextProps {
   /** Initial HTML (or plain text from older records). */
   defaultValue?: string | null
   /** Called on blur with the HTML, or null when empty. */
   onSave: (html: string | null) => void
   placeholder?: string
   ariaLabel?: string
-  className?: string
+  /** Shows "Saved · just now" in the toolbar after each save. */
+  showSaved?: boolean
 }
 
-/**
- * Lightweight rich-text field (bold, italic, strike, lists, links) that saves on blur.
- * Grows with content; the scroll cap is set by the parent (e.g. max-h in ProjectDetail).
- */
-export function RichTextEditor({
-  defaultValue,
-  onSave,
-  placeholder = 'Write something…',
-  ariaLabel = 'Rich text editor',
-  className,
-}: RichTextEditorProps) {
+/** The design's editor: toolbar (.editor-bar) + body (.editor). Saves on blur. */
+export function RichText({ defaultValue, onSave, placeholder = 'Write something…', ariaLabel = 'Description', showSaved }: RichTextProps) {
+  const [savedAt, setSavedAt] = useState<number | null>(null)
+  const lastSaved = useRef(defaultValue ?? '')
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({
-        heading: false,
-        codeBlock: false,
-        blockquote: false,
-        horizontalRule: false,
-      }),
+      StarterKit.configure({ heading: { levels: [3] }, codeBlock: false, blockquote: false, horizontalRule: false }),
       LinkExtension.configure({ openOnClick: false, autolink: true, defaultProtocol: 'https' }),
       Placeholder.configure({ placeholder }),
     ],
     content: defaultValue || '',
-    editorProps: {
-      attributes: {
-        class: 'rich-text min-h-16 px-4 py-3 text-sm leading-relaxed focus:outline-none',
-        'aria-label': ariaLabel,
-      },
+    editorProps: { attributes: { 'aria-label': ariaLabel } },
+    onBlur: ({ editor }) => {
+      const html = editor.isEmpty ? '' : editor.getHTML()
+      if (html === lastSaved.current) return
+      lastSaved.current = html
+      onSave(html || null)
+      setSavedAt(Date.now())
     },
-    onBlur: ({ editor }) => onSave(editor.isEmpty ? null : editor.getHTML()),
   })
 
+  // Re-render the "just now" label occasionally.
+  const [, tick] = useState(0)
+  useEffect(() => {
+    if (!savedAt) return
+    const t = setInterval(() => tick((n) => n + 1), 30000)
+    return () => clearInterval(t)
+  }, [savedAt])
+
   if (!editor) return null
+  const run = (fn: (c: ReturnType<Editor['chain']>) => ReturnType<Editor['chain']>) => fn(editor.chain().focus()).run()
+  const ago = savedAt ? Math.floor((Date.now() - savedAt) / 60000) : null
 
   return (
-    <div
-      className={cn(
-        'rounded-xl border bg-surface transition-colors duration-150 focus-within:border-primary',
-        className,
-      )}
-    >
-      <div className="flex items-center gap-0.5 border-b px-2 py-1.5" role="toolbar" aria-label="Formatting">
-        <ToolButton
-          icon={Bold}
-          label="Bold"
-          active={editor.isActive('bold')}
-          onClick={() => runOnSelection(editor, (c) => c.toggleBold())}
-        />
-        <ToolButton
-          icon={Italic}
-          label="Italic"
-          active={editor.isActive('italic')}
-          onClick={() => runOnSelection(editor, (c) => c.toggleItalic())}
-        />
-        <ToolButton
-          icon={Strikethrough}
-          label="Strikethrough"
-          active={editor.isActive('strike')}
-          onClick={() => runOnSelection(editor, (c) => c.toggleStrike())}
-        />
-        <span className="mx-1 h-4 w-px bg-border" aria-hidden />
-        <ToolButton
-          icon={List}
-          label="Bullet list"
-          active={editor.isActive('bulletList')}
-          onClick={() => runOnSelection(editor, (c) => c.toggleBulletList())}
-        />
-        <ToolButton
-          icon={ListOrdered}
-          label="Numbered list"
-          active={editor.isActive('orderedList')}
-          onClick={() => runOnSelection(editor, (c) => c.toggleOrderedList())}
-        />
-        <span className="mx-1 h-4 w-px bg-border" aria-hidden />
-        <ToolButton
-          icon={Link2}
-          label="Add link"
-          active={editor.isActive('link')}
-          onClick={() => promptForLink(editor)}
-        />
+    <div>
+      <div className="editor-bar" role="toolbar" aria-label="Formatting">
+        <ToolButton label="Bold" active={editor.isActive('bold')} onClick={() => run((c) => c.toggleBold())}>
+          <Bold className="i i-sm" />
+        </ToolButton>
+        <ToolButton label="Italic" active={editor.isActive('italic')} onClick={() => run((c) => c.toggleItalic())}>
+          <Italic className="i i-sm" />
+        </ToolButton>
+        <ToolButton label="Heading" active={editor.isActive('heading')} onClick={() => run((c) => c.toggleHeading({ level: 3 }))}>
+          <Heading className="i i-sm" />
+        </ToolButton>
+        <span className="vr" />
+        <ToolButton label="Bullet list" active={editor.isActive('bulletList')} onClick={() => run((c) => c.toggleBulletList())}>
+          <List className="i i-sm" />
+        </ToolButton>
+        <ToolButton label="Numbered list" active={editor.isActive('orderedList')} onClick={() => run((c) => c.toggleOrderedList())}>
+          <ListOrdered className="i i-sm" />
+        </ToolButton>
+        <ToolButton label="Link" active={editor.isActive('link')} onClick={() => promptForLink(editor)}>
+          <Link2 className="i i-sm" />
+        </ToolButton>
+        {showSaved && savedAt && (
+          <span className="ml-auto xs faint" style={{ paddingRight: 8 }}>
+            Saved · {ago === 0 ? 'just now' : `${ago} min ago`}
+          </span>
+        )}
       </div>
-      {/* Grows with content, scrolls past 40% of the viewport */}
-      <div className="max-h-[40vh] overflow-y-auto">
+      <div className="editor" onClick={() => editor.commands.focus()}>
         <EditorContent editor={editor} />
       </div>
     </div>
   )
+}
+
+/** Read-only render of stored description HTML (or legacy plain text). */
+export function RichView({ html, className }: { html?: string | null; className?: string }) {
+  if (!html) return null
+  const isHtml = /<\/?[a-z][\s\S]*>/i.test(html)
+  if (!isHtml) return <p className={cn('rich', className)} style={{ whiteSpace: 'pre-wrap' }}>{html}</p>
+  return <div className={cn('rich', className)} dangerouslySetInnerHTML={{ __html: sanitize(html) }} />
+}
+
+/** Minimal sanitizer for our own editor output: strips scripts, event handlers and js: urls. */
+function sanitize(html: string) {
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  doc.querySelectorAll('script,style,iframe,object,embed').forEach((n) => n.remove())
+  doc.querySelectorAll('*').forEach((el) => {
+    for (const attr of [...el.attributes]) {
+      if (attr.name.startsWith('on')) el.removeAttribute(attr.name)
+      if ((attr.name === 'href' || attr.name === 'src') && /^\s*javascript:/i.test(attr.value)) el.removeAttribute(attr.name)
+    }
+    if (el.tagName === 'A') {
+      el.setAttribute('target', '_blank')
+      el.setAttribute('rel', 'noreferrer')
+    }
+  })
+  return doc.body.innerHTML
 }

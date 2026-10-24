@@ -1,231 +1,200 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { AnimatePresence, motion } from 'framer-motion'
-import { CheckCircle2, Eye, EyeOff, FolderKanban, Plus } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { EmptyState } from '@/components/ui/empty-state'
-import { PageHeader } from '@/components/ui/page-header'
-import { Select, type SelectOption } from '@/components/ui/select'
-import { ListSkeleton } from '@/components/ui/skeleton'
-import { StatusPill } from '@/components/ui/status-pill'
-import { Row, Table, TD, TH, THead } from '@/components/ui/table'
-import { SearchInput, Toolbar } from '@/components/ui/toolbar'
+import { useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { ChevronDown, Folder, Plus, Search } from 'lucide-react'
 import { useData } from '@/data/store'
+import { useUI } from '@/data/ui'
 import { useIsAdmin } from '@/hooks/usePermissions'
-import { clientDisplayName } from '@/lib/derive'
+import { Topbar, Content, Empty, PageHead } from '@/components/ui/layout'
+import { Tabs } from '@/components/ui/tabs'
+import { Menu, MenuItem, MenuSearch } from '@/components/ui/menu'
+import { AvatarStack, ClientMark } from '@/components/ui/avatar'
+import { StatusPill } from '@/components/ui/pill'
+import { clientDisplayName, effectivePaymentStatus, OPEN_PROJECT } from '@/lib/derive'
 import { formatDate, formatMoney, isOverdue } from '@/lib/format'
-import { listContainer } from '@/lib/motion'
-import { options, paymentStatus, priorityMeta, projectStatus, tonePill } from '@/lib/status'
-import { cn } from '@/lib/utils'
-import type { Priority, ProjectStatus } from '@/types'
-import { ProjectFormModal } from '@/features/projects/ProjectFormModal'
+import { paymentStatus, projectStatus } from '@/lib/status'
+import type { Profile, Project } from '@/types'
 
-const statusFilter: SelectOption<'all' | ProjectStatus>[] = [
-  { value: 'all', label: 'All active statuses' },
-  ...options(projectStatus),
-]
-const priorityFilter: SelectOption<'all' | Priority>[] = [
-  { value: 'all', label: 'All priorities' },
-  ...options(priorityMeta),
-]
+const PAGE = 25
 
 export function ProjectsPage() {
-  const { ready, projects, clients } = useData()
   const isAdmin = useIsAdmin()
-  const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  const [search, setSearch] = useState('')
-  const [status, setStatus] = useState<'all' | ProjectStatus>('all')
-  const [priority, setPriority] = useState<'all' | Priority>('all')
-  const [clientFilter, setClientFilter] = useState('all')
-  const [showCompleted, setShowCompleted] = useState(false)
-  const [formOpen, setFormOpen] = useState(false)
+  const { projects, clients, tasks, profiles, clientMembers, payments } = useData()
+  const { openCreate } = useUI()
+  const [params, setParams] = useSearchParams()
+  const tab = (params.get('tab') as 'active' | 'done') || 'active'
+  const [q, setQ] = useState('')
+  const [clientId, setClientId] = useState(params.get('client') ?? 'all')
+  const [clientQ, setClientQ] = useState('')
+  const [limit, setLimit] = useState(PAGE)
 
-  /** Project details live in the client workspace (master-detail). */
-  const openProject = (projectId: string) => {
-    const project = projects.find((p) => p.id === projectId)
-    if (project) navigate(`/clients/${project.client_id}?project=${project.id}`)
+  const matches = (p: Project) => {
+    if (clientId !== 'all' && p.client_id !== clientId) return false
+    const c = clients.find((x) => x.id === p.client_id)
+    return !q.trim() || `${p.title} ${clientDisplayName(c)} ${p.project_type ?? ''}`.toLowerCase().includes(q.trim().toLowerCase())
+  }
+  const active = useMemo(() => projects.filter((p) => OPEN_PROJECT(p) && matches(p)).sort((a, b) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999')), [projects, q, clientId, clients])
+  const done = useMemo(
+    () => projects.filter((p) => !OPEN_PROJECT(p) && matches(p)).sort((a, b) => (b.completed_at ?? b.due_date ?? b.created_at).localeCompare(a.completed_at ?? a.due_date ?? a.created_at)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [projects, q, clientId, clients],
+  )
+  const allActive = projects.filter(OPEN_PROJECT).length
+
+  const team = (p: Project): Profile[] => {
+    const granted = new Set(clientMembers.filter((m) => m.client_id === p.client_id).map((m) => m.user_id))
+    const assignees = new Set(tasks.filter((t) => t.project_id === p.id && t.assignee_id).map((t) => t.assignee_id!))
+    return profiles.filter((u) => granted.has(u.id) || assignees.has(u.id))
   }
 
-  // Legacy deep links (?p=<id>) forward to the workspace.
-  const legacyId = searchParams.get('p')
-  useEffect(() => {
-    if (ready && legacyId) openProject(legacyId)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, legacyId])
-
-  const clientOptions = [
-    { value: 'all', label: 'All clients' },
-    ...clients.map((c) => ({ value: c.id, label: clientDisplayName(c) })),
-  ]
-
-  const completedCount = useMemo(() => {
-    return projects.filter((p) => p.status === 'completed' || p.status === 'finished').length
-  }, [projects])
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return projects.filter((p) => {
-      const client = clients.find((c) => c.id === p.client_id)
-      const isDone = p.status === 'completed' || p.status === 'finished'
-
-      // By default, don't show completed/finished projects when 'all' is selected
-      // unless user explicitly toggles showCompleted or selects 'completed'/'finished' in status filter.
-      const statusMatches =
-        status === 'all'
-          ? showCompleted || !isDone
-          : p.status === status
-
-      return (
-        statusMatches &&
-        (priority === 'all' || p.priority === priority) &&
-        (clientFilter === 'all' || p.client_id === clientFilter) &&
-        (!q ||
-          `${p.title} ${p.project_type ?? ''} ${p.tags.join(' ')} ${client?.company_name ?? ''} ${client?.name ?? ''}`
-            .toLowerCase()
-            .includes(q))
-      )
-    })
-  }, [projects, clients, search, status, priority, clientFilter, showCompleted])
+  const usedClients = clients.filter((c) => projects.some((p) => p.client_id === c.id) && clientDisplayName(c).toLowerCase().includes(clientQ.toLowerCase()))
+  const client = clients.find((c) => c.id === clientId)
+  const list = tab === 'active' ? active : done
 
   return (
     <>
-      <PageHeader
-        title="Projects"
-        description="Every engagement, its status, and what it's worth."
-        actions={
-          <Button onClick={() => setFormOpen(true)} className="shadow-sm hover:shadow transition-all active:scale-95">
-            <Plus strokeWidth={1.75} />
-            New project
-          </Button>
-        }
-      />
-      <Toolbar>
-        <SearchInput value={search} onChange={setSearch} placeholder="Search projects, tags…" />
-        <Select value={status} onChange={setStatus} options={statusFilter} aria-label="Filter by status" className="w-48" />
-        <Select value={priority} onChange={setPriority} options={priorityFilter} aria-label="Filter by priority" className="w-36" />
-        <Select value={clientFilter} onChange={setClientFilter} options={clientOptions} aria-label="Filter by client" className="w-44" />
-        {completedCount > 0 && status === 'all' && (
-          <Button
-            variant={showCompleted ? 'secondary' : 'ghost'}
-            size="sm"
-            onClick={() => setShowCompleted(!showCompleted)}
-            className="ml-auto text-xs font-medium text-muted-foreground hover:text-foreground"
-          >
-            {showCompleted ? (
+      <Topbar crumbs={[{ label: 'Projects' }]}>
+        <button type="button" className="btn btn-pri" onClick={() => openCreate('project', { client_id: clientId !== 'all' ? clientId : undefined })}>
+          <Plus className="i" />New project<kbd>P</kbd>
+        </button>
+      </Topbar>
+      <Content>
+        <PageHead title="Projects" sub="Every engagement, where it stands, and what it's worth." />
+        <div className="tabs">
+          <Tabs
+            value={tab}
+            onChange={(t) => {
+              setParams(t === 'active' ? {} : { tab: t }, { replace: true })
+              setLimit(PAGE)
+            }}
+            tabs={[
+              { id: 'active', label: 'Active', count: allActive },
+              { id: 'done', label: 'Completed', count: projects.length - allActive },
+            ]}
+            after={
               <>
-                <EyeOff className="size-3.5" strokeWidth={1.75} />
-                <span>Hide completed ({completedCount})</span>
+                <label className="inp-wrap hide-sm" style={{ width: 220, height: 32, marginBottom: 6 }}>
+                  <Search className="i i-sm" />
+                  <input placeholder="Search projects…" aria-label="Search projects" value={q} onChange={(e) => setQ(e.target.value)} />
+                </label>
+                <Menu
+                  wide
+                  className="hide-sm"
+                  trigger={({ toggle }) => (
+                    <button type="button" className="chip" style={{ margin: '0 0 6px 6px' }} onClick={toggle}>
+                      {client ? <><ClientMark client={client} size="xs" />{clientDisplayName(client)}</> : 'All clients'}
+                      <ChevronDown className="i i-xs" />
+                    </button>
+                  )}
+                >
+                  {clients.length > 8 && <MenuSearch value={clientQ} onChange={setClientQ} />}
+                  <MenuItem on={clientId === 'all'} onSelect={() => setClientId('all')}>All clients</MenuItem>
+                  {usedClients.map((c) => (
+                    <MenuItem key={c.id} on={clientId === c.id} icon={<ClientMark client={c} size="xs" />} onSelect={() => setClientId(c.id)}>{clientDisplayName(c)}</MenuItem>
+                  ))}
+                </Menu>
               </>
+            }
+          />
+          <div className="card tbl-wrap panel-in" key={tab}>
+            {list.length === 0 ? (
+              <Empty
+                icon={<Folder className="i" />}
+                title={projects.length === 0 ? 'No projects yet' : 'Nothing here'}
+                action={projects.length === 0 ? <button type="button" className="btn btn-pri" onClick={() => openCreate('project')}><Plus className="i" />New project</button> : undefined}
+              >
+                {projects.length === 0 ? 'A project groups the tasks, notes and money for one engagement.' : 'Try another search or client.'}
+              </Empty>
+            ) : tab === 'active' ? (
+              <table className="tbl" style={{ minWidth: 880 }}>
+                <thead>
+                  <tr>
+                    <th>Project</th>
+                    <th>Status</th>
+                    <th style={{ width: 160 }}>Progress</th>
+                    <th>Team</th>
+                    <th>Due</th>
+                    {isAdmin && <th className="r">Amount</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {list.slice(0, limit).map((p) => {
+                    const c = clients.find((x) => x.id === p.client_id)
+                    const pt = tasks.filter((t) => t.project_id === p.id && t.status !== 'cancelled')
+                    const d = pt.filter((t) => t.status === 'done').length
+                    const pct = pt.length ? (d / pt.length) * 100 : 0
+                    const late = isOverdue(p.due_date)
+                    return (
+                      <tr key={p.id} className="hov">
+                        <td>
+                          <Link className="row cover" to={`/projects/${p.id}`}>
+                            <ClientMark client={c} />
+                            <span style={{ minWidth: 0 }}>
+                              <span className="m" style={{ display: 'block' }}>{p.title}</span>
+                              <span className="xs muted">{clientDisplayName(c)}</span>
+                            </span>
+                          </Link>
+                        </td>
+                        <td><StatusPill meta={projectStatus[p.status]} /></td>
+                        <td>
+                          <div className="row">
+                            <div className="bar grow"><i className={pt.length && d === pt.length ? 'ok' : undefined} style={{ width: `${pct}%` }} /></div>
+                            <span className="xs muted num">{d}/{pt.length}</span>
+                          </div>
+                        </td>
+                        <td><AvatarStack profiles={team(p)} /></td>
+                        <td className={late ? 't-bad m' : undefined}>{formatDate(p.due_date)}</td>
+                        {isAdmin && <td className={`r num ${p.billing_type === 'retainer' ? 'muted' : 'b'}`}>{p.billing_type === 'retainer' ? 'Retainer' : p.amount ? formatMoney(p.amount, p.currency) : '—'}</td>}
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             ) : (
-              <>
-                <Eye className="size-3.5 text-primary" strokeWidth={1.75} />
-                <span>Show completed ({completedCount})</span>
-              </>
+              <table className="tbl" style={{ minWidth: 820 }}>
+                <thead>
+                  <tr>
+                    <th>Project</th>
+                    <th>Completed</th>
+                    <th>Status</th>
+                    {isAdmin && <th>Payment</th>}
+                    {isAdmin && <th className="r">Amount</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {list.slice(0, limit).map((p) => {
+                    const c = clients.find((x) => x.id === p.client_id)
+                    const linked = payments.filter((x) => x.project_ids?.includes(p.id))
+                    const st = linked.length ? linked.map(effectivePaymentStatus).sort((a, b) => ['overdue', 'unpaid', 'partial', 'paid', 'refunded'].indexOf(a) - ['overdue', 'unpaid', 'partial', 'paid', 'refunded'].indexOf(b))[0] : null
+                    return (
+                      <tr key={p.id} className="hov">
+                        <td>
+                          <Link className="row cover" to={`/projects/${p.id}`}>
+                            <ClientMark client={c} />
+                            <span style={{ minWidth: 0 }}>
+                              <span className="m" style={{ display: 'block' }}>{p.title}</span>
+                              <span className="xs muted">{clientDisplayName(c)}</span>
+                            </span>
+                          </Link>
+                        </td>
+                        <td>{formatDate((p.completed_at ?? p.due_date ?? p.created_at).slice(0, 10))}</td>
+                        <td>{p.archived_at ? <span className="pill gray">Archived</span> : <StatusPill meta={projectStatus[p.status]} />}</td>
+                        {isAdmin && <td>{st ? <StatusPill meta={paymentStatus[st]} /> : <span className="faint xs">—</span>}</td>}
+                        {isAdmin && <td className="r num b">{p.amount ? formatMoney(p.amount, p.currency) : '—'}</td>}
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             )}
-          </Button>
-        )}
-      </Toolbar>
-
-      {!ready ? (
-        <ListSkeleton rows={6} />
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          icon={FolderKanban}
-          title={projects.length === 0 ? 'No projects yet' : 'No active projects found'}
-          description={
-            projects.length === 0
-              ? 'Create your first project and start tracking work, access, and payments.'
-              : completedCount > 0 && !showCompleted && status === 'all'
-                ? `${completedCount} completed project${completedCount > 1 ? 's are' : ' is'} hidden. Click "Show completed" above to view.`
-                : 'Try different filters or clear the search.'
-          }
-          action={
-            projects.length === 0 ? (
-              <Button onClick={() => setFormOpen(true)}>
-                <Plus strokeWidth={1.75} />
-                New project
-              </Button>
-            ) : completedCount > 0 && !showCompleted && status === 'all' ? (
-              <Button variant="secondary" onClick={() => setShowCompleted(true)}>
-                <CheckCircle2 strokeWidth={1.75} className="size-4 text-emerald-500" />
-                Show completed projects ({completedCount})
-              </Button>
-            ) : undefined
-          }
-        />
-      ) : (
-        <Table>
-          <THead>
-            <TH>Project</TH>
-            <TH>Status</TH>
-            <TH className="hidden md:table-cell">Priority</TH>
-            {isAdmin && <TH>Payment</TH>}
-            {isAdmin && <TH className="text-right">Amount</TH>}
-            <TH className="hidden text-right lg:table-cell">Due</TH>
-          </THead>
-          <motion.tbody variants={listContainer} initial="initial" animate="animate" className="divide-y">
-            <AnimatePresence initial={false}>
-              {filtered.map((project) => {
-                const client = clients.find((c) => c.id === project.client_id)
-                const overdue = isOverdue(project.due_date) && !['completed', 'finished', 'cancelled'].includes(project.status)
-                return (
-                  <Row
-                    key={project.id}
-                    clickable
-                    exit="exit"
-                    onClick={() => openProject(project.id)}
-                    className="group transition-colors duration-150 hover:bg-surface-hover/80"
-                  >
-                    <TD>
-                      <div className="flex items-center gap-3">
-                        <span
-                          className={cn(
-                            'grid size-9 shrink-0 place-items-center rounded-lg transition-transform duration-150 group-hover:scale-105',
-                            tonePill[projectStatus[project.status].tone],
-                          )}
-                          aria-hidden
-                        >
-                          <FolderKanban className="size-4" strokeWidth={1.75} />
-                        </span>
-                        <div>
-                          <p className="font-medium group-hover:text-primary transition-colors duration-150">{project.title}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {clientDisplayName(client)}
-                            {project.tags.length > 0 && <> · {project.tags.join(', ')}</>}
-                          </p>
-                        </div>
-                      </div>
-                    </TD>
-                    <TD>
-                      <StatusPill meta={projectStatus[project.status]} animate={false} />
-                    </TD>
-                    <TD className="hidden md:table-cell">
-                      <StatusPill meta={priorityMeta[project.priority]} animate={false} />
-                    </TD>
-                    {isAdmin && (
-                      <TD>
-                        <StatusPill meta={paymentStatus[project.payment_status]} animate={false} />
-                      </TD>
-                    )}
-                    {isAdmin && (
-                      <TD className="tnum text-right font-medium">
-                        {formatMoney(project.amount, project.currency)}
-                      </TD>
-                    )}
-                    <TD className={cn('tnum hidden text-right lg:table-cell', overdue ? 'font-medium text-danger' : 'text-muted-foreground')}>
-                      {formatDate(project.due_date)}
-                    </TD>
-                  </Row>
-                )
-              })}
-            </AnimatePresence>
-          </motion.tbody>
-        </Table>
-      )}
-
-      <ProjectFormModal key={formOpen ? 'open' : 'closed'} open={formOpen} onClose={() => setFormOpen(false)} />
+            {list.length > limit && (
+              <div className="card-f">
+                <span className="muted">Showing {limit} of {list.length}</span>
+                <button type="button" className="btn btn-sm" onClick={() => setLimit((l) => l + PAGE)}>Load more</button>
+              </div>
+            )}
+          </div>
+        </div>
+      </Content>
     </>
   )
 }
-

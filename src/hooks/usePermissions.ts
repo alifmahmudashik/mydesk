@@ -1,8 +1,8 @@
 import { useData } from '@/data/store'
 
 /**
- * Role helpers. Until profiles load (or when the collaborator migration hasn't been run),
- * default to admin so the owner's experience never degrades.
+ * Role helpers. Until profiles load, default to admin so the owner's experience never
+ * degrades; the database's row-level security is the real gate either way.
  */
 export function useIsAdmin() {
   const me = useData((s) => s.me)

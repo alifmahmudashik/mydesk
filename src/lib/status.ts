@@ -1,45 +1,11 @@
-import type {
-  AccessStatus,
-  ClientStatus,
-  PaymentStatus,
-  Priority,
-  ProjectStatus,
-  TaskStatus,
-} from '@/types'
+import type { AccessStatus, ClientStatus, PaymentStatus, Priority, ProjectStatus, TaskStatus } from '@/types'
 
 /**
- * Single status-color convention for the whole app (see design-system/mydesk/MASTER.md §4):
- * neutral = not yet / inactive · accent = in motion · amber = waiting/attention ·
- * red = problem/overdue · green = done/positive · violet = exceptional
+ * One status-colour convention for the whole app, mapped to the design's pill classes:
+ * gray = not yet / inactive · pri = in motion · warn = waiting · bad = problem/overdue ·
+ * ok = done/positive · teal = exceptional (finished/refunded)
  */
-export type Tone = 'neutral' | 'accent' | 'amber' | 'red' | 'green' | 'violet'
-
-export const tonePill: Record<Tone, string> = {
-  neutral: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-500/10 dark:text-zinc-400',
-  accent: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400',
-  amber: 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400',
-  red: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
-  green: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400',
-  violet: 'bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-400',
-}
-
-export const toneText: Record<Tone, string> = {
-  neutral: 'text-zinc-400 dark:text-zinc-500',
-  accent: 'text-indigo-500 dark:text-indigo-400',
-  amber: 'text-amber-500 dark:text-amber-400',
-  red: 'text-red-500 dark:text-red-400',
-  green: 'text-emerald-500 dark:text-emerald-400',
-  violet: 'text-violet-500 dark:text-violet-400',
-}
-
-export const toneDot: Record<Tone, string> = {
-  neutral: 'bg-zinc-400 dark:bg-zinc-500',
-  accent: 'bg-indigo-500 dark:bg-indigo-400',
-  amber: 'bg-amber-500 dark:bg-amber-400',
-  red: 'bg-red-500 dark:bg-red-400',
-  green: 'bg-emerald-500 dark:bg-emerald-400',
-  violet: 'bg-violet-500 dark:bg-violet-400',
-}
+export type Tone = 'gray' | 'pri' | 'warn' | 'bad' | 'ok' | 'teal'
 
 export interface StatusMeta {
   label: string
@@ -47,51 +13,73 @@ export interface StatusMeta {
 }
 
 export const clientStatus: Record<ClientStatus, StatusMeta> = {
-  active: { label: 'Active', tone: 'accent' },
-  paused: { label: 'Paused', tone: 'amber' },
-  completed: { label: 'Completed', tone: 'green' },
-  archived: { label: 'Archived', tone: 'neutral' },
+  active: { label: 'Active', tone: 'ok' },
+  paused: { label: 'Paused', tone: 'warn' },
+  completed: { label: 'Completed', tone: 'gray' },
+  archived: { label: 'Archived', tone: 'gray' },
 }
 
 export const projectStatus: Record<ProjectStatus, StatusMeta> = {
-  not_started: { label: 'Not started', tone: 'neutral' },
-  in_progress: { label: 'In progress', tone: 'accent' },
-  waiting_for_client: { label: 'Waiting for client', tone: 'amber' },
-  blocked: { label: 'Blocked', tone: 'red' },
-  completed: { label: 'Completed', tone: 'green' },
-  finished: { label: 'Finished', tone: 'violet' },
-  cancelled: { label: 'Cancelled', tone: 'neutral' },
+  not_started: { label: 'Not started', tone: 'gray' },
+  in_progress: { label: 'In progress', tone: 'pri' },
+  waiting_for_client: { label: 'Waiting for client', tone: 'warn' },
+  blocked: { label: 'Blocked', tone: 'bad' },
+  completed: { label: 'Completed', tone: 'ok' },
+  finished: { label: 'Finished', tone: 'teal' },
+  cancelled: { label: 'Cancelled', tone: 'gray' },
 }
 
 export const taskStatus: Record<TaskStatus, StatusMeta> = {
-  todo: { label: 'To do', tone: 'neutral' },
-  in_progress: { label: 'In progress', tone: 'accent' },
-  review: { label: 'In review', tone: 'amber' },
-  done: { label: 'Done', tone: 'green' },
-  cancelled: { label: 'Cancelled', tone: 'neutral' },
+  todo: { label: 'To do', tone: 'gray' },
+  in_progress: { label: 'In progress', tone: 'pri' },
+  review: { label: 'In review', tone: 'warn' },
+  done: { label: 'Done', tone: 'ok' },
+  cancelled: { label: 'Cancelled', tone: 'gray' },
+}
+
+/** Ring style for the round status control (design's .st variants). */
+export const taskRing: Record<TaskStatus, string> = {
+  todo: '',
+  in_progress: 'prog',
+  review: 'rev',
+  done: 'done',
+  cancelled: 'cancel',
 }
 
 export const accessStatus: Record<AccessStatus, StatusMeta> = {
-  needed: { label: 'Needed', tone: 'amber' },
-  requested: { label: 'Requested', tone: 'accent' },
-  received: { label: 'Received', tone: 'green' },
-  not_needed: { label: 'Not needed', tone: 'neutral' },
+  needed: { label: 'Needed', tone: 'warn' },
+  requested: { label: 'Requested', tone: 'pri' },
+  received: { label: 'Received', tone: 'ok' },
+  not_needed: { label: 'Not needed', tone: 'gray' },
 }
 
 export const paymentStatus: Record<PaymentStatus, StatusMeta> = {
-  unpaid: { label: 'Unpaid', tone: 'neutral' },
-  partial: { label: 'Partial', tone: 'amber' },
-  paid: { label: 'Paid', tone: 'green' },
-  refunded: { label: 'Refunded', tone: 'violet' },
-  overdue: { label: 'Overdue', tone: 'red' },
+  unpaid: { label: 'Unpaid', tone: 'gray' },
+  partial: { label: 'Partial', tone: 'warn' },
+  paid: { label: 'Paid', tone: 'ok' },
+  refunded: { label: 'Refunded', tone: 'teal' },
+  overdue: { label: 'Overdue', tone: 'bad' },
 }
 
-export const priorityMeta: Record<Priority, StatusMeta> = {
-  low: { label: 'Low', tone: 'neutral' },
-  medium: { label: 'Medium', tone: 'accent' },
-  high: { label: 'High', tone: 'amber' },
-  urgent: { label: 'Urgent', tone: 'red' },
+export const priorityMeta: Record<Priority, StatusMeta & { bars: string }> = {
+  low: { label: 'Low', tone: 'gray', bars: 'low' },
+  medium: { label: 'Medium', tone: 'pri', bars: 'med' },
+  high: { label: 'High', tone: 'warn', bars: 'high' },
+  urgent: { label: 'Urgent', tone: 'bad', bars: 'high' },
 }
+
+export const billingLabel: Record<string, string> = {
+  retainer: 'Monthly retainer',
+  fixed: 'Fixed price',
+  hourly: 'Hourly',
+}
+
+export const paymentTerms: { value: string; label: string; days: number }[] = [
+  { value: 'net_7', label: 'Net 7', days: 7 },
+  { value: 'net_14', label: 'Net 14', days: 14 },
+  { value: 'net_30', label: 'Net 30', days: 30 },
+  { value: 'receipt', label: 'Due on receipt', days: 0 },
+]
 
 export function options<T extends string>(map: Record<T, StatusMeta>) {
   return (Object.keys(map) as T[]).map((value) => ({ value, label: map[value].label }))

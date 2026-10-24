@@ -1,365 +1,313 @@
-import { useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { formatISO } from 'date-fns'
-import { AnimatePresence, motion } from 'framer-motion'
+import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { addDays, format, startOfMonth } from 'date-fns'
+import { ChartColumn, Check, CreditCard, Plus, Search, Send } from 'lucide-react'
 import { toast } from 'sonner'
-import {
-  AlertTriangle,
-  Check,
-  CircleDollarSign,
-  CreditCard,
-  ExternalLink,
-  MoreHorizontal,
-  Pencil,
-  Plus,
-  Trash2,
-  Wallet,
-} from 'lucide-react'
-import { Avatar } from '@/components/ui/avatar'
-import { Button } from '@/components/ui/button'
-import { Dropdown } from '@/components/ui/dropdown'
-import { EmptyState } from '@/components/ui/empty-state'
-import { ConfirmDialog } from '@/components/ui/modal'
-import { PageHeader } from '@/components/ui/page-header'
-import { Select, type SelectOption } from '@/components/ui/select'
-import { CardSkeleton, ListSkeleton } from '@/components/ui/skeleton'
-import { StatCard } from '@/components/ui/stat-card'
-import { StatusPill } from '@/components/ui/status-pill'
-import { PanelSection, SlideOverPanel } from '@/components/ui/slide-over'
-import { Row, Table, TD, TH, THead } from '@/components/ui/table'
-import { SearchInput, Toolbar } from '@/components/ui/toolbar'
 import { useData } from '@/data/store'
-import { useIsAdmin } from '@/hooks/usePermissions'
+import { useUI } from '@/data/ui'
+import { markPaymentPaid, paymentTitle } from '@/data/actions'
+import { Topbar, Content, Empty, PageHead } from '@/components/ui/layout'
+import { Tabs } from '@/components/ui/tabs'
+import { ClientMark } from '@/components/ui/avatar'
+import { StatusPill } from '@/components/ui/pill'
+import { Modal } from '@/components/ui/modal'
+import { PaymentModal } from '@/features/payments/PaymentModal'
+import { RemindModal } from '@/features/payments/RemindModal'
 import { celebrateFrom } from '@/lib/confetti'
 import { sumUSD, useUsdRates } from '@/lib/currency'
-import { clientDisplayName, effectivePaymentStatus, isOpenPayment } from '@/lib/derive'
-import { formatDate, formatMoney } from '@/lib/format'
-import { listContainer } from '@/lib/motion'
-import { options, paymentStatus } from '@/lib/status'
-import type { Payment, PaymentStatus } from '@/types'
-import { PaymentFormModal } from '@/features/payments/PaymentFormModal'
+import { clientDisplayName, effectivePaymentStatus, isOpenPayment, sumByCurrency } from '@/lib/derive'
+import { daysUntil, formatDate, formatMoney, lateLabel } from '@/lib/format'
+import { paymentStatus, paymentTerms } from '@/lib/status'
+import type { Payment } from '@/types'
 
-type PaymentFilter = 'open' | 'all' | PaymentStatus
-const statusFilter: SelectOption<PaymentFilter>[] = [
-  { value: 'open', label: 'Open (unpaid)' },
-  { value: 'all', label: 'All statuses' },
-  ...options(paymentStatus),
-]
-
-/** Compact label/value row, matching the properties rail used on the project detail page. */
-function Prop({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex min-h-11 items-center justify-between gap-6 py-1.5">
-      <dt className="shrink-0 text-[13px] text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 text-right text-sm">{children}</dd>
-    </div>
-  )
-}
+type Tab = 'open' | 'overdue' | 'paid'
 
 export function PaymentsPage() {
-  const { ready, payments, clients, projects, updateRow, deleteRow } = useData()
-  const isAdmin = useIsAdmin()
-  const usdRates = useUsdRates()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const [search, setSearch] = useState('')
-  // "What am I owed" is the default question — open payments first.
-  const [status, setStatus] = useState<PaymentFilter>('open')
-  const [formOpen, setFormOpen] = useState(false)
-  const [editing, setEditing] = useState<Payment>()
-  const [deleting, setDeleting] = useState<Payment>()
+  const { payments, clients, invoices, projects } = useData()
+  const { openCreate } = useUI()
+  const rates = useUsdRates()
+  const [params, setParams] = useSearchParams()
+  const tab = (params.get('tab') as Tab) || 'open'
+  const [q, setQ] = useState('')
+  const [edit, setEdit] = useState<Payment | undefined>()
+  const [remind, setRemind] = useState<Payment | null>(null)
+  const [datesOpen, setDatesOpen] = useState(false)
+  const [paidLimit, setPaidLimit] = useState(25)
 
-  const openId = searchParams.get('p')
-  const openPayment = payments.find((p) => p.id === openId)
-
-  const clientName = (id: string) => clientDisplayName(clients.find((c) => c.id === id))
-  const projectTitles = (p: Payment) =>
-    (p.project_ids ?? [])
-      .map((id) => projects.find((pr) => pr.id === id)?.title)
-      .filter(Boolean)
-      .join(', ')
-
-  const matchesStatus = (p: Payment) =>
-    status === 'all' ? true : status === 'open' ? isOpenPayment(p) : effectivePaymentStatus(p) === status
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return payments.filter(
-      (p) =>
-        matchesStatus(p) &&
-        (!q || `${clientName(p.client_id)} ${projectTitles(p)}`.toLowerCase().includes(q)),
-    )
+  // Deep link ?p=<id> opens that payment (from inbox, dashboard, emails).
+  useEffect(() => {
+    const pid = params.get('p')
+    if (!pid) return
+    const p = payments.find((x) => x.id === pid)
+    if (p) setEdit(p)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [payments, clients, projects, search, status])
+  }, [params.get('p')])
 
-  if (!isAdmin) {
-    return (
-      <EmptyState
-        icon={CreditCard}
-        title="Admins only"
-        description="Payments are only visible to the workspace owner and admins."
-      />
-    )
+  const closeEdit = () => {
+    setEdit(undefined)
+    if (params.get('p')) {
+      params.delete('p')
+      setParams(params, { replace: true })
+    }
+  }
+
+  const matchQ = (p: Payment) => {
+    if (!q.trim()) return true
+    const c = clients.find((x) => x.id === p.client_id)
+    const inv = invoices.find((i) => i.id === p.invoice_id)
+    return `${clientDisplayName(c)} ${paymentTitle(p)} ${inv?.number ?? ''}`.toLowerCase().includes(q.trim().toLowerCase())
   }
 
   const open = payments.filter(isOpenPayment)
-  const overdue = payments.filter((p) => effectivePaymentStatus(p) === 'overdue')
-  const thisMonth = formatISO(new Date(), { representation: 'date' }).slice(0, 7)
-  const paidThisMonth = payments.filter((p) => p.status === 'paid' && p.payment_date?.startsWith(thisMonth))
+  const overdue = open.filter((p) => effectivePaymentStatus(p) === 'overdue').sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? ''))
+  const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd')
+  const paid = payments.filter((p) => p.status === 'paid').sort((a, b) => (b.payment_date ?? '').localeCompare(a.payment_date ?? ''))
+  const paidThisMonth = paid.filter((p) => (p.payment_date ?? '') >= monthStart)
+  const noDate = open.filter((p) => !p.due_date)
+  const openClients = new Set(open.map((p) => p.client_id)).size
 
-  /** The "marked paid" moment: optimistic flip + confetti from the trigger + toast. */
-  function markPaid(payment: Payment, trigger: HTMLElement | null) {
-    updateRow(
-      'payments',
-      payment.id,
-      { status: 'paid', payment_date: formatISO(new Date(), { representation: 'date' }) },
-      {
-        entity: 'payment',
-        entityId: payment.id,
-        action: 'paid',
-        message: `Received ${formatMoney(payment.amount, payment.currency)} from ${clientName(payment.client_id)}`,
-      },
+  // Open tab groups by client, clients with overdue money first.
+  const groups = useMemo(() => {
+    const list = open.filter(matchQ)
+    const ids = [...new Set(list.map((p) => p.client_id))]
+    return ids
+      .map((id) => {
+        const rows = list.filter((p) => p.client_id === id).sort((a, b) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999'))
+        return { client: clients.find((c) => c.id === id), rows, late: rows.some((r) => effectivePaymentStatus(r) === 'overdue') }
+      })
+      .sort((a, b) => Number(b.late) - Number(a.late) || sumUSD(b.rows, rates) - sumUSD(a.rows, rates))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, q, clients, rates])
+
+  const markPaid = (p: Payment, el: HTMLElement) => {
+    markPaymentPaid(p)
+    celebrateFrom(el)
+  }
+
+  const actions = (p: Payment, withRemind: boolean) => (
+    <span className="row-sm above" style={{ justifyContent: 'flex-end' }}>
+      {withRemind && (
+        <button type="button" className="btn btn-sm" onClick={() => setRemind(p)} title={p.last_reminded_at ? `Last reminded ${formatDate(p.last_reminded_at.slice(0, 10))}` : undefined}>
+          <Send className="i i-sm" />Remind
+        </button>
+      )}
+      <button type="button" className="btn btn-sm" onClick={(e) => markPaid(p, e.currentTarget)}><Check className="i i-sm" />Mark paid</button>
+    </span>
+  )
+
+  const dueCell = (p: Payment) => {
+    if (!p.due_date) return <td className="faint"><button type="button" className="link-btn above faint" style={{ color: 'var(--faint)', fontWeight: 400 }} onClick={() => setEdit(p)}>Add date</button></td>
+    const late = lateLabel(p.due_date)
+    return (
+      <td>
+        <div>{formatDate(p.due_date)}</div>
+        {late ? <div className="xs t-bad">{late}</div> : (daysUntil(p.due_date) ?? 99) <= 3 ? <div className="xs t-warn">Due soon</div> : null}
+      </td>
     )
-    celebrateFrom(trigger)
-    toast.success(`${formatMoney(payment.amount, payment.currency)} received`, {
-      description: `${clientName(payment.client_id)} — marked as paid.`,
-    })
   }
 
   return (
     <>
-      <PageHeader
-        title="Payments"
-        description="What you're owed, what's late, and what came in."
-        actions={
-          <Button onClick={() => { setEditing(undefined); setFormOpen(true) }}>
-            <Plus strokeWidth={1.75} />
-            New payment
-          </Button>
-        }
-      />
-
-      {/* Totals */}
-      {!ready ? (
-        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <CardSkeleton />
-          <CardSkeleton />
-          <CardSkeleton />
+      <Topbar crumbs={[{ label: 'Payments' }]}>
+        <Link className="btn hide-sm" to="/analytics"><ChartColumn className="i" />Analytics</Link>
+        <button type="button" className="btn btn-pri" onClick={() => openCreate('payment')}><Plus className="i" />Record payment</button>
+      </Topbar>
+      <Content>
+        <PageHead title="Payments" sub="What you're owed, what's late, and what came in." />
+        <div className="kstrip">
+          <div>
+            <div className="row-sm small muted m"><span className="sq" style={{ background: 'var(--warn-dot)', borderRadius: 99 }} />Outstanding</div>
+            <div className="val">{formatMoney(Math.round(sumUSD(open, rates)))}</div>
+            <div className="xs muted">{open.length} open · {openClients} client{openClients === 1 ? '' : 's'}</div>
+          </div>
+          <div style={overdue.length ? { background: 'var(--bad-soft)' } : undefined}>
+            <div className={`row-sm small m ${overdue.length ? 't-bad' : 'muted'}`}><span className="sq" style={{ background: 'var(--bad-dot)', borderRadius: 99 }} />Overdue</div>
+            <div className="val">{formatMoney(Math.round(sumUSD(overdue, rates)))}</div>
+            <div className={`xs ${overdue.length ? 't-bad' : 'muted'}`}>{overdue.length ? `Oldest is ${lateLabel(overdue[0].due_date)}` : 'Nothing late'}</div>
+          </div>
+          <div>
+            <div className="row-sm small muted m"><span className="sq" style={{ background: 'var(--ok-dot)', borderRadius: 99 }} />Paid this month</div>
+            <div className="val">{formatMoney(sumUSD(paidThisMonth, rates), 'USD', { cents: true })}</div>
+            <div className="xs muted">{paidThisMonth.length} payment{paidThisMonth.length === 1 ? '' : 's'}</div>
+          </div>
         </div>
-      ) : (
-        <motion.div
-          variants={listContainer}
-          initial="initial"
-          animate="animate"
-          className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3"
-        >
-          <StatCard
-            icon={Wallet}
-            label="Outstanding"
-            value={formatMoney(sumUSD(open, usdRates), 'USD')}
-            hint={`${open.length} open payment${open.length === 1 ? '' : 's'}`}
-            tone="amber"
-            onClick={() => setStatus('open')}
-          />
-          <StatCard
-            icon={AlertTriangle}
-            label="Overdue"
-            value={formatMoney(sumUSD(overdue, usdRates), 'USD')}
-            hint={overdue.length ? `${overdue.length} need chasing` : 'Nothing late'}
-            tone={overdue.length ? 'red' : 'green'}
-            onClick={() => setStatus('overdue')}
-          />
-          <StatCard
-            icon={CircleDollarSign}
-            label="Paid this month"
-            value={formatMoney(sumUSD(paidThisMonth, usdRates), 'USD')}
-            hint={`${paidThisMonth.length} payment${paidThisMonth.length === 1 ? '' : 's'}`}
-            tone="green"
-            onClick={() => setStatus('paid')}
-          />
-        </motion.div>
-      )}
+        {(rates === null && payments.some((p) => p.currency !== 'USD')) && <span className="xs faint" style={{ marginTop: -16 }}>Totals in USD. Exchange rates are loading.</span>}
 
-      <Toolbar>
-        <SearchInput value={search} onChange={setSearch} placeholder="Search by client or project…" />
-        <Select value={status} onChange={setStatus} options={statusFilter} aria-label="Filter by status" className="w-40" />
-      </Toolbar>
-
-      {!ready ? (
-        <ListSkeleton rows={6} />
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          icon={CreditCard}
-          title={payments.length === 0 ? 'No payments yet' : 'No payments match'}
-          description={
-            payments.length === 0
-              ? 'Log a payment against a client or project to track what you’re owed.'
-              : 'Try different filters or clear the search.'
-          }
-          action={
-            payments.length === 0 && (
-              <Button onClick={() => setFormOpen(true)}>
-                <Plus strokeWidth={1.75} />
-                New payment
-              </Button>
-            )
-          }
-        />
-      ) : (
-        <Table>
-          <THead>
-            <TH>Client</TH>
-            <TH className="hidden md:table-cell">Project</TH>
-            <TH className="text-right">Amount</TH>
-            <TH>Status</TH>
-            <TH className="hidden text-right lg:table-cell">Due</TH>
-            <TH className="w-32" />
-          </THead>
-          <motion.tbody variants={listContainer} initial="initial" animate="animate" className="divide-y">
-            <AnimatePresence initial={false}>
-              {filtered.map((payment) => {
-                const eff = effectivePaymentStatus(payment)
-                return (
-                  <Row
-                    key={payment.id}
-                    clickable
-                    exit="exit"
-                    onClick={() => setSearchParams({ p: payment.id })}
-                  >
-                    <TD>
-                      <div className="flex items-center gap-2.5">
-                        <Avatar name={clientName(payment.client_id)} size="sm" />
-                        <p className="font-medium">{clientName(payment.client_id)}</p>
-                      </div>
-                    </TD>
-                    <TD className="hidden max-w-56 truncate text-muted-foreground md:table-cell">
-                      {projectTitles(payment) || '—'}
-                    </TD>
-                    <TD className="tnum text-right font-semibold">
-                      {formatMoney(payment.amount, payment.currency)}
-                    </TD>
-                    <TD>
-                      <StatusPill meta={paymentStatus[eff]} animate={false} />
-                    </TD>
-                    <TD className="tnum hidden text-right text-muted-foreground lg:table-cell">
-                      {payment.status === 'paid' ? formatDate(payment.payment_date) : formatDate(payment.due_date)}
-                    </TD>
-                    <TD>
-                      <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                        {isOpenPayment(payment) && (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={(e) => markPaid(payment, e.currentTarget)}
-                          >
-                            <Check strokeWidth={1.75} />
-                            Mark paid
-                          </Button>
-                        )}
-                        <Dropdown
-                          trigger={
-                            <Button variant="ghost" size="iconSm" aria-label="Payment actions">
-                              <MoreHorizontal strokeWidth={1.75} />
-                            </Button>
-                          }
-                          items={[
-                            { label: 'Edit', icon: Pencil, onSelect: () => { setEditing(payment); setFormOpen(true) } },
-                            { label: 'Delete', icon: Trash2, danger: true, onSelect: () => setDeleting(payment) },
-                          ]}
-                        />
-                      </div>
-                    </TD>
-                  </Row>
-                )
-              })}
-            </AnimatePresence>
-          </motion.tbody>
-        </Table>
-      )}
-
-      {/* Detail panel (?p=<id> — deep-linkable) */}
-      <SlideOverPanel
-        open={Boolean(openPayment)}
-        onClose={() => setSearchParams({})}
-        title={openPayment ? formatMoney(openPayment.amount, openPayment.currency) : ''}
-        subtitle={openPayment && clientName(openPayment.client_id)}
-        headerActions={
-          openPayment && (
-            <Button variant="ghost" size="iconSm" aria-label="Edit payment" onClick={() => { setEditing(openPayment); setFormOpen(true) }}>
-              <Pencil strokeWidth={1.75} />
-            </Button>
-          )
-        }
-      >
-        {openPayment && (
-          <>
-            <PanelSection title="Details">
-              <dl className="divide-y">
-                <Prop label="Status">
-                  <StatusPill meta={paymentStatus[effectivePaymentStatus(openPayment)]} animate={false} />
-                </Prop>
-                <Prop label={(openPayment.project_ids ?? []).length > 1 ? 'Projects' : 'Project'}>
-                  {projectTitles(openPayment) || '—'}
-                </Prop>
-                <Prop label="Due">
-                  <span className="tnum">{formatDate(openPayment.due_date)}</span>
-                </Prop>
-                <Prop label="Paid">
-                  <span className="tnum">{formatDate(openPayment.payment_date)}</span>
-                </Prop>
-                <Prop label="Method">{openPayment.payment_method ?? '—'}</Prop>
-                <Prop label="Invoice">
-                  {openPayment.invoice_url ? (
-                    <a
-                      href={openPayment.invoice_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-primary hover:underline"
-                    >
-                      Open invoice
-                      <ExternalLink className="size-3.5" strokeWidth={1.75} aria-hidden />
-                    </a>
-                  ) : (
-                    '—'
+        <div className="tabs">
+          <Tabs
+            value={tab}
+            onChange={(t) => setParams(t === 'open' ? {} : { tab: t }, { replace: true })}
+            tabs={[
+              { id: 'open', label: 'Open', count: open.length },
+              { id: 'overdue', label: <>Overdue {overdue.length > 0 && <span className="n" style={{ background: 'var(--bad-bg)', color: 'var(--bad)' }}>{overdue.length}</span>}</> },
+              { id: 'paid', label: 'Paid', count: paid.length },
+            ]}
+            after={
+              <label className="inp-wrap" style={{ width: 240, maxWidth: '45vw', height: 32, marginBottom: 6 }}>
+                <Search className="i i-sm" />
+                <input placeholder="Search client or project…" aria-label="Search payments" value={q} onChange={(e) => setQ(e.target.value)} />
+              </label>
+            }
+          />
+          <div className="card tbl-wrap panel-in" key={tab}>
+            {tab === 'open' &&
+              (groups.length === 0 ? (
+                <Empty icon={<CreditCard className="i" />} title={payments.length ? 'Nothing open' : 'No payments yet'} action={<button type="button" className="btn btn-sm" onClick={() => openCreate('payment')}><Plus className="i i-sm" />Record payment</button>}>
+                  {payments.length ? 'Every payment is settled. Nice.' : 'Payments are created automatically when a project has a budget, or record one here.'}
+                </Empty>
+              ) : (
+                <>
+                  <table className="tbl" style={{ minWidth: 860 }}>
+                    <thead><tr><th>Project</th><th className="r">Amount</th><th>Status</th><th>Due</th><th className="r" /></tr></thead>
+                    <tbody>
+                      {groups.map((g) => (
+                        <Fragment key={g.client?.id ?? 'x'}>
+                          <tr className="grp">
+                            <td colSpan={5}>
+                              <span className="row-sm">
+                                <ClientMark client={g.client} size="xs" />
+                                {g.client ? <Link to={`/clients/${g.client.id}`}>{clientDisplayName(g.client)}</Link> : 'Unknown client'}
+                                <span className={g.late ? 't-bad' : 't-warn'}>· {sumByCurrency(g.rows)} open</span>
+                              </span>
+                            </td>
+                          </tr>
+                          {g.rows.map((p) => {
+                            const st = effectivePaymentStatus(p)
+                            return (
+                              <tr key={p.id} className="hov">
+                                <td><button type="button" className="m cover" style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', color: 'inherit' }} onClick={() => setEdit(p)}>{paymentTitle(p)}</button></td>
+                                <td className="r num b">{formatMoney(p.amount, p.currency)}</td>
+                                <td><StatusPill meta={st === 'unpaid' ? { ...paymentStatus.unpaid, tone: 'warn' } : paymentStatus[st]} /></td>
+                                {dueCell(p)}
+                                <td className="r">{actions(p, st === 'overdue' || Boolean(p.due_date && (daysUntil(p.due_date) ?? 99) <= 3))}</td>
+                              </tr>
+                            )
+                          })}
+                        </Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                  {noDate.length > 0 && (
+                    <div className="card-f">
+                      <span className="muted">{noDate.length} open payment{noDate.length === 1 ? ' has' : 's have'} no due date, so {noDate.length === 1 ? 'it never turns' : 'they never turn'} overdue.</span>
+                      <button type="button" className="btn btn-sm" onClick={() => setDatesOpen(true)}>Set due dates</button>
+                    </div>
                   )}
-                </Prop>
-              </dl>
-              {openPayment.notes && (
-                <p className="mt-4 rounded-lg bg-surface-hover px-3 py-2.5 text-[13px] leading-relaxed text-muted-foreground">
-                  {openPayment.notes}
-                </p>
-              )}
-            </PanelSection>
-            {isOpenPayment(openPayment) && (
-              <Button className="w-full" onClick={(e) => markPaid(openPayment, e.currentTarget)}>
-                <Check strokeWidth={1.75} />
-                Mark as paid
-              </Button>
-            )}
-          </>
-        )}
-      </SlideOverPanel>
+                </>
+              ))}
 
-      <PaymentFormModal
-        key={editing?.id ?? 'new'}
-        open={formOpen}
-        onClose={() => setFormOpen(false)}
-        payment={editing}
-      />
-      <ConfirmDialog
-        open={Boolean(deleting)}
-        onClose={() => setDeleting(undefined)}
-        onConfirm={() => {
-          if (!deleting) return
-          deleteRow('payments', deleting.id, {
-            entity: 'payment',
-            entityId: deleting.id,
-            action: 'deleted',
-            message: `Deleted ${formatMoney(deleting.amount, deleting.currency)} payment for ${clientName(deleting.client_id)}`,
-          })
-        }}
-        title="Delete this payment?"
-        description="The payment record will be removed permanently. This can't be undone."
-      />
+            {tab === 'overdue' &&
+              (overdue.filter(matchQ).length === 0 ? (
+                <Empty icon={<Check className="i" />} title="Nothing overdue">When a payment passes its due date it shows up here, and owners and admins get one email about it.</Empty>
+              ) : (
+                <table className="tbl" style={{ minWidth: 760 }}>
+                  <thead><tr><th>Client</th><th>Project</th><th className="r">Amount</th><th>Due</th><th>Last reminder</th><th className="r" /></tr></thead>
+                  <tbody>
+                    {overdue.filter(matchQ).map((p) => {
+                      const c = clients.find((x) => x.id === p.client_id)
+                      return (
+                        <tr key={p.id} className="hov">
+                          <td><span className="row-sm"><ClientMark client={c} size="sm" />{clientDisplayName(c)}</span></td>
+                          <td><button type="button" className="m cover" style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', color: 'inherit' }} onClick={() => setEdit(p)}>{paymentTitle(p)}</button></td>
+                          <td className="r num b">{formatMoney(p.amount, p.currency)}</td>
+                          <td className="t-bad">{lateLabel(p.due_date)}</td>
+                          <td className="small muted">{p.last_reminded_at ? formatDate(p.last_reminded_at.slice(0, 10)) : 'Never'}</td>
+                          <td className="r">{actions(p, true)}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              ))}
+
+            {tab === 'paid' &&
+              (paid.filter(matchQ).length === 0 ? (
+                <Empty title="No paid payments yet" />
+              ) : (
+                <>
+                  <table className="tbl" style={{ minWidth: 760 }}>
+                    <thead><tr><th>Client</th><th>Invoice / project</th><th className="r">Amount</th><th>Paid on</th><th>Method</th></tr></thead>
+                    <tbody>
+                      {paid.filter(matchQ).slice(0, paidLimit).map((p) => {
+                        const c = clients.find((x) => x.id === p.client_id)
+                        const inv = invoices.find((i) => i.id === p.invoice_id)
+                        return (
+                          <tr key={p.id} className="hov">
+                            <td><span className="row-sm"><ClientMark client={c} size="sm" />{clientDisplayName(c)}</span></td>
+                            <td>
+                              {inv ? <Link className="mono m cover" to={`/invoices/${inv.id}`}>{inv.number}</Link> : <button type="button" className="m cover trunc" style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', color: 'inherit', maxWidth: 320 }} onClick={() => setEdit(p)}>{paymentTitle(p)}</button>}
+                            </td>
+                            <td className="r num b">{formatMoney(p.amount, p.currency, { cents: true })}</td>
+                            <td>{formatDate(p.payment_date)}</td>
+                            <td className="muted">{p.payment_method ?? '—'}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                  <div className="card-f">
+                    <span className="muted">Showing {Math.min(paidLimit, paid.length)} of {paid.length} · {paidThisMonth.length} this month</span>
+                    {paid.length > paidLimit ? <button type="button" className="btn btn-sm" onClick={() => setPaidLimit((l) => l + 25)}>Load more</button> : <Link className="link" to="/analytics">See trends</Link>}
+                  </div>
+                </>
+              ))}
+          </div>
+        </div>
+      </Content>
+      <PaymentModal open={Boolean(edit)} payment={edit && payments.find((p) => p.id === edit.id)} onClose={closeEdit} onRemind={(p) => { closeEdit(); setRemind(p) }} />
+      <RemindModal payment={remind} onClose={() => setRemind(null)} />
+      <SetDueDatesModal open={datesOpen} onClose={() => setDatesOpen(false)} rows={noDate} projects={projects} />
     </>
+  )
+}
+
+function SetDueDatesModal({ open, onClose, rows, projects }: { open: boolean; onClose: () => void; rows: Payment[]; projects: { id: string; due_date?: string | null }[] }) {
+  const { clients, updateRow } = useData()
+  const [dates, setDates] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    if (!open) return
+    // Suggest: the project's due date, else today + the client's payment terms.
+    const next: Record<string, string> = {}
+    for (const p of rows) {
+      const proj = projects.find((x) => p.project_ids?.includes(x.id) && x.due_date)
+      const c = clients.find((x) => x.id === p.client_id)
+      const days = paymentTerms.find((t) => t.value === c?.payment_terms)?.days ?? 7
+      next[p.id] = proj?.due_date ?? format(addDays(new Date(), days), 'yyyy-MM-dd')
+    }
+    setDates(next)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  const save = () => {
+    let n = 0
+    for (const p of rows) {
+      if (dates[p.id]) {
+        updateRow('payments', p.id, { due_date: dates[p.id] })
+        n++
+      }
+    }
+    toast.success(`Set ${n} due date${n === 1 ? '' : 's'}`)
+    onClose()
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Set due dates" size="wide" note="Suggested from project due dates or the client’s payment terms" footer={<><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="button" className="btn btn-pri" onClick={save}>Save dates</button></>}>
+      <div className="list" style={{ maxHeight: '55vh', overflowY: 'auto' }}>
+        {rows.map((p) => {
+          const c = clients.find((x) => x.id === p.client_id)
+          return (
+            <div key={p.id} className="li">
+              <ClientMark client={c} size="sm" />
+              <div className="grow" style={{ minWidth: 0 }}>
+                <div className="t trunc" style={{ fontSize: 13.5 }}>{paymentTitle(p)}</div>
+                <div className="s">{clientDisplayName(c)} · {formatMoney(p.amount, p.currency)}</div>
+              </div>
+              <input className="inp sm" type="date" style={{ width: 160 }} value={dates[p.id] ?? ''} onChange={(e) => setDates((d) => ({ ...d, [p.id]: e.target.value }))} />
+            </div>
+          )
+        })}
+      </div>
+    </Modal>
   )
 }

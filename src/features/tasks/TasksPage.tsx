@@ -1,168 +1,182 @@
 import { useMemo, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
-import { ListTodo, Plus } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { EmptyState } from '@/components/ui/empty-state'
-import { PageHeader } from '@/components/ui/page-header'
-import { Select, type SelectOption } from '@/components/ui/select'
-import { ListSkeleton } from '@/components/ui/skeleton'
-import { SearchInput, Toolbar } from '@/components/ui/toolbar'
+import { addDays, endOfWeek, format } from 'date-fns'
+import { AlertCircle, Calendar, ChevronDown, Clock, Filter, Folder, LayoutGrid, List, ListChecks, Plus, Search, User } from 'lucide-react'
 import { useData } from '@/data/store'
-import { useIsAdmin } from '@/hooks/usePermissions'
-import { clientDisplayName, profileDisplayName } from '@/lib/derive'
-import { daysUntil } from '@/lib/format'
-import { listContainer } from '@/lib/motion'
-import { options, taskStatus } from '@/lib/status'
+import { useUI } from '@/data/ui'
+import { Topbar, Content, Empty, PageHead } from '@/components/ui/layout'
+import { Tabs } from '@/components/ui/tabs'
+import { Menu, MenuItem, MenuSearch, MenuTitle } from '@/components/ui/menu'
+import { Avatar, ClientMark } from '@/components/ui/avatar'
+import { StatusRing } from '@/components/ui/pill'
+import { DoneRow, TaskBoard, TaskGroup } from '@/components/domain/TaskViews'
+import { clientDisplayName, profileDisplayName, shortProjectTitle, taskRef } from '@/lib/derive'
+import { taskStatus } from '@/lib/status'
 import type { Task, TaskStatus } from '@/types'
-import { TaskFormModal } from '@/features/tasks/TaskFormModal'
-import { TaskItem } from '@/features/tasks/TaskItem'
 
-const statusFilter: SelectOption<'all' | TaskStatus>[] = [
-  { value: 'all', label: 'All statuses' },
-  ...options(taskStatus),
-]
-const groupOptions: SelectOption<'status' | 'due'>[] = [
-  { value: 'status', label: 'Group by status' },
-  { value: 'due', label: 'Group by due date' },
-]
+type Group = 'due' | 'project' | 'status' | 'assignee'
+const groupLabel: Record<Group, string> = { due: 'Due date', project: 'Project', status: 'Status', assignee: 'Assignee' }
 
-const STATUS_ORDER: TaskStatus[] = ['in_progress', 'review', 'todo', 'done', 'cancelled']
-
-function dueGroup(task: Task): string {
-  if (task.status === 'done' || task.status === 'cancelled') return 'Wrapped up'
-  const d = daysUntil(task.due_date)
-  if (d === null) return 'No due date'
-  if (d < 0) return 'Overdue'
-  if (d === 0) return 'Today'
-  if (d <= 7) return 'This week'
-  return 'Later'
+function usePersisted<T extends string>(key: string, initial: T) {
+  const [v, setV] = useState<T>(() => {
+    try {
+      return (localStorage.getItem(key) as T) || initial
+    } catch {
+      return initial
+    }
+  })
+  return [
+    v,
+    (next: T) => {
+      setV(next)
+      try {
+        localStorage.setItem(key, next)
+      } catch {
+        // ignore
+      }
+    },
+  ] as const
 }
 
-const DUE_ORDER = ['Overdue', 'Today', 'This week', 'Later', 'No due date', 'Wrapped up']
-
-/** Global task list — "what do I need to do today" without opening every project. */
 export function TasksPage() {
-  const { ready, tasks, projects, clients, profiles, me } = useData()
-  const isAdmin = useIsAdmin()
-  const [search, setSearch] = useState('')
-  const [status, setStatus] = useState<'all' | TaskStatus>('all')
-  const [projectFilter, setProjectFilter] = useState('all')
-  // Members land on "assigned to me" first — the rest of their granted work is one click away.
-  const [assigneeFilter, setAssigneeFilter] = useState(() => (isAdmin ? 'all' : (me?.id ?? 'all')))
-  const [grouping, setGrouping] = useState<'status' | 'due'>('due')
-  const [formOpen, setFormOpen] = useState(false)
-
-  const projectOptions = [
-    { value: 'all', label: 'All projects' },
-    ...projects.map((p) => {
-      const client = clients.find((c) => c.id === p.client_id)
-      return { value: p.id, label: `${p.title}${client ? ` — ${clientDisplayName(client)}` : ''}` }
-    }),
-  ]
-
-  const assigneeOptions = [
-    { value: 'all', label: 'Everyone' },
-    { value: 'unassigned', label: 'Unassigned' },
-    ...profiles.map((p) => ({
-      value: p.id,
-      label: p.id === me?.id ? `${profileDisplayName(p)} (me)` : profileDisplayName(p),
-    })),
-  ]
+  const { tasks, projects, clients, profiles, me } = useData()
+  const { openCreate } = useUI()
+  const [view, setView] = usePersisted<'list' | 'board'>('mydesk-tasks-view', 'list')
+  const [who, setWho] = usePersisted<string>('mydesk-tasks-who', me?.role === 'member' ? 'me' : 'everyone')
+  const [group, setGroup] = usePersisted<Group>('mydesk-tasks-group', 'due')
+  const [projectId, setProjectId] = useState('all')
+  const [q, setQ] = useState('')
+  const [projectQ, setProjectQ] = useState('')
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return tasks.filter(
-      (t) =>
-        (status === 'all' || t.status === status) &&
-        (projectFilter === 'all' || t.project_id === projectFilter) &&
-        (assigneeFilter === 'all' ||
-          (assigneeFilter === 'unassigned' ? !t.assignee_id : t.assignee_id === assigneeFilter)) &&
-        (!q || t.title.toLowerCase().includes(q)),
-    )
-  }, [tasks, search, status, projectFilter, assigneeFilter])
+    const query = q.trim().toLowerCase()
+    return tasks.filter((t) => {
+      if (t.status === 'cancelled') return false
+      if (who === 'me' && t.assignee_id !== me?.id) return false
+      if (who === 'none' && t.assignee_id) return false
+      if (who !== 'me' && who !== 'none' && who !== 'everyone' && t.assignee_id !== who) return false
+      if (projectId !== 'all' && t.project_id !== projectId) return false
+      if (query) {
+        const p = projects.find((x) => x.id === t.project_id)
+        if (!`${t.title} ${taskRef(t, p)} ${(t.labels ?? []).join(' ')}`.toLowerCase().includes(query)) return false
+      }
+      return true
+    })
+  }, [tasks, who, projectId, q, me?.id, projects])
 
-  const groups = useMemo(() => {
-    const byDue = (a: Task, b: Task) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999')
-    if (grouping === 'status') {
-      return STATUS_ORDER.map((s) => ({
-        key: s,
-        label: taskStatus[s].label,
-        tasks: filtered.filter((t) => t.status === s).sort(byDue),
-      })).filter((g) => g.tasks.length > 0)
+  const open = filtered.filter((t) => t.status !== 'done')
+  const done = filtered.filter((t) => t.status === 'done').sort((a, b) => (b.completed_at ?? b.created_at).localeCompare(a.completed_at ?? a.created_at))
+  const byDue = (a: Task, b: Task) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999') || b.created_at.localeCompare(a.created_at)
+
+  const today = format(new Date(), 'yyyy-MM-dd')
+  const weekEnd = format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
+  const nextWeekEnd = format(addDays(endOfWeek(new Date(), { weekStartsOn: 1 }), 7), 'yyyy-MM-dd')
+
+  const groups: { key: string; title: string; icon?: React.ReactNode; tasks: Task[] }[] = useMemo(() => {
+    const sorted = [...open].sort(byDue)
+    if (group === 'due') {
+      return [
+        { key: 'late', title: 'Overdue', icon: <AlertCircle className="i i-sm t-bad" />, tasks: sorted.filter((t) => t.due_date && t.due_date < today) },
+        { key: 'week', title: 'This week', icon: <Calendar className="i i-sm" />, tasks: sorted.filter((t) => t.due_date && t.due_date >= today && t.due_date <= weekEnd) },
+        { key: 'next', title: 'Next week', icon: <Calendar className="i i-sm" />, tasks: sorted.filter((t) => t.due_date && t.due_date > weekEnd && t.due_date <= nextWeekEnd) },
+        { key: 'later', title: 'Later', icon: <Calendar className="i i-sm" />, tasks: sorted.filter((t) => t.due_date && t.due_date > nextWeekEnd) },
+        { key: 'none', title: 'No due date', icon: <Clock className="i i-sm" />, tasks: sorted.filter((t) => !t.due_date) },
+      ]
     }
-    return DUE_ORDER.map((label) => ({
-      key: label,
-      label,
-      tasks: filtered.filter((t) => dueGroup(t) === label).sort(byDue),
-    })).filter((g) => g.tasks.length > 0)
-  }, [filtered, grouping])
+    if (group === 'project') {
+      const ids = [...new Set(sorted.map((t) => t.project_id))]
+      return ids.map((id) => {
+        const p = projects.find((x) => x.id === id)
+        return { key: id, title: p ? shortProjectTitle(p.title) : 'Unknown project', icon: <ClientMark client={clients.find((c) => c.id === p?.client_id)} size="xs" />, tasks: sorted.filter((t) => t.project_id === id) }
+      })
+    }
+    if (group === 'status') {
+      return (['todo', 'in_progress', 'review'] as TaskStatus[]).map((s) => ({ key: s, title: taskStatus[s].label, icon: <StatusRing status={s} />, tasks: sorted.filter((t) => t.status === s) }))
+    }
+    const ids = [...new Set(sorted.map((t) => t.assignee_id ?? ''))]
+    return ids.map((id) => {
+      const p = profiles.find((x) => x.id === id)
+      return { key: id || 'none', title: p ? (p.id === me?.id ? 'Me' : profileDisplayName(p)) : 'Unassigned', icon: <Avatar profile={p} size="xs" />, tasks: sorted.filter((t) => (t.assignee_id ?? '') === id) }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, group, projects, profiles, clients])
+
+  const whoLabel = who === 'everyone' ? 'Everyone' : who === 'me' ? 'Me' : who === 'none' ? 'Unassigned' : profileDisplayName(profiles.find((p) => p.id === who))
+  const project = projects.find((p) => p.id === projectId)
+  const projectList = projects.filter((p) => tasks.some((t) => t.project_id === p.id) && `${p.title}`.toLowerCase().includes(projectQ.toLowerCase()))
 
   return (
     <>
-      <PageHeader
-        title="Tasks"
-        description="Everything on your plate, across all projects."
-        actions={
-          <Button onClick={() => setFormOpen(true)}>
-            <Plus strokeWidth={1.75} />
-            New task
-          </Button>
-        }
-      />
-      <Toolbar>
-        <SearchInput value={search} onChange={setSearch} placeholder="Search tasks…" />
-        <Select value={status} onChange={setStatus} options={statusFilter} aria-label="Filter by status" className="w-36" />
-        <Select value={projectFilter} onChange={setProjectFilter} options={projectOptions} aria-label="Filter by project" className="w-56" />
-        <Select value={assigneeFilter} onChange={setAssigneeFilter} options={assigneeOptions} aria-label="Filter by assignee" className="w-40" />
-        <Select value={grouping} onChange={setGrouping} options={groupOptions} aria-label="Grouping" className="ml-auto w-44" />
-      </Toolbar>
+      <Topbar crumbs={[{ label: 'My tasks' }]}>
+        <button type="button" className="btn btn-pri" onClick={() => openCreate('task', { project_id: projectId !== 'all' ? projectId : undefined })}>
+          <Plus className="i" />New task<kbd>T</kbd>
+        </button>
+      </Topbar>
+      <Content>
+        <PageHead title="Tasks" sub="Everything on your plate across all projects." />
+        <div className="tabs">
+          <Tabs
+            variant="seg"
+            value={view}
+            onChange={setView}
+            tabs={[
+              { id: 'list', label: <><List className="i i-sm" />List</> },
+              { id: 'board', label: <><LayoutGrid className="i i-sm" />Board</> },
+            ]}
+          />
+          <div className="row wrap" style={{ marginTop: -4 }}>
+            <label className="inp-wrap" style={{ width: 260, maxWidth: '100%' }}>
+              <Search className="i i-sm" />
+              <input placeholder="Search tasks…" aria-label="Search tasks" value={q} onChange={(e) => setQ(e.target.value)} />
+            </label>
+            <Menu align="left" trigger={({ toggle }) => <button type="button" className="chip" onClick={toggle}><User className="i i-sm" />{whoLabel}<ChevronDown className="i i-xs" /></button>}>
+              <MenuTitle>Assignee</MenuTitle>
+              <MenuItem on={who === 'everyone'} onSelect={() => setWho('everyone')}>Everyone</MenuItem>
+              <MenuItem on={who === 'me'} icon={<Avatar profile={me} size="xs" />} onSelect={() => setWho('me')}>Me</MenuItem>
+              {profiles.filter((p) => p.id !== me?.id).map((p) => (
+                <MenuItem key={p.id} on={who === p.id} icon={<Avatar profile={p} size="xs" />} onSelect={() => setWho(p.id)}>{profileDisplayName(p)}</MenuItem>
+              ))}
+              <MenuItem on={who === 'none'} icon={<Avatar size="xs" />} onSelect={() => setWho('none')}>Unassigned</MenuItem>
+            </Menu>
+            <Menu align="left" wide trigger={({ toggle }) => <button type="button" className="chip" onClick={toggle}><Folder className="i i-sm" /><span className="trunc" style={{ maxWidth: 200 }}>{project ? shortProjectTitle(project.title) : 'All projects'}</span><ChevronDown className="i i-xs" /></button>}>
+              {projects.length > 8 && <MenuSearch value={projectQ} onChange={setProjectQ} />}
+              <MenuItem on={projectId === 'all'} onSelect={() => setProjectId('all')}>All projects</MenuItem>
+              {projectList.map((p) => (
+                <MenuItem key={p.id} on={projectId === p.id} icon={<ClientMark client={clients.find((c) => c.id === p.client_id)} size="xs" />} onSelect={() => setProjectId(p.id)}>
+                  {shortProjectTitle(p.title)} <span className="faint">· {clientDisplayName(clients.find((c) => c.id === p.client_id))}</span>
+                </MenuItem>
+              ))}
+            </Menu>
+            {view === 'list' && (
+              <Menu align="left" trigger={({ toggle }) => <button type="button" className="chip" onClick={toggle}><Filter className="i i-sm" />Group: {groupLabel[group]}<ChevronDown className="i i-xs" /></button>}>
+                {(Object.keys(groupLabel) as Group[]).map((g) => (
+                  <MenuItem key={g} on={g === group} onSelect={() => setGroup(g)}>{groupLabel[g]}</MenuItem>
+                ))}
+              </Menu>
+            )}
+          </div>
 
-      {!ready ? (
-        <ListSkeleton rows={7} />
-      ) : groups.length === 0 ? (
-        <EmptyState
-          icon={ListTodo}
-          title={tasks.length === 0 ? 'No tasks yet' : 'No tasks match'}
-          description={
-            tasks.length === 0
-              ? 'Add a task to a project and it shows up here.'
-              : 'Try different filters or clear the search.'
-          }
-          action={
-            tasks.length === 0 && (
-              <Button onClick={() => setFormOpen(true)}>
-                <Plus strokeWidth={1.75} />
-                New task
-              </Button>
-            )
-          }
-        />
-      ) : (
-        <div className="space-y-6">
-          {groups.map((group) => (
-            <section key={group.key}>
-              <h2 className="mb-2 flex items-baseline gap-2 text-sm font-semibold">
-                {group.label}
-                <span className="tnum text-xs font-medium text-muted-foreground">{group.tasks.length}</span>
-              </h2>
-              <motion.div
-                variants={listContainer}
-                initial="initial"
-                animate="animate"
-                className="divide-y rounded-xl border bg-surface shadow-sm"
-              >
-                <AnimatePresence initial={false}>
-                  {group.tasks.map((task) => (
-                    <TaskItem key={task.id} task={task} showProject />
-                  ))}
-                </AnimatePresence>
-              </motion.div>
-            </section>
-          ))}
+          {view === 'list' ? (
+            <div className="stack-lg panel-in">
+              {open.length === 0 && done.length === 0 && (
+                <div className="card">
+                  <Empty icon={<ListChecks className="i" />} title={tasks.length ? 'No tasks match' : 'No tasks yet'} action={<button type="button" className="btn btn-pri" onClick={() => openCreate('task')}><Plus className="i" />New task</button>}>
+                    {tasks.length ? 'Try a different filter.' : 'Tasks live inside projects. Create one to get going.'}
+                  </Empty>
+                </div>
+              )}
+              {open.length === 0 && done.length > 0 && <div className="card"><Empty small title="All clear">Nothing open here.</Empty></div>}
+              {groups.map((g) => (
+                <TaskGroup key={g.key} icon={g.icon} title={g.title} tasks={g.tasks} />
+              ))}
+              <TaskGroup collapsible defaultOpen={false} icon={<span className="st done" />} title="Wrapped up" tasks={done.slice(0, 50)} render={(t) => <DoneRow key={t.id} task={t} />} />
+            </div>
+          ) : (
+            <div className="panel-in">
+              <TaskBoard tasks={[...open, ...done.slice(0, 20)].sort(byDue)} projectId={projectId !== 'all' ? projectId : undefined} />
+            </div>
+          )}
         </div>
-      )}
-
-      <TaskFormModal key={formOpen ? 'open' : 'closed'} open={formOpen} onClose={() => setFormOpen(false)} />
+      </Content>
     </>
   )
 }

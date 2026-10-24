@@ -1,79 +1,78 @@
-import * as Dialog from '@radix-ui/react-dialog'
-import { AnimatePresence, motion } from 'framer-motion'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
-import { modalVariants, overlayVariants } from '@/lib/motion'
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
+
+let openCount = 0
 
 interface ModalProps {
   open: boolean
   onClose: () => void
-  title: string
-  description?: string
-  children: React.ReactNode
-  /** Sticky footer area, usually action buttons. */
-  footer?: React.ReactNode
-  size?: 'sm' | 'md' | 'lg'
+  title?: ReactNode
+  size?: 'narrow' | 'wide' | ''
+  footer?: ReactNode
+  /** Small note on the left of the footer (e.g. "Mahedi gets one email"). */
+  note?: ReactNode
+  children: ReactNode
+  className?: string
+  /** Hide the header entirely (e.g. command palette). */
+  bare?: boolean
 }
 
-const sizes = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-xl' }
+export function Modal({ open, onClose, title, size = '', footer, note, children, className, bare }: ModalProps) {
+  const titleId = useId()
+  const dlgRef = useRef<HTMLDivElement>(null)
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
 
-/** The one centered-dialog pattern (forms, confirmations). Detail views use SlideOverPanel instead. */
-export function Modal({ open, onClose, title, description, children, footer, size = 'md' }: ModalProps) {
-  return (
-    <Dialog.Root open={open} onOpenChange={(v) => !v && onClose()}>
-      <AnimatePresence>
-        {open && (
-          <Dialog.Portal forceMount>
-            <Dialog.Overlay asChild forceMount>
-              <motion.div
-                variants={overlayVariants}
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px]"
-              />
-            </Dialog.Overlay>
-            <Dialog.Content asChild forceMount onOpenAutoFocus={(e) => e.preventDefault()}>
-              <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto p-4">
-                <motion.div
-                  variants={modalVariants}
-                  initial="initial"
-                  animate="animate"
-                  exit="exit"
-                  className={cn(
-                    'flex max-h-[85dvh] w-full flex-col rounded-xl border bg-surface shadow-xl',
-                    sizes[size],
-                  )}
-                >
-                  <div className="flex shrink-0 items-start justify-between gap-4 border-b px-5 py-4">
-                    <div>
-                      <Dialog.Title className="text-base font-semibold">{title}</Dialog.Title>
-                      {description ? (
-                        <Dialog.Description className="mt-0.5 text-[13px] text-muted-foreground">
-                          {description}
-                        </Dialog.Description>
-                      ) : (
-                        <Dialog.Description className="sr-only">{title}</Dialog.Description>
-                      )}
-                    </div>
-                    <Dialog.Close asChild>
-                      <Button variant="ghost" size="iconSm" aria-label="Close dialog">
-                        <X strokeWidth={1.75} />
-                      </Button>
-                    </Dialog.Close>
-                  </div>
-                  <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
-                  {footer && (
-                    <div className="flex shrink-0 justify-end gap-2 border-t px-5 py-3.5">{footer}</div>
-                  )}
-                </motion.div>
-              </div>
-            </Dialog.Content>
-          </Dialog.Portal>
+  useEffect(() => {
+    if (!open) return
+    openCount++
+    document.body.classList.add('modal-open')
+    const prevFocus = document.activeElement as HTMLElement | null
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        closeRef.current()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    // Focus the first field (or the dialog) for keyboard users.
+    requestAnimationFrame(() => {
+      const el = dlgRef.current?.querySelector<HTMLElement>('[data-autofocus], input:not([type=hidden]):not([type=checkbox]):not([type=radio]), textarea, select')
+      ;(el ?? dlgRef.current)?.focus()
+    })
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      openCount--
+      if (openCount === 0) document.body.classList.remove('modal-open')
+      prevFocus?.focus?.()
+    }
+  }, [open])
+
+  if (!open) return null
+  return createPortal(
+    <div className="modal" role="dialog" aria-modal="true" aria-labelledby={title ? titleId : undefined}>
+      <div className="scrim" onClick={onClose} />
+      <div ref={dlgRef} tabIndex={-1} className={cn('dlg', size, className)}>
+        {!bare && (
+          <div className="dlg-h">
+            <h2 id={titleId}>{title}</h2>
+            <button type="button" className="btn btn-ghost btn-sm btn-icon" onClick={onClose} aria-label="Close">
+              <X className="i" />
+            </button>
+          </div>
         )}
-      </AnimatePresence>
-    </Dialog.Root>
+        {children}
+        {footer && (
+          <div className="dlg-f">
+            {note && <span className="note">{note}</span>}
+            {footer}
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -82,28 +81,55 @@ interface ConfirmProps {
   onClose: () => void
   onConfirm: () => void
   title: string
-  description: string
+  description?: ReactNode
   confirmLabel?: string
+  /** If set, the user must type this exactly to enable the button. */
+  typeToConfirm?: string
+  danger?: boolean
 }
 
-/** Standard destructive-action confirmation. */
-export function ConfirmDialog({ open, onClose, onConfirm, title, description, confirmLabel = 'Delete' }: ConfirmProps) {
+export function ConfirmDialog({ open, onClose, onConfirm, title, description, confirmLabel = 'Delete', typeToConfirm, danger = true }: ConfirmProps) {
+  const [typed, setTyped] = useState('')
+  useEffect(() => {
+    if (open) setTyped('')
+  }, [open])
+  const ok = !typeToConfirm || typed.trim() === typeToConfirm.trim()
   return (
-    <Modal open={open} onClose={onClose} title={title} size="sm">
-      <p className="text-sm text-muted-foreground">{description}</p>
-      <div className="mt-5 flex justify-end gap-2">
-        <Button variant="secondary" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button
-          variant="danger"
-          onClick={() => {
-            onConfirm()
-            onClose()
-          }}
-        >
-          {confirmLabel}
-        </Button>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={title}
+      size="narrow"
+      footer={
+        <>
+          <button type="button" className="btn" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className={cn('btn', danger ? 'btn-danger' : 'btn-pri')}
+            style={danger ? { background: 'var(--bad)', color: '#fff', borderColor: 'var(--bad)' } : undefined}
+            disabled={!ok}
+            onClick={() => {
+              onConfirm()
+              onClose()
+            }}
+          >
+            {confirmLabel}
+          </button>
+        </>
+      }
+    >
+      <div className="dlg-b">
+        {description && <p className="muted" style={{ fontSize: 13.5, lineHeight: 1.55 }}>{description}</p>}
+        {typeToConfirm && (
+          <label className="field">
+            <span className="lbl">
+              Type <b>{typeToConfirm}</b> to confirm
+            </span>
+            <input className="inp" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
+          </label>
+        )}
       </div>
     </Modal>
   )

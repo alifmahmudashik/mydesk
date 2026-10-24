@@ -1,490 +1,133 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { toast } from 'sonner'
-import { FileText, Loader2, Plus, Receipt, Settings, Trash2, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { CheckboxRow } from '@/components/ui/checkbox'
-import { DatePicker } from '@/components/ui/date-picker'
-import { EmptyState } from '@/components/ui/empty-state'
-import { Field, FormSection } from '@/components/ui/field'
-import { Input, Textarea } from '@/components/ui/input'
-import { ConfirmDialog, Modal } from '@/components/ui/modal'
-import { PageHeader } from '@/components/ui/page-header'
-import { Select } from '@/components/ui/select'
-import { ListSkeleton } from '@/components/ui/skeleton'
+import { useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { format, startOfMonth } from 'date-fns'
+import { Download, Edit3, FileText, Plus, Search, Settings, Trash2 } from 'lucide-react'
 import { useData } from '@/data/store'
-import { useIsAdmin } from '@/hooks/usePermissions'
-import { getCurrencyOptions } from '@/lib/currency'
-import { clientDisplayName } from '@/lib/derive'
+import { Topbar, Content, Empty, PageHead } from '@/components/ui/layout'
+import { ClientMark } from '@/components/ui/avatar'
+import { StatusPill } from '@/components/ui/pill'
+import { ConfirmDialog } from '@/components/ui/modal'
+import { sumUSD, useUsdRates } from '@/lib/currency'
+import { clientDisplayName, effectivePaymentStatus } from '@/lib/derive'
 import { formatDate, formatMoney } from '@/lib/format'
-import type { Client, Invoice, InvoiceField, InvoiceLineItem } from '@/types'
-import { InvoicePreview } from '@/features/invoices/InvoicePreview'
-import { InvoiceSettingsModal } from '@/features/invoices/InvoiceSettingsModal'
-import { exportElementToPdf } from '@/features/invoices/pdf'
+import { paymentStatus } from '@/lib/status'
+import type { Invoice } from '@/types'
 
-const today = () => new Date().toISOString().slice(0, 10)
-const plusDays = (n: number) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10)
-
-function suggestNumber(client: Client | undefined, invoices: Invoice[]) {
-  if (!client) return ''
-  const letters = clientDisplayName(client).replace(/[^a-zA-Z]/g, '')
-  const prefix = (letters.slice(0, 2) || 'IN').toUpperCase()
-  const count = invoices.filter((i) => i.client_id === client.id).length + 1
-  return `${prefix}-${String(count).padStart(2, '0')}`
-}
-
-/** "Alif Mahmud - Lagoon Media - invoice - Aug 8, 2026.pdf" — strips characters Windows/macOS
- *  reject in filenames (colons, slashes, etc.) since business/client names are free text. */
-function exportFilename(senderName: string | null | undefined, client: Client | undefined, issueDate: string, number: string) {
-  const parts = [senderName?.trim(), client ? clientDisplayName(client) : undefined, 'invoice', issueDate ? formatDate(issueDate) : undefined].filter(
-    (p): p is string => Boolean(p),
-  )
-  const base = parts.length > 0 ? parts.join(' - ') : `Invoice-${number || 'draft'}`
-  return `${base.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim()}.pdf`
-}
-
-/**
- * Tracks an element's content-box size (padding/border excluded), live across resizes.
- * Uses a callback ref (not a plain useRef) so the observer attaches whenever the node
- * actually mounts — including when it mounts later than the component itself, e.g. behind
- * a loading skeleton that swaps in after the initial render.
- */
-function useElementSize<T extends HTMLElement>() {
-  const nodeRef = useRef<T | null>(null)
-  const [size, setSize] = useState({ width: 0, height: 0 })
-  const [mountTick, setMountTick] = useState(0)
-
-  const setRef = useCallback((node: T | null) => {
-    nodeRef.current = node
-    setMountTick((t) => t + 1)
-  }, [])
-
-  useEffect(() => {
-    const el = nodeRef.current
-    if (!el) return
-    const observer = new ResizeObserver(([entry]) => {
-      setSize({ width: entry.contentRect.width, height: entry.contentRect.height })
-    })
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [mountTick])
-
-  return [setRef, size, nodeRef] as const
-}
-
-function emptyForm(client?: Client) {
-  return {
-    id: undefined as string | undefined,
-    client_id: client?.id ?? '',
-    number: '',
-    issue_date: today(),
-    due_date: plusDays(7),
-    currency: 'USD',
-    line_items: [] as InvoiceLineItem[],
-    tax_rate: 0,
-    notes: '',
-    brand_color: client?.brand_color ?? '#6366f1',
-    payment_profile_id: 'none',
-    payment_fields: [] as InvoiceField[],
-  }
+export function invoiceTotal(inv: Pick<Invoice, 'line_items' | 'tax_rate'>) {
+  const sub = inv.line_items.reduce((s, li) => s + Number(li.price) * Number(li.qty), 0)
+  return sub * (1 + Number(inv.tax_rate) / 100)
 }
 
 export function InvoicesPage() {
-  const isAdmin = useIsAdmin()
-  const {
-    ready, clients, projects, invoices, invoiceSettings, createRow, updateRow, deleteRow,
-  } = useData()
-
-  const [form, setForm] = useState(emptyForm())
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const [loadProjectsOpen, setLoadProjectsOpen] = useState(false)
+  const { invoices, clients, payments, projects, deleteRow } = useData()
+  const navigate = useNavigate()
+  const rates = useUsdRates()
+  const [q, setQ] = useState('')
   const [deleting, setDeleting] = useState<Invoice>()
-  const [exporting, setExporting] = useState(false)
-  const previewRef = useRef<HTMLDivElement>(null)
-  // Scale the A4 page to fit the available width instead of overflowing/needing a scrollbar.
-  // Transform doesn't affect layout size, so these two measurements stay independent of
-  // each other and of the scale itself — no circular sizing.
-  const [frameRef, frameSize] = useElementSize<HTMLDivElement>()
-  const [contentRef, contentSize, contentNodeRef] = useElementSize<HTMLDivElement>()
-  const previewScale = frameSize.width > 0 && contentSize.width > 0 ? Math.min(1, frameSize.width / contentSize.width) : 1
 
-  // Business settings load asynchronously, after this component's first render — pick up the
-  // default note once it arrives, but only onto a fresh, still-blank invoice (never overwrite
-  // something the admin already typed or a saved invoice's own note).
-  useEffect(() => {
-    if (!form.id && !form.notes && invoiceSettings?.default_note) {
-      setForm((f) => (f.notes ? f : { ...f, notes: invoiceSettings.default_note ?? '' }))
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [invoiceSettings])
-
-  const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
-    setForm((f) => ({ ...f, [key]: value }))
-
-  const client = clients.find((c) => c.id === form.client_id)
-  // Only "completed" is billable here — "finished" projects are already paid (that's what
-  // finishing one does), and anything else isn't done yet.
-  const clientProjects = useMemo(
-    () => projects.filter((p) => p.client_id === form.client_id && p.status === 'completed'),
-    [projects, form.client_id],
+  const sorted = useMemo(
+    () =>
+      [...invoices]
+        .filter((i) => {
+          const c = clients.find((x) => x.id === i.client_id)
+          return !q.trim() || `${i.number} ${clientDisplayName(c)}`.toLowerCase().includes(q.trim().toLowerCase())
+        })
+        .sort((a, b) => (b.issue_date ?? b.created_at).localeCompare(a.issue_date ?? a.created_at)),
+    [invoices, clients, q],
   )
 
-  const clientOptions = clients.map((c) => ({ value: c.id, label: clientDisplayName(c) }))
-
-  const selectClient = (clientId: string) => {
-    const c = clients.find((cl) => cl.id === clientId)
-    setForm((f) => ({
-      ...f,
-      client_id: clientId,
-      brand_color: c?.brand_color || f.brand_color,
-      number: f.number || suggestNumber(c, invoices),
-    }))
+  const statusOf = (inv: Invoice) => {
+    const p = payments.find((x) => x.invoice_id === inv.id)
+    return p ? effectivePaymentStatus(p) : null
   }
 
-  const paymentProfiles = invoiceSettings?.payment_profiles ?? []
-  const paymentMethodOptions = [
-    { value: 'none', label: 'None' },
-    ...paymentProfiles.map((p) => ({ value: p.id, label: p.name || 'Untitled' })),
-  ]
+  const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd')
+  const thisMonth = invoices.filter((i) => (i.issue_date ?? '') >= monthStart)
+  const tracked = invoices.filter((i) => statusOf(i))
+  const paidCount = tracked.filter((i) => statusOf(i) === 'paid').length
+  const mixed = new Set(thisMonth.map((i) => i.currency)).size > 1
 
-  const selectPaymentMethod = (profileId: string) => {
-    const profile = paymentProfiles.find((p) => p.id === profileId)
-    setForm((f) => ({ ...f, payment_profile_id: profileId, payment_fields: profile ? profile.fields : [] }))
-  }
-
-  const setLineItem = (i: number, patch: Partial<InvoiceLineItem>) =>
-    set(
-      'line_items',
-      form.line_items.map((li, idx) => (idx === i ? { ...li, ...patch } : li)),
-    )
-  const removeLineItem = (i: number) => set('line_items', form.line_items.filter((_, idx) => idx !== i))
-  const addLineItem = () => set('line_items', [...form.line_items, { description: '', price: 0, qty: 1 }])
-
-  const loadFromInvoice = (inv: Invoice) => {
-    setForm({
-      id: inv.id,
-      client_id: inv.client_id,
-      number: inv.number,
-      issue_date: inv.issue_date ?? today(),
-      due_date: inv.due_date ?? today(),
-      currency: inv.currency,
-      line_items: inv.line_items,
-      tax_rate: inv.tax_rate,
-      notes: inv.notes ?? '',
-      brand_color: inv.brand_color ?? '#6366f1',
-      // The profile itself may have since been renamed or deleted — the invoice keeps its
-      // own snapshot of the fields, so re-picking a profile here is optional, not required.
-      payment_profile_id: 'none',
-      payment_fields: inv.payment_fields ?? [],
-    })
-  }
-
-  function save() {
-    if (!form.client_id) {
-      toast.error('Pick a client first')
-      return
-    }
-    if (!form.number.trim()) {
-      toast.error('Give the invoice a number')
-      return
-    }
-    const data = {
-      client_id: form.client_id,
-      number: form.number.trim(),
-      issue_date: form.issue_date || null,
-      due_date: form.due_date || null,
-      currency: form.currency,
-      line_items: form.line_items.filter((li) => li.description.trim()),
-      tax_rate: form.tax_rate,
-      notes: form.notes.trim() || null,
-      brand_color: form.brand_color || null,
-      payment_fields: form.payment_fields,
-    }
-    if (form.id) {
-      updateRow('invoices', form.id, data)
-      toast.success('Invoice updated')
-    } else {
-      const created = createRow<Invoice>('invoices', data)
-      setForm((f) => ({ ...f, id: created.id }))
-      toast.success('Invoice saved')
-    }
-  }
-
-  async function exportPdf() {
-    if (!previewRef.current) return
-    setExporting(true)
-    // The on-screen page is visually scaled down to fit the panel — export the real,
-    // full-size document, not whatever fraction is currently showing.
-    const scaledEl = contentNodeRef.current
-    const prevTransform = scaledEl?.style.transform
-    if (scaledEl) scaledEl.style.transform = 'none'
-    try {
-      await exportElementToPdf(
-        previewRef.current,
-        exportFilename(invoiceSettings?.business_name, client, form.issue_date, form.number),
-      )
-    } catch {
-      toast.error('Could not export PDF', { description: 'Try again in a moment.' })
-    } finally {
-      if (scaledEl) scaledEl.style.transform = prevTransform ?? ''
-      setExporting(false)
-    }
-  }
-
-  if (!isAdmin) {
-    return (
-      <>
-        <PageHeader title="Invoices" description="Generate branded, exportable invoices." />
-        <EmptyState icon={Receipt} title="Admins only" description="Invoice generation isn't available on your account." />
-      </>
-    )
-  }
+  // Completed projects with a budget whose title isn't on any invoice for that client yet.
+  const notInvoiced = projects.filter(
+    (p) => (p.status === 'completed' || p.status === 'finished') && p.amount > 0 && !invoices.some((i) => i.client_id === p.client_id && i.line_items.some((li) => li.description.trim() === p.title.trim())),
+  )
+  const notInvoicedClients = [...new Set(notInvoiced.map((p) => clientDisplayName(clients.find((c) => c.id === p.client_id))))]
 
   return (
     <>
-      <PageHeader
-        title="Invoice maker"
-        description="Build a branded invoice and export it to PDF."
-        actions={
-          <Button variant="secondary" onClick={() => setSettingsOpen(true)}>
-            <Settings strokeWidth={1.75} />
-            Business settings
-          </Button>
-        }
-      />
-
-      {!ready ? (
-        <ListSkeleton rows={4} />
-      ) : (
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
-          {/* ---- Left: builder form ---- */}
-          <div className="min-w-0 space-y-4">
-            <div className="rounded-xl border bg-surface p-4 shadow-sm">
-              <div className="divide-y">
-                <FormSection title="Client & details">
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <Field label="Client" className="sm:col-span-2">
-                      <Select
-                        value={form.client_id || undefined}
-                        onChange={selectClient}
-                        options={clientOptions}
-                        placeholder="Select a client"
-                      />
-                    </Field>
-                    <Field label="Invoice number">
-                      <Input value={form.number} onChange={(e) => set('number', e.target.value)} placeholder="e.g. NW-01" />
-                    </Field>
-                    <Field label="Currency">
-                      <Select value={form.currency} onChange={(v) => set('currency', v)} options={getCurrencyOptions(form.currency)} />
-                    </Field>
-                    <Field label="Issue date">
-                      <DatePicker value={form.issue_date} onChange={(v) => set('issue_date', v)} />
-                    </Field>
-                    <Field label="Due date">
-                      <DatePicker value={form.due_date} onChange={(v) => set('due_date', v)} />
-                    </Field>
-                  </div>
-                </FormSection>
-
-                <FormSection title="Line items">
-                  <div className="space-y-2">
-                    {form.line_items.map((li, i) => (
-                      <div key={i} className="flex items-start gap-2">
-                        <Input
-                          value={li.description}
-                          onChange={(e) => setLineItem(i, { description: e.target.value })}
-                          placeholder="Description"
-                          className="flex-1"
-                        />
-                        <Input
-                          inputMode="decimal"
-                          value={li.price || ''}
-                          onChange={(e) => setLineItem(i, { price: Number(e.target.value) || 0 })}
-                          placeholder="Price"
-                          className="tnum w-20"
-                        />
-                        <Input
-                          inputMode="numeric"
-                          value={li.qty || ''}
-                          onChange={(e) => setLineItem(i, { qty: Number(e.target.value) || 1 })}
-                          placeholder="Qty"
-                          className="tnum w-14"
-                        />
-                        <Button variant="ghost" size="iconSm" aria-label="Remove line" onClick={() => removeLineItem(i)}>
-                          <X strokeWidth={1.75} />
-                        </Button>
-                      </div>
-                    ))}
-                    <div className="flex gap-2">
-                      <Button type="button" variant="secondary" size="sm" onClick={addLineItem}>
-                        <Plus strokeWidth={1.75} />
-                        Add line
-                      </Button>
-                      {clientProjects.length > 0 && (
-                        <Button type="button" variant="secondary" size="sm" onClick={() => setLoadProjectsOpen(true)}>
-                          <FileText strokeWidth={1.75} />
-                          Load from projects
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </FormSection>
-
-                <FormSection title="Totals & notes">
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <Field label="Payment method" hint={paymentProfiles.length === 0 ? 'Add one in Business settings.' : undefined}>
-                      <Select
-                        value={form.payment_profile_id}
-                        onChange={selectPaymentMethod}
-                        options={paymentMethodOptions}
-                        disabled={paymentProfiles.length === 0}
-                      />
-                    </Field>
-                    <Field label="Tax rate (%)">
-                      <Input
-                        inputMode="decimal"
-                        value={form.tax_rate || ''}
-                        onChange={(e) => set('tax_rate', Number(e.target.value) || 0)}
-                        className="tnum"
-                      />
-                    </Field>
-                    <Field label="Brand color">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="color"
-                          value={form.brand_color}
-                          onChange={(e) => set('brand_color', e.target.value)}
-                          className="size-9 shrink-0 cursor-pointer rounded-lg border bg-surface p-1"
-                          aria-label="Brand color"
-                        />
-                        <Input value={form.brand_color} onChange={(e) => set('brand_color', e.target.value)} className="w-full uppercase" />
-                      </div>
-                    </Field>
-                    <Field label="Note" className="sm:col-span-2">
-                      <Textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} />
-                    </Field>
-                  </div>
-                </FormSection>
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <Button className="flex-1" variant="secondary" onClick={save}>
-                {form.id ? 'Save changes' : 'Save invoice'}
-              </Button>
-              <Button className="flex-1" onClick={exportPdf} disabled={exporting}>
-                {exporting ? <Loader2 className="animate-spin" strokeWidth={1.75} /> : <FileText strokeWidth={1.75} />}
-                Export PDF
-              </Button>
-            </div>
-
-            {invoices.length > 0 && (
-              <div>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Recent invoices
-                </h3>
-                <ul className="divide-y rounded-xl border bg-surface shadow-sm">
-                  {invoices.slice(0, 8).map((inv) => {
-                    const c = clients.find((cl) => cl.id === inv.client_id)
-                    const total = inv.line_items.reduce((s, li) => s + li.price * li.qty, 0) * (1 + inv.tax_rate / 100)
-                    return (
-                      <li key={inv.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                        <button type="button" onClick={() => loadFromInvoice(inv)} className="min-w-0 flex-1 cursor-pointer text-left">
-                          <p className="truncate text-sm font-medium">
-                            {inv.number} · {c ? clientDisplayName(c) : 'Unknown client'}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatDate(inv.issue_date)} · {formatMoney(total, inv.currency)}
-                          </p>
-                        </button>
-                        <Button variant="ghost" size="iconSm" aria-label="Delete invoice" onClick={() => setDeleting(inv)}>
-                          <Trash2 strokeWidth={1.75} />
-                        </Button>
-                      </li>
-                    )
-                  })}
-                </ul>
-              </div>
-            )}
+      <Topbar crumbs={[{ label: 'Invoices' }]}>
+        <Link className="btn hide-sm" to="/settings"><Settings className="i" />Business settings</Link>
+        <Link className="btn btn-pri" to="/invoices/new"><Plus className="i" />New invoice</Link>
+      </Topbar>
+      <Content>
+        <PageHead title="Invoices" sub="Branded invoices you can edit, export to PDF and send." />
+        <div className="kpis">
+          <div className="kpi">
+            <span className="lbl">Invoiced in {format(new Date(), 'MMMM')}</span>
+            <span className="val">{formatMoney(Math.round(sumUSD(thisMonth.map((i) => ({ amount: invoiceTotal(i), currency: i.currency })), rates)))}</span>
+            <span className="sub">{thisMonth.length} invoice{thisMonth.length === 1 ? '' : 's'}{mixed ? ' · mixed currencies in USD' : ''}</span>
           </div>
-
-          {/* ---- Right: live preview, scaled to fit the panel ---- */}
-          <div ref={frameRef} className="min-w-0 overflow-hidden rounded-xl border bg-surface-hover p-6 shadow-sm sm:p-10">
-            <div
-              className="mx-auto"
-              style={{ width: contentSize.width * previewScale || undefined, height: contentSize.height * previewScale || undefined }}
-            >
-              {/* The shadow lives on this wrapper, not the page itself, so html2canvas never
-                  bakes it into the exported PDF. */}
-              <div
-                ref={contentRef}
-                className="w-fit rounded-sm shadow-xl"
-                style={{ transform: `scale(${previewScale})`, transformOrigin: 'top left' }}
-              >
-                <InvoicePreview
-                  ref={previewRef}
-                  number={form.number}
-                  issueDate={form.issue_date}
-                  dueDate={form.due_date}
-                  currency={form.currency}
-                  lineItems={form.line_items}
-                  taxRate={form.tax_rate}
-                  notes={form.notes}
-                  brandColor={form.brand_color}
-                  client={client}
-                  settings={invoiceSettings}
-                  paymentFields={form.payment_fields}
-                />
-              </div>
-            </div>
+          <div className="kpi">
+            <span className="lbl">Paid</span>
+            <span className="val">{paidCount} of {tracked.length}</span>
+            <span className="sub">{tracked.length === 0 ? 'Link invoices to payments to track them' : paidCount === tracked.length ? 'Every invoice is settled' : `${tracked.length - paidCount} waiting on payment`}</span>
+          </div>
+          <div className="kpi">
+            <span className="lbl">Projects not invoiced</span>
+            <span className="val">{notInvoiced.length}</span>
+            <span className="sub">{notInvoiced.length ? <span className="trunc">{notInvoicedClients.slice(0, 2).join(' and ')}{notInvoicedClients.length > 2 ? ` +${notInvoicedClients.length - 2}` : ''}</span> : 'All caught up'}</span>
           </div>
         </div>
-      )}
-
-      <InvoiceSettingsModal
-        key={settingsOpen ? 'open' : 'closed'}
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-      />
-
-      <Modal
-        open={loadProjectsOpen}
-        onClose={() => setLoadProjectsOpen(false)}
-        title="Load from projects"
-        description="Adds each picked project as a line item."
-        footer={<Button onClick={() => setLoadProjectsOpen(false)}>Done</Button>}
-      >
-        <div className="space-y-1.5">
-          {clientProjects.map((p) => {
-            const already = form.line_items.some((li) => li.description === p.title)
-            return (
-              <CheckboxRow
-                key={p.id}
-                checked={already}
-                onChange={(on) => {
-                  if (on && !already) {
-                    set('line_items', [...form.line_items, { description: p.title, price: p.amount, qty: 1 }])
-                  } else if (!on) {
-                    set('line_items', form.line_items.filter((li) => li.description !== p.title))
-                  }
-                }}
-                label={p.title}
-                sublabel={formatMoney(p.amount, p.currency)}
-              />
-            )
-          })}
+        <div className="row">
+          <label className="inp-wrap" style={{ width: 260, maxWidth: '100%' }}>
+            <Search className="i i-sm" />
+            <input placeholder="Search number or client…" aria-label="Search invoices" value={q} onChange={(e) => setQ(e.target.value)} />
+          </label>
         </div>
-      </Modal>
-
+        <div className="card tbl-wrap">
+          {sorted.length === 0 ? (
+            <Empty icon={<FileText className="i" />} title={invoices.length ? 'No matches' : 'No invoices yet'} action={!invoices.length ? <Link className="btn btn-pri btn-sm" to="/invoices/new"><Plus className="i i-sm" />New invoice</Link> : undefined}>
+              {invoices.length ? 'Try another search.' : 'Set your business details once in Business settings, then make a branded invoice in a minute.'}
+            </Empty>
+          ) : (
+            <table className="tbl" style={{ minWidth: 820 }}>
+              <thead><tr><th>Invoice</th><th>Client</th><th>Issued</th><th>Status</th><th className="r">Amount</th><th className="r" /></tr></thead>
+              <tbody>
+                {sorted.map((inv) => {
+                  const c = clients.find((x) => x.id === inv.client_id)
+                  const st = statusOf(inv)
+                  return (
+                    <tr key={inv.id} className="hov">
+                      <td><Link className="mono m cover" to={`/invoices/${inv.id}`}>{inv.number}</Link></td>
+                      <td><span className="row-sm"><ClientMark client={c} size="sm" />{clientDisplayName(c)}</span></td>
+                      <td>{formatDate(inv.issue_date)}</td>
+                      <td>{st ? <StatusPill meta={paymentStatus[st]} /> : <span className="pill gray">Not tracked</span>}</td>
+                      <td className="r num b">{formatMoney(invoiceTotal(inv), inv.currency, { cents: true })}</td>
+                      <td className="r">
+                        <span className="row-sm above" style={{ justifyContent: 'flex-end' }}>
+                          <button className="btn btn-sm btn-icon" type="button" aria-label="Download PDF" title="Download PDF" onClick={() => navigate(`/invoices/${inv.id}?export=1`)}><Download className="i i-sm" /></button>
+                          <Link className="btn btn-sm btn-icon" to={`/invoices/${inv.id}`} aria-label="Edit" title="Edit"><Edit3 className="i i-sm" /></Link>
+                          <button className="btn btn-sm btn-icon" type="button" aria-label="Delete" title="Delete" onClick={() => setDeleting(inv)}><Trash2 className="i i-sm" /></button>
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </Content>
       <ConfirmDialog
         open={Boolean(deleting)}
         onClose={() => setDeleting(undefined)}
+        title={`Delete invoice ${deleting?.number ?? ''}?`}
+        description="The invoice is removed. Any linked payment stays, just without the invoice."
         onConfirm={() => {
           if (!deleting) return
-          deleteRow('invoices', deleting.id)
-          if (form.id === deleting.id) setForm(emptyForm())
+          deleteRow('invoices', deleting.id, { entity: 'invoice', entityId: deleting.id, action: 'deleted', message: `deleted invoice ${deleting.number}` })
+          useData.setState((s) => ({ payments: s.payments.map((p) => (p.invoice_id === deleting.id ? { ...p, invoice_id: null } : p)) }))
         }}
-        title={`Delete invoice ${deleting?.number}?`}
-        description="This removes the saved invoice record. The client isn't notified."
       />
     </>
   )

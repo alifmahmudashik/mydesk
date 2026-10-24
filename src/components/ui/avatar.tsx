@@ -1,55 +1,47 @@
+import type { Client, Profile } from '@/types'
+import { avatarTone, clientColor, clientDisplayName, initials, profileDisplayName, profileFullName } from '@/lib/derive'
 import { cn } from '@/lib/utils'
 
-/** Deterministic pastel pairs — same name always gets the same color, readable in both themes. */
-const PALETTES = [
-  'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300',
-  'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
-  'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
-  'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
-  'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300',
-  'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
-  'bg-pink-100 text-pink-700 dark:bg-pink-500/15 dark:text-pink-300',
-  'bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300',
-]
+type Size = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | ''
 
-function hash(str: string) {
-  let h = 0
-  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0
-  return Math.abs(h)
-}
-
-export function initialsOf(name: string) {
-  const parts = name.trim().split(/\s+/)
-  const init =
-    parts.length >= 2 ? `${parts[0][0]}${parts[1][0]}` : name.trim().slice(0, 2)
-  return init.toUpperCase()
-}
-
-interface AvatarProps {
-  name: string
-  size?: 'sm' | 'md' | 'lg'
-  className?: string
-}
-
-const SIZES = {
-  sm: 'size-7 rounded-lg text-[11px]',
-  md: 'size-9 rounded-lg text-xs',
-  lg: 'size-12 rounded-xl text-sm',
-}
-
-/** Client identity mark: colored initials tile, deterministic per name. */
-export function Avatar({ name, size = 'md', className }: AvatarProps) {
+export function Avatar({ profile, size = '', className, title }: { profile?: Profile | null; size?: Size; className?: string; title?: string }) {
+  if (!profile) {
+    return <span className={cn('av none', size, className)} title={title ?? 'Unassigned'} aria-label="Unassigned" />
+  }
+  const name = profileFullName(profile)
   return (
-    <span
-      aria-hidden
-      className={cn(
-        'grid shrink-0 select-none place-items-center font-semibold',
-        SIZES[size],
-        PALETTES[hash(name) % PALETTES.length],
-        className,
-      )}
-    >
-      {initialsOf(name)}
+    <span className={cn('av', size, avatarTone(profile.id), className)} title={title ?? profileDisplayName(profile)}>
+      {profile.avatar_url ? <img src={profile.avatar_url} alt="" /> : initials(name)}
+    </span>
+  )
+}
+
+export function AvatarStack({ profiles, size = 'sm', max = 4 }: { profiles: Profile[]; size?: Size; max?: number }) {
+  if (profiles.length === 0) return <span className="faint xs">—</span>
+  const shown = profiles.slice(0, max)
+  const extra = profiles.length - shown.length
+  return (
+    <span className="avs">
+      {shown.map((p) => (
+        <Avatar key={p.id} profile={p} size={size} />
+      ))}
+      {extra > 0 && <span className={cn('av gray', size)}>+{extra}</span>}
+    </span>
+  )
+}
+
+/** Soft background from a hex colour, for client marks. */
+function soft(hex: string) {
+  const h = hex.replace('#', '')
+  if (h.length !== 6) return { background: 'var(--line-xs)', color: 'var(--ink3)' }
+  return { background: `#${h}1F`, color: `#${h}` }
+}
+
+export function ClientMark({ client, size = '', className }: { client?: Client | null; size?: Size; className?: string }) {
+  const color = clientColor(client)
+  return (
+    <span className={cn('cl', size, className)} style={soft(color)} title={clientDisplayName(client)}>
+      {initials(clientDisplayName(client))}
     </span>
   )
 }

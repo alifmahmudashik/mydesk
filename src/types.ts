@@ -11,6 +11,7 @@ export type TaskStatus = 'todo' | 'in_progress' | 'review' | 'done' | 'cancelled
 export type AccessStatus = 'needed' | 'requested' | 'received' | 'not_needed'
 export type PaymentStatus = 'unpaid' | 'partial' | 'paid' | 'refunded' | 'overdue'
 export type Priority = 'low' | 'medium' | 'high' | 'urgent'
+export type BillingType = 'retainer' | 'fixed' | 'hourly'
 
 /** Freeform extra field shown on invoices (e.g. VAT Number, Account manager). */
 export interface InvoiceField {
@@ -37,6 +38,10 @@ export interface Client {
   brand_color?: string | null
   /** Extra label/value rows shown on this client's invoices, e.g. VAT Number. */
   invoice_fields?: InvoiceField[]
+  pinned?: boolean
+  default_currency?: string | null
+  /** 'receipt' | 'net_7' | 'net_14' | 'net_30' */
+  payment_terms?: string | null
   created_at: string
 }
 
@@ -54,6 +59,13 @@ export interface Project {
   priority: Priority
   payment_status: PaymentStatus
   tags: string[]
+  /** Short prefix for task refs, e.g. "CPS" → CPS-12. */
+  key?: string | null
+  billing_type?: BillingType | null
+  link_url?: string | null
+  link_label?: string | null
+  archived_at?: string | null
+  completed_at?: string | null
   created_at: string
 }
 
@@ -67,6 +79,12 @@ export interface Task {
   due_date?: string | null
   assignee_id?: string | null
   notes?: string | null
+  /** Per-project sequence number (CPS-12). Assigned by the database if missing. */
+  number?: number | null
+  labels?: string[]
+  estimate_minutes?: number | null
+  created_by?: string | null
+  completed_at?: string | null
   created_at: string
 }
 
@@ -94,6 +112,8 @@ export interface Payment {
   payment_date?: string | null
   due_date?: string | null
   notes?: string | null
+  invoice_id?: string | null
+  last_reminded_at?: string | null
   created_at: string
 }
 
@@ -118,6 +138,7 @@ export interface Invoice {
   /** Snapshot of whichever payment profile was picked when this invoice was made — stays
    *  accurate even if the profile is later renamed/edited/deleted in Business settings. */
   payment_fields?: InvoiceField[]
+  payment_profile_id?: string | null
   created_at: string
 }
 
@@ -138,6 +159,10 @@ export interface InvoiceSettings {
   brand_color?: string | null
   payment_profiles: PaymentProfile[]
   default_note?: string | null
+  default_currency?: string
+  default_due_days?: number
+  default_tax?: number
+  workspace_name?: string | null
   created_at: string
 }
 
@@ -146,6 +171,9 @@ export interface ProjectNote {
   project_id: string
   note: string
   created_by?: string | null
+  pinned?: boolean
+  author_id?: string | null
+  mentions?: string[]
   created_at: string
 }
 
@@ -156,7 +184,22 @@ export interface Profile {
   email: string
   display_name?: string | null
   role: Role
+  full_name?: string | null
+  avatar_url?: string | null
+  phone?: string | null
+  job_title?: string | null
+  timezone?: string | null
+  last_active_at?: string | null
+  notification_prefs?: NotificationPrefs
   created_at: string
+}
+
+export interface NotificationPrefs {
+  assigned?: boolean
+  mentioned?: boolean
+  comment?: boolean
+  overdue?: boolean
+  weekly?: boolean
 }
 
 /** Grants a user every project (and task) under this client — see migration-005. */
@@ -167,8 +210,12 @@ export interface ClientMember {
   created_at: string
 }
 
-export type ActivityEntity = 'client' | 'project' | 'task' | 'access_item' | 'payment' | 'note'
-export type ActivityAction = 'created' | 'updated' | 'status_changed' | 'completed' | 'paid' | 'deleted'
+export type ActivityEntity =
+  | 'client' | 'project' | 'task' | 'access_item' | 'payment' | 'note'
+  | 'comment' | 'subtask' | 'invoice' | 'member' | 'attachment' | 'time'
+export type ActivityAction =
+  | 'created' | 'updated' | 'status_changed' | 'completed' | 'paid' | 'deleted'
+  | 'commented' | 'assigned' | 'mentioned' | 'invited' | 'removed' | 'logged' | 'reminded'
 
 export interface ActivityEvent {
   id: string
@@ -176,5 +223,99 @@ export interface ActivityEvent {
   entity_id: string
   action: ActivityAction
   message: string
+  actor_id?: string | null
+  project_id?: string | null
+  meta?: Record<string, unknown>
+  created_at: string
+}
+
+export interface Subtask {
+  id: string
+  task_id: string
+  title: string
+  done: boolean
+  assignee_id?: string | null
+  position: number
+  created_at: string
+}
+
+export interface TaskComment {
+  id: string
+  task_id: string
+  author_id?: string | null
+  /** Plain text with @[Name](user-id) mention tokens. */
+  body: string
+  mentions: string[]
+  edited_at?: string | null
+  created_at: string
+}
+
+export interface TaskAttachment {
+  id: string
+  task_id: string
+  kind: 'file' | 'link'
+  name: string
+  url?: string | null
+  storage_path?: string | null
+  size_bytes?: number | null
+  uploaded_by?: string | null
+  created_at: string
+}
+
+export interface TimeEntry {
+  id: string
+  task_id: string
+  user_id?: string | null
+  minutes: number
+  note?: string | null
+  logged_on: string
+  created_at: string
+}
+
+export interface TaskWatcher {
+  id: string
+  task_id: string
+  user_id: string
+  created_at: string
+}
+
+export type NotificationType =
+  | 'assigned' | 'mentioned' | 'mentioned_note' | 'comment' | 'completed'
+  | 'overdue' | 'paid' | 'invite_accepted'
+
+export interface AppNotification {
+  id: string
+  user_id: string
+  type: NotificationType
+  actor_id?: string | null
+  entity?: string | null
+  entity_id?: string | null
+  project_id?: string | null
+  title: string
+  excerpt?: string | null
+  link?: string | null
+  emailed: boolean
+  read_at?: string | null
+  created_at: string
+}
+
+export interface Invite {
+  id: string
+  email: string
+  role: 'admin' | 'member'
+  client_ids: string[]
+  token: string
+  invited_by?: string | null
+  accepted_at?: string | null
+  revoked_at?: string | null
+  created_at: string
+}
+
+export interface PaymentReminder {
+  id: string
+  payment_id: string
+  sent_by?: string | null
+  to_email: string
+  subject?: string | null
   created_at: string
 }

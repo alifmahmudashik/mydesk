@@ -6,6 +6,7 @@ import { isSupabaseConfigured, supabase } from '@/lib/supabase'
 export function useAuth() {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(isSupabaseConfigured)
+  const [recovery, setRecovery] = useState(false)
 
   useEffect(() => {
     if (!supabase) return
@@ -15,14 +16,31 @@ export function useAuth() {
     })
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, s) => setSession(s))
+    } = supabase.auth.onAuthStateChange((event, s) => {
+      setSession(s)
+      if (event === 'PASSWORD_RECOVERY') setRecovery(true)
+    })
     return () => subscription.unsubscribe()
   }, [])
 
   return {
     session,
     loading,
+    recovery,
+    clearRecovery: () => setRecovery(false),
     authRequired: isSupabaseConfigured,
-    signOut: () => supabase?.auth.signOut(),
   }
+}
+
+export async function signOut() {
+  if (supabase) await supabase.auth.signOut()
+  window.location.href = '/'
+}
+
+export async function signInWithGoogle(next = '/') {
+  if (!supabase) return
+  await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: `${window.location.origin}${next}` },
+  })
 }

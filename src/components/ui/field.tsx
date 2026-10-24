@@ -1,77 +1,101 @@
-import { cloneElement, isValidElement, useId } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
 import { cn } from '@/lib/utils'
 
-/** Labeled group inside form modals — parent should be a `divide-y` container. */
-export function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
+export function Field({ label, required, hint, children, className }: { label?: ReactNode; required?: boolean; hint?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <section className="py-3.5 first:pt-0 last:pb-0" role="group" aria-label={title}>
-      <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-        {title}
-      </h4>
+    <label className={cn('field', className)}>
+      {label && (
+        <span className="lbl">
+          {label}
+          {required && <span className="req"> *</span>}
+        </span>
+      )}
       {children}
-    </section>
+      {hint && <span className="hint">{hint}</span>}
+    </label>
   )
 }
 
-interface FieldProps {
-  label: string
-  required?: boolean
-  error?: string
-  hint?: string
-  className?: string
-  children: React.ReactNode
+export function Input({ className, sm, ...props }: InputHTMLAttributes<HTMLInputElement> & { sm?: boolean }) {
+  return <input className={cn('inp', sm && 'sm', className)} {...props} />
 }
 
-/**
- * Standard form field: visible label above, control, persistent hint and/or error below.
- * Wires id/aria attributes into the child control automatically.
- */
-export function Field({ label, required, error, hint, className, children }: FieldProps) {
-  const id = useId()
-  const errorId = `${id}-error`
-  const hintId = `${id}-hint`
+export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea className={cn('inp', className)} rows={3} {...props} />
+}
 
-  const control = isValidElement(children)
-    ? cloneElement(children as React.ReactElement<Record<string, unknown>>, {
-        id,
-        'aria-invalid': error ? true : undefined,
-        'aria-describedby': error ? errorId : hint ? hintId : undefined,
-        'aria-required': required || undefined,
-      })
-    : children
-
+export function Select({ className, sm, options, ...props }: SelectHTMLAttributes<HTMLSelectElement> & { sm?: boolean; options: { value: string; label: string }[] }) {
   return (
-    <div className={cn('space-y-1.5', className)}>
-      <label htmlFor={id} className="block text-[13px] font-medium text-foreground">
-        {label}
-        {required && (
-          <span className="ml-0.5 text-danger" aria-hidden>
-            *
-          </span>
-        )}
-      </label>
-      {control}
-      <AnimatePresence initial={false}>
-        {error && (
-          <motion.p
-            id={errorId}
-            role="alert"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.15 }}
-            className="text-[13px] text-danger"
-          >
-            {error}
-          </motion.p>
-        )}
-      </AnimatePresence>
-      {hint && !error && (
-        <p id={hintId} className="text-[13px] text-muted-foreground">
-          {hint}
-        </p>
-      )}
+    <select className={cn('inp', sm && 'sm', className)} {...props}>
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+export function Switch({ checked, onChange, label, disabled }: { checked: boolean; onChange: (v: boolean) => void; label?: string; disabled?: boolean }) {
+  return (
+    <span className="sw">
+      <input type="checkbox" checked={checked} disabled={disabled} aria-label={label} onChange={(e) => onChange(e.target.checked)} />
+      <span />
+    </span>
+  )
+}
+
+export function ToggleRow({ title, desc, checked, onChange, disabled }: { title: ReactNode; desc?: ReactNode; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  return (
+    <label className="toggle-row" style={disabled ? { opacity: 0.6, cursor: 'not-allowed' } : undefined}>
+      <Switch checked={checked} onChange={onChange} disabled={disabled} />
+      <span>
+        <b>{title}</b>
+        {desc && <small>{desc}</small>}
+      </span>
+    </label>
+  )
+}
+
+export function Checkbox({ checked, onChange, round, lg, label, className }: { checked: boolean; onChange: (v: boolean) => void; round?: boolean; lg?: boolean; label?: string; className?: string }) {
+  return (
+    <input
+      type="checkbox"
+      className={cn('cb', round && 'round', lg && 'lg', className)}
+      checked={checked}
+      aria-label={label}
+      onChange={(e) => onChange(e.target.checked)}
+      onClick={(e) => e.stopPropagation()}
+    />
+  )
+}
+
+export function RadioCard({ name, checked, onChange, title, desc, disabled }: { name: string; checked: boolean; onChange: () => void; title: ReactNode; desc?: ReactNode; disabled?: boolean }) {
+  return (
+    <label className="radio-card">
+      <input type="radio" name={name} checked={checked} onChange={onChange} disabled={disabled} />
+      <span>
+        <b>{title}</b>
+        {desc && <small>{desc}</small>}
+      </span>
+    </label>
+  )
+}
+
+/** Money input with a currency prefix select. */
+export function MoneyInput({ amount, currency, onAmount, onCurrency, currencies }: { amount: string; currency: string; onAmount: (v: string) => void; onCurrency: (v: string) => void; currencies: string[] }) {
+  return (
+    <div className="prefix">
+      <span style={{ padding: 0 }}>
+        <select value={currency} onChange={(e) => onCurrency(e.target.value)} aria-label="Currency" style={{ border: 0, background: 'transparent', height: '100%', padding: '0 8px', fontSize: 13, color: 'var(--mute)', cursor: 'pointer', outline: 0 }}>
+          {currencies.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+      </span>
+      <input className="inp num" inputMode="decimal" value={amount} onChange={(e) => onAmount(e.target.value.replace(/[^\d.]/g, ''))} placeholder="0.00" />
     </div>
   )
 }
