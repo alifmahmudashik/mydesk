@@ -42,7 +42,8 @@ export function TasksPage() {
   const { tasks, projects, clients, profiles, me } = useData()
   const { openCreate } = useUI()
   const [view, setView] = usePersisted<'list' | 'board'>('mydesk-tasks-view', 'list')
-  const [who, setWho] = usePersisted<string>('mydesk-tasks-who', me?.role === 'member' ? 'me' : 'everyone')
+  // Default: only tasks assigned to you (new key so earlier saved 'Everyone' choices reset once).
+  const [who, setWho] = usePersisted<string>('mydesk-tasks-who-v2', 'me')
   const [group, setGroup] = usePersisted<Group>('mydesk-tasks-group-v2', 'client')
   const [projectId, setProjectId] = useState('all')
   const [q, setQ] = useState('')
