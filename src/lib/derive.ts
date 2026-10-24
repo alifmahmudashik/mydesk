@@ -125,3 +125,26 @@ export function splitMentions(body: string): BodyPart[] {
 export function plainMentions(body: string) {
   return body.replace(MENTION_RE, '@$1')
 }
+
+/**
+ * An invoice's status, from the payment(s) linked to it. An invoice built from several
+ * projects links to each project's own payment: paid once all are paid, overdue if any is.
+ */
+export function invoicePaymentStatus(invoiceId: string, payments: Payment[]): PaymentStatus | null {
+  const linked = payments.filter((p) => p.invoice_id === invoiceId)
+  if (linked.length === 0) return null
+  const st = linked.map(effectivePaymentStatus)
+  if (st.every((s) => s === 'paid')) return 'paid'
+  if (st.every((s) => s === 'refunded' || s === 'paid')) return 'refunded'
+  if (st.includes('overdue')) return 'overdue'
+  if (st.some((s) => s === 'paid' || s === 'partial')) return 'partial'
+  return 'unpaid'
+}
+
+/** Projects ready to invoice: marked Completed (not Finished, which is already paid) and not on an invoice yet. */
+export function isInvoiceable(project: Project, invoices: { client_id: string; line_items: { description: string }[] }[], payments: Payment[]) {
+  if (project.status !== 'completed') return false
+  const onInvoice = invoices.some((i) => i.client_id === project.client_id && i.line_items.some((li) => li.description.trim() === project.title.trim()))
+  const paymentInvoiced = payments.some((p) => p.project_ids?.includes(project.id) && p.invoice_id)
+  return !onInvoice && !paymentInvoiced
+}

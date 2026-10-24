@@ -15,7 +15,7 @@ import { Avatar, AvatarStack, ClientMark } from '@/components/ui/avatar'
 import { StatusPill } from '@/components/ui/pill'
 import { RemindModal } from '@/features/payments/RemindModal'
 import { PaymentModal } from '@/features/payments/PaymentModal'
-import { clientColor, clientDisplayName, clientSecondaryName, effectivePaymentStatus, isOpenPayment, OPEN_PROJECT, profileDisplayName, sumByCurrency } from '@/lib/derive'
+import { clientColor, clientDisplayName, clientSecondaryName, effectivePaymentStatus, invoicePaymentStatus, isOpenPayment, OPEN_PROJECT, profileDisplayName, sumByCurrency } from '@/lib/derive'
 import { formatDate, formatMoney, lateLabel } from '@/lib/format'
 import { clientStatus, paymentStatus } from '@/lib/status'
 import type { Payment, ProjectStatus } from '@/types'
@@ -66,10 +66,7 @@ export function ClientPage() {
   const globalAvg = allPaidDays.length ? allPaidDays.reduce((a, b) => a + b, 0) / allPaidDays.length : null
   const shown = showAll ? cProjects : cProjects.slice(0, 6)
 
-  const invoiceStatus = (invId: string) => {
-    const p = payments.find((x) => x.invoice_id === invId)
-    return p ? effectivePaymentStatus(p) : null
-  }
+  const invoiceStatus = (invId: string) => invoicePaymentStatus(invId, payments)
 
   const tabs = [
     { id: 'projects' as const, label: 'Projects', count: cProjects.length },

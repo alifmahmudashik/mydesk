@@ -8,7 +8,7 @@ import { ClientMark } from '@/components/ui/avatar'
 import { StatusPill } from '@/components/ui/pill'
 import { ConfirmDialog } from '@/components/ui/modal'
 import { sumUSD, useUsdRates } from '@/lib/currency'
-import { clientDisplayName, effectivePaymentStatus } from '@/lib/derive'
+import { clientDisplayName, invoicePaymentStatus, isInvoiceable } from '@/lib/derive'
 import { formatDate, formatMoney } from '@/lib/format'
 import { paymentStatus } from '@/lib/status'
 import type { Invoice } from '@/types'
@@ -36,10 +36,7 @@ export function InvoicesPage() {
     [invoices, clients, q],
   )
 
-  const statusOf = (inv: Invoice) => {
-    const p = payments.find((x) => x.invoice_id === inv.id)
-    return p ? effectivePaymentStatus(p) : null
-  }
+  const statusOf = (inv: Invoice) => invoicePaymentStatus(inv.id, payments)
 
   const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd')
   const thisMonth = invoices.filter((i) => (i.issue_date ?? '') >= monthStart)
@@ -48,9 +45,7 @@ export function InvoicesPage() {
   const mixed = new Set(thisMonth.map((i) => i.currency)).size > 1
 
   // Completed projects with a budget whose title isn't on any invoice for that client yet.
-  const notInvoiced = projects.filter(
-    (p) => (p.status === 'completed' || p.status === 'finished') && p.amount > 0 && !invoices.some((i) => i.client_id === p.client_id && i.line_items.some((li) => li.description.trim() === p.title.trim())),
-  )
+  const notInvoiced = projects.filter((p) => p.amount > 0 && isInvoiceable(p, invoices, payments))
   const notInvoicedClients = [...new Set(notInvoiced.map((p) => clientDisplayName(clients.find((c) => c.id === p.client_id))))]
 
   return (

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
-import { createProject, updateProject } from '@/data/actions'
+import { createProject, setProjectStatus, updateProject } from '@/data/actions'
 import { useIsAdmin } from '@/hooks/usePermissions'
 import { Modal } from '@/components/ui/modal'
 import { Field, MoneyInput, Select } from '@/components/ui/field'
@@ -88,7 +88,9 @@ export function ProjectFormModal({ open, onClose, project, defaults = {} }: Prop
     }
     let id = project?.id
     if (project) {
-      updateProject(project, { ...data, status: f.status })
+      updateProject(project, data)
+      // Status goes through the same rule as the status menu: Finished marks payments paid.
+      if (f.status !== project.status) setProjectStatus({ ...project, ...data }, f.status)
       toast.success('Project updated')
     } else {
       const created = createProject({ ...data, status: 'not_started', payment_status: 'unpaid', tags: [] })
