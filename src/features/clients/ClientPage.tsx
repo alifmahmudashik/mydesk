@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { differenceInCalendarDays, format, parseISO } from 'date-fns'
-import { Check, ChevronRight, Clock, CreditCard, Edit3, FileText, Folder, Globe, Mail, Phone, Plus, User } from 'lucide-react'
+import { Check, Clock, CreditCard, Edit3, FileText, Folder, Globe, Mail, Phone, Plus, User } from 'lucide-react'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
 import { useUI } from '@/data/ui'
@@ -11,17 +11,17 @@ import { pushRecent } from '@/components/layout/CommandPalette'
 import { Topbar, Content, Empty } from '@/components/ui/layout'
 import { Tabs } from '@/components/ui/tabs'
 import { Menu, MenuItem } from '@/components/ui/menu'
-import { Avatar, AvatarStack, ClientMark } from '@/components/ui/avatar'
+import { Avatar, ClientMark } from '@/components/ui/avatar'
 import { StatusPill } from '@/components/ui/pill'
 import { RemindModal } from '@/features/payments/RemindModal'
 import { PaymentModal } from '@/features/payments/PaymentModal'
+import { ClientProjects } from '@/features/clients/ClientProjects'
 import { clientColor, clientDisplayName, clientSecondaryName, effectivePaymentStatus, invoicePaymentStatus, isOpenPayment, OPEN_PROJECT, profileDisplayName, sumByCurrency } from '@/lib/derive'
 import { formatDate, formatMoney, lateLabel } from '@/lib/format'
 import { clientStatus, paymentStatus } from '@/lib/status'
-import type { Payment, ProjectStatus } from '@/types'
+import type { Payment } from '@/types'
 
 type Tab = 'projects' | 'invoices' | 'payments' | 'notes'
-const RING: Record<ProjectStatus, string> = { not_started: '', in_progress: 'prog', waiting_for_client: 'rev', blocked: 'rev', completed: 'done', finished: 'done', cancelled: 'cancel' }
 
 export function ClientPage() {
   const { id = '' } = useParams()
@@ -31,7 +31,6 @@ export function ClientPage() {
   const { clients, projects, tasks, payments, invoices, profiles, clientMembers, me, updateRow } = useData()
   const [params, setParams] = useSearchParams()
   const tab = (params.get('tab') as Tab) || 'projects'
-  const [showAll, setShowAll] = useState(false)
   const [note, setNote] = useState('')
   const [remind, setRemind] = useState<Payment | null>(null)
   const [editPay, setEditPay] = useState<Payment | undefined>()
@@ -64,7 +63,6 @@ export function ClientPage() {
   const avgDays = daysToPay.length ? Math.max(0, Math.round(daysToPay.reduce((a, b) => a + b, 0) / daysToPay.length)) : null
   const allPaidDays = payments.filter((p) => p.status === 'paid' && p.payment_date).map((p) => differenceInCalendarDays(parseISO(p.payment_date!), parseISO(p.created_at)))
   const globalAvg = allPaidDays.length ? allPaidDays.reduce((a, b) => a + b, 0) / allPaidDays.length : null
-  const shown = showAll ? cProjects : cProjects.slice(0, 6)
 
   const invoiceStatus = (invId: string) => invoicePaymentStatus(invId, payments)
 
@@ -130,39 +128,7 @@ export function ClientPage() {
             <div className="tabs">
               <Tabs value={tab} onChange={(t) => setParams(t === 'projects' ? {} : { tab: t }, { replace: true })} tabs={tabs} />
               <div className="panel-in" key={tab}>
-                {tab === 'projects' && (
-                  <div className="card list">
-                    {cProjects.length === 0 && <Empty small icon={<Folder className="i" />} title="No projects yet" action={<button type="button" className="btn btn-sm" onClick={() => openCreate('project', { client_id: id })}><Plus className="i i-sm" />New project</button>} />}
-                    {shown.map((p) => {
-                      const pt = tasks.filter((t) => t.project_id === p.id && t.status !== 'cancelled')
-                      const d = pt.filter((t) => t.status === 'done').length
-                      const done = !OPEN_PROJECT(p)
-                      const pp = payments.filter((x) => x.project_ids?.includes(p.id) && x.status === 'paid')
-                      const pteam = profiles.filter((u) => pt.some((t) => t.assignee_id === u.id))
-                      return (
-                        <Link key={p.id} className="li" to={`/projects/${p.id}`}>
-                          <span className={`st ${RING[p.status]}`} />
-                          <div className="grow" style={{ minWidth: 0 }}>
-                            <div className={`t trunc ${done ? 'muted' : ''}`}>{p.title}</div>
-                            <div className="s">
-                              {done
-                                ? `${p.status === 'cancelled' ? 'Cancelled' : 'Completed'} ${formatDate((p.completed_at ?? p.due_date ?? p.created_at).slice(0, 10))}${isAdmin && pp.length ? ` · ${sumByCurrency(pp)} paid` : ''}`
-                                : `${p.due_date ? `Due ${formatDate(p.due_date)}` : 'No due date'} · ${d}/${pt.length} tasks`}
-                            </div>
-                          </div>
-                          {!done && <AvatarStack profiles={pteam} />}
-                          <ChevronRight className="i faint" />
-                        </Link>
-                      )
-                    })}
-                    {cProjects.length > 6 && (
-                      <div className="card-f">
-                        <span className="muted">{showAll ? `All ${cProjects.length} projects` : `+ ${cProjects.length - 6} older projects`}</span>
-                        <button type="button" className="link-btn" onClick={() => setShowAll((s) => !s)}>{showAll ? 'Show less' : 'View all'}</button>
-                      </div>
-                    )}
-                  </div>
-                )}
+                {tab === 'projects' && <ClientProjects client={client} />}
 
                 {tab === 'invoices' && (
                   <div className="card tbl-wrap">

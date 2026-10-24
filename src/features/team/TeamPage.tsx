@@ -10,7 +10,7 @@ import { Tabs } from '@/components/ui/tabs'
 import { Menu, MenuItem } from '@/components/ui/menu'
 import { Avatar } from '@/components/ui/avatar'
 import { supabase } from '@/lib/supabase'
-import { clientColor, clientDisplayName, OPEN_TASK, profileDisplayName, profileFullName } from '@/lib/derive'
+import { clientColor, clientDisplayName, OPEN_PROJECT, OPEN_TASK, profileDisplayName, profileFullName } from '@/lib/derive'
 import { formatFeedAgo } from '@/lib/format'
 import { copyText } from '@/lib/utils'
 import type { ClientMember, Invite } from '@/types'
@@ -106,7 +106,8 @@ export function TeamPage() {
                   <tbody>
                     {profiles.map((p) => {
                       const granted = clients.filter((c) => clientMembers.some((m) => m.client_id === c.id && m.user_id === p.id))
-                      const nProjects = projects.filter((x) => granted.some((c) => c.id === x.client_id)).length
+                      // Current work only: open projects under the clients they can see (not every project ever made).
+                      const nProjects = projects.filter((x) => OPEN_PROJECT(x) && granted.some((c) => c.id === x.client_id)).length
                       const open = tasks.filter((t) => t.assignee_id === p.id && OPEN_TASK(t)).length
                       const to = p.id === me?.id ? '/account' : `/team/${p.id}`
                       return (
@@ -130,7 +131,7 @@ export function TeamPage() {
                               <span className="row-sm wrap">
                                 {granted.slice(0, 3).map((c) => <span key={c.id} className="tag" style={{ background: `${clientColor(c)}1F`, color: clientColor(c) }}>{clientDisplayName(c)}</span>)}
                                 {granted.length > 3 && <span className="xs muted">+{granted.length - 3}</span>}
-                                <span className="xs muted">{nProjects} project{nProjects === 1 ? '' : 's'}</span>
+                                <span className="xs muted">{nProjects} active project{nProjects === 1 ? '' : 's'}</span>
                               </span>
                             )}
                           </td>

@@ -86,7 +86,7 @@ export function DashboardPage() {
     { id: 'mine' as const, label: 'Assigned to me', count: myTasks.length },
     { id: 'mentions' as const, label: 'Mentions', count: mentions.length },
   ]
-  const listed = tab === 'open' ? sortTasks(isAdmin ? openTasks : openTasks).slice(0, 6) : tab === 'mine' ? sortTasks(myTasks).slice(0, 6) : []
+  const listed = tab === 'open' ? sortTasks(openTasks).slice(0, 8) : tab === 'mine' ? sortTasks(myTasks).slice(0, 8) : []
 
   return (
     <>
@@ -194,7 +194,9 @@ export function DashboardPage() {
           </div>
         )}
 
+        {/* Two independent columns, so a short card never leaves a gap beside a tall one. */}
         <div className="dash">
+          <div className="stack-lg dash-col">
           {isAdmin && (
             <section className="card card-b dash-a">
               <div className="row between wrap" style={{ alignItems: 'flex-start' }}>
@@ -214,6 +216,31 @@ export function DashboardPage() {
               <RevenueChart buckets={buckets} />
             </section>
           )}
+          <section className="card dash-c">
+            <Tabs pad tabs={tabs} value={tab} onChange={setTab} before={<h2 className="h2">Up next</h2>} after={<Link className="link small" to="/tasks">View all</Link>} />
+            <div className="list panel-in" key={tab}>
+              {tab !== 'mentions' && listed.length === 0 && <Empty small icon={<ListChecks className="i" />} title="Nothing open">Create a task with <kbd>T</kbd>.</Empty>}
+              {tab !== 'mentions' && listed.map((t) => <TaskRow key={t.id} task={t} />)}
+              {tab === 'mentions' && mentions.length === 0 && <Empty small title="No mentions yet">When someone @mentions you, it shows up here.</Empty>}
+              {tab === 'mentions' &&
+                mentions.slice(0, 6).map((n) => {
+                  const actor = profiles.find((p) => p.id === n.actor_id)
+                  return (
+                    <Link className="li" key={n.id} to={n.link ?? '/inbox'}>
+                      <Avatar profile={actor} />
+                      <div className="grow" style={{ minWidth: 0 }}>
+                        <div className="t trunc">{profileDisplayName(actor)} mentioned you {n.type === 'mentioned_note' ? 'in a note on' : 'on'} {shortProjectTitle(n.title)}</div>
+                        <div className="s"><span className="trunc">“{n.excerpt}” · {formatFeedAgo(n.created_at)}</span></div>
+                      </div>
+                      <ChevronRight className="i faint" />
+                    </Link>
+                  )
+                })}
+            </div>
+          </section>
+
+          </div>
+          <div className="stack-lg dash-col">
           {isAdmin && (
             <section className="card dash-b">
               <div className="card-h">
@@ -243,30 +270,6 @@ export function DashboardPage() {
             </section>
           )}
 
-          <section className="card dash-c">
-            <Tabs pad tabs={tabs} value={tab} onChange={setTab} before={<h2 className="h2">Up next</h2>} after={<Link className="link small" to="/tasks">View all</Link>} />
-            <div className="list panel-in" key={tab}>
-              {tab !== 'mentions' && listed.length === 0 && <Empty small icon={<ListChecks className="i" />} title="Nothing open">Create a task with <kbd>T</kbd>.</Empty>}
-              {tab !== 'mentions' && listed.map((t) => <TaskRow key={t.id} task={t} />)}
-              {tab === 'mentions' && mentions.length === 0 && <Empty small title="No mentions yet">When someone @mentions you, it shows up here.</Empty>}
-              {tab === 'mentions' &&
-                mentions.slice(0, 6).map((n) => {
-                  const actor = profiles.find((p) => p.id === n.actor_id)
-                  return (
-                    <Link className="li" key={n.id} to={n.link ?? '/inbox'}>
-                      <Avatar profile={actor} />
-                      <div className="grow" style={{ minWidth: 0 }}>
-                        <div className="t trunc">{profileDisplayName(actor)} mentioned you {n.type === 'mentioned_note' ? 'in a note on' : 'on'} {shortProjectTitle(n.title)}</div>
-                        <div className="s"><span className="trunc">“{n.excerpt}” · {formatFeedAgo(n.created_at)}</span></div>
-                      </div>
-                      <ChevronRight className="i faint" />
-                    </Link>
-                  )
-                })}
-            </div>
-          </section>
-
-          <div className="dash-d stack-lg">
             <section className="card card-b stack">
               <h2 className="h2">Next 7 days</h2>
               <div className="week">
@@ -305,7 +308,7 @@ export function DashboardPage() {
                 <Link className="link" to="/inbox">Open inbox</Link>
               </div>
             </section>
-          </div>
+                    </div>
         </div>
       </Content>
       <RemindModal payment={remind} onClose={() => setRemind(null)} />

@@ -167,3 +167,21 @@ a.client-chip:hover { background: color-mix(in srgb, var(--cc) 20%, transparent)
 
 /* ---- brand logo (fire) ---- */
 .logo img { width: 22px; height: 22px; display: block; }
+/* chart tooltip: .bars>div>span (axis labels) was overriding the tip's text colour */
+.bars > div > .tip { color: var(--on-ink); font-size: 11.5px; }
+.dash { align-items: start; }
+.dash > .dash-col { min-width: 0; }
+.dash > .dash-col > * { animation: in .5s var(--ease) both; }
+
+/* ---- auth brand panel ---- */
+.auth-brand { position: relative; overflow: hidden; background: radial-gradient(120% 80% at 100% 0%, rgba(79,70,229,.35), transparent 55%), radial-gradient(90% 70% at 0% 100%, rgba(14,165,233,.18), transparent 60%), #0F0F14; }
+.auth-headline { font-size: 34px; font-weight: 600; letter-spacing: -.025em; line-height: 1.2; max-width: 460px; min-height: 2.4em; }
+.auth-typed { background: linear-gradient(90deg, #A5B4FC, #67E8F9); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.auth-caret { display: inline-block; width: 3px; height: .9em; margin-left: 3px; vertical-align: -.08em; background: #A5B4FC; border-radius: 2px; animation: caret 1s steps(1) infinite; }
+@keyframes caret { 50% { opacity: 0; } }
+.auth-sub { margin-top: 14px; max-width: 420px; font-size: 15px; line-height: 1.6; color: rgba(255,255,255,.62); }
+.auth-feed { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.06); animation: in .5s var(--ease) both; }
+.auth-feed-ico { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; flex: none; }
+.dash > .dash-col > * { align-self: stretch; }
+/* selecting projects to export is not "done": no strike-through */
+.select-list .li:has(.cb:checked) .t { text-decoration: none; color: var(--ink); }

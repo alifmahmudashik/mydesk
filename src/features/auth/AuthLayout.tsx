@@ -1,39 +1,97 @@
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { CheckCircle2, DollarSign, FileText, ListChecks } from 'lucide-react'
 
-/** Split auth screen from the design: form on the left, dark brand panel on the right. */
+/** Phrases typed out on the brand panel, one after another. */
+const PHRASES = ['every client.', 'every project.', 'every invoice.', 'every deadline.']
+
+/** Illustrative, made-up activity (never real workspace data: this screen is public). */
+const FEED = [
+  { icon: <CheckCircle2 className="i i-sm" />, tone: '#22C55E', text: <><b>Website redesign</b> marked complete</>, when: '2m' },
+  { icon: <DollarSign className="i i-sm" />, tone: '#4F46E5', text: <><b>$2,400</b> received from Northwind Studio</>, when: '1h' },
+  { icon: <FileText className="i i-sm" />, tone: '#0EA5E9', text: <>Invoice <b>NW-014</b> sent to Acme Co.</>, when: '3h' },
+  { icon: <ListChecks className="i i-sm" />, tone: '#F59E0B', text: <><b>3 tasks</b> due this week across 2 clients</>, when: 'today' },
+]
+
+function useTyping(words: string[]) {
+  const [i, setI] = useState(0)
+  const [text, setText] = useState('')
+  const [deleting, setDeleting] = useState(false)
+
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setText(words[0])
+      return
+    }
+    const word = words[i % words.length]
+    const done = !deleting && text === word
+    const empty = deleting && text === ''
+    const delay = done ? 1600 : empty ? 300 : deleting ? 35 : 70
+    const t = setTimeout(() => {
+      if (done) setDeleting(true)
+      else if (empty) {
+        setDeleting(false)
+        setI((n) => n + 1)
+      } else setText(deleting ? word.slice(0, text.length - 1) : word.slice(0, text.length + 1))
+    }, delay)
+    return () => clearTimeout(t)
+  }, [text, deleting, i, words])
+
+  return text
+}
+
+export function BrandLogo({ size = 32 }: { size?: number }) {
+  return (
+    <div className="logo" style={{ width: size, height: size }}>
+      <img src="/mydesk-fire.png" alt="" style={{ width: size * 0.7, height: size * 0.7 }} />
+    </div>
+  )
+}
+
+/** Split auth screen: form on the left, animated brand panel on the right. */
 export function AuthLayout({ children }: { children: ReactNode }) {
+  const typed = useTyping(PHRASES)
+  const [shown, setShown] = useState(1)
+
+  // Reveal the sample activity one card at a time.
+  useEffect(() => {
+    if (shown >= FEED.length) return
+    const t = setTimeout(() => setShown((n) => n + 1), 900)
+    return () => clearTimeout(t)
+  }, [shown])
+
   return (
     <div className="auth-screen">
       <div className="login-l">
         <div className="row" style={{ marginBottom: 40 }}>
-          <div className="logo"><img src="/mydesk-fire.png" alt="" /></div>
+          <BrandLogo />
           <b style={{ fontSize: 15 }}>MyDesk</b>
         </div>
         <div style={{ maxWidth: 380, width: '100%' }}>{children}</div>
       </div>
-      <div className="login-r">
+      <div className="login-r auth-brand">
         <div className="row">
-          <div className="logo"><img src="/mydesk-fire.png" alt="" /></div>
+          <BrandLogo />
           <b>MyDesk</b>
         </div>
         <div>
-          <p style={{ fontSize: 28, fontWeight: 600, letterSpacing: '-.02em', lineHeight: 1.25, maxWidth: 420 }}>
-            Clients, projects, tasks and money. One calm place for freelance work.
+          <p className="auth-headline">
+            One calm place for
+            <br />
+            <span className="auth-typed">{typed}</span>
+            <span className="auth-caret" aria-hidden />
           </p>
-          <div className="stack" style={{ marginTop: 28, maxWidth: 380 }}>
-            <div className="row" style={{ padding: '12px 14px', borderRadius: 12, background: 'rgba(255,255,255,.06)' }}>
-              <span className="av sm av-c2">MA</span>
-              <span className="small grow">Mahedi completed <b>Review search terms</b></span>
-              <span className="xs" style={{ opacity: 0.6 }}>2m</span>
-            </div>
-            <div className="row" style={{ padding: '12px 14px', borderRadius: 12, background: 'rgba(255,255,255,.06)' }}>
-              <span className="av sm" style={{ background: '#16A34A', color: '#fff' }}>$</span>
-              <span className="small grow"><b>$200</b> received from Yamin Khan</span>
-              <span className="xs" style={{ opacity: 0.6 }}>1h</span>
-            </div>
+          <p className="auth-sub">Clients, projects, tasks, invoices and payments for freelancers and small agencies, all in one workspace.</p>
+          <div className="stack" style={{ marginTop: 28, maxWidth: 400 }}>
+            {FEED.slice(0, shown).map((f, idx) => (
+              <div key={idx} className="auth-feed">
+                <span className="auth-feed-ico" style={{ background: `${f.tone}26`, color: f.tone }}>{f.icon}</span>
+                <span className="small grow">{f.text}</span>
+                <span className="xs" style={{ opacity: 0.55 }}>{f.when}</span>
+              </div>
+            ))}
           </div>
         </div>
-        <span className="xs" style={{ opacity: 0.5 }}>Your data stays in your workspace.</span>
+        <span className="xs" style={{ opacity: 0.5 }}>Example activity shown. Your data stays private to your workspace.</span>
       </div>
     </div>
   )

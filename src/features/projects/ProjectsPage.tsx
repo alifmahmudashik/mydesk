@@ -27,6 +27,8 @@ export function ProjectsPage() {
   const [clientId, setClientId] = useState(params.get('client') ?? 'all')
   const [clientQ, setClientQ] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  // Finished = paid and closed; hidden unless asked for.
+  const [showFinished, setShowFinished] = useState(false)
 
   const matches = (p: Project) => {
     if (clientId !== 'all' && p.client_id !== clientId) return false
@@ -35,9 +37,10 @@ export function ProjectsPage() {
   }
   const active = useMemo(() => projects.filter((p) => OPEN_PROJECT(p) && matches(p)).sort((a, b) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999')), [projects, q, clientId, clients]) // eslint-disable-line react-hooks/exhaustive-deps
   const done = useMemo(
-    () => projects.filter((p) => !OPEN_PROJECT(p) && matches(p)).sort((a, b) => (b.completed_at ?? b.due_date ?? b.created_at).localeCompare(a.completed_at ?? a.due_date ?? a.created_at)),
-    [projects, q, clientId, clients], // eslint-disable-line react-hooks/exhaustive-deps
+    () => projects.filter((p) => !OPEN_PROJECT(p) && (showFinished || p.status !== 'finished') && matches(p)).sort((a, b) => (b.completed_at ?? b.due_date ?? b.created_at).localeCompare(a.completed_at ?? a.due_date ?? a.created_at)),
+    [projects, q, clientId, clients, showFinished], // eslint-disable-line react-hooks/exhaustive-deps
   )
+  const finishedCount = projects.filter((p) => p.status === 'finished').length
   const allActive = projects.filter(OPEN_PROJECT).length
   const list = tab === 'active' ? active : done
   // Clients with the soonest deadline (active) or most recent work (completed) first.
@@ -86,6 +89,11 @@ export function ProjectsPage() {
             ]}
             after={
               <>
+                {tab === 'done' && finishedCount > 0 && (
+                  <button type="button" className={`chip${showFinished ? ' on' : ''}`} style={{ marginRight: 6 }} onClick={() => setShowFinished((v) => !v)}>
+                    {showFinished ? 'Hide' : 'Show'} finished · {finishedCount}
+                  </button>
+                )}
                 <label className="inp-wrap hide-sm" style={{ width: 220, height: 32 }}>
                   <Search className="i i-sm" />
                   <input placeholder="Search projects…" aria-label="Search projects" value={q} onChange={(e) => setQ(e.target.value)} />
