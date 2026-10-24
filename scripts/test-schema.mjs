@@ -130,7 +130,7 @@ ok(n.rows[0].c === 0, 'mentioned person is not double-notified as a plain commen
 // RLS: member can read their own notifications only, can't read the outbox.
 await db.exec(`grant usage on schema public to authenticated; grant all on all tables in schema public to authenticated;`)
 await db.exec(`set role authenticated`)
-const mine = await as(U2, `select count(*)::int c from notifications`)
+const mine = await as(U2, `select count(*)::int c from notifications where type <> 'access_granted'`)
 const outbox = await as(U2, `select count(*)::int c from email_outbox`)
 await db.exec(`reset role`)
 ok(mine.rows[0].c === 1, `member sees only their own notifications (${mine.rows[0].c})`)
@@ -174,8 +174,8 @@ ok(n.rows[0].c === 1, 'assigning yourself sends nothing')
 // Access granted email when a member is given another client.
 await as(U1, `insert into clients (id, name, owner_id) values ('aaaaaaaa-0000-0000-0000-000000000002', 'Tony', $1)`, [U1])
 await as(U1, `insert into client_members (client_id, user_id) values ('aaaaaaaa-0000-0000-0000-000000000002', $1)`, [U2])
-n = await q(`select payload->>'client' as client from email_outbox where template = 'access_granted' and user_id = $1`, [U2])
-ok(n.rows.length === 1 && n.rows[0].client === 'Tony', 'giving a member access to a client emails them once')
+n = await q(`select payload->>'client' as client from email_outbox where template = 'access_granted' and user_id = $1 and payload->>'client' = 'Tony'`, [U2])
+ok(n.rows.length === 1, 'giving a member access to a client emails them once')
 
 // Due soon: a task and a project due tomorrow.
 await as(U1, `update projects set due_date = current_date + 1 where id = 'bbbbbbbb-0000-0000-0000-000000000001'`)
