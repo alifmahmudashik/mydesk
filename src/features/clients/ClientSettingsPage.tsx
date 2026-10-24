@@ -148,6 +148,13 @@ export function ClientSettingsPage() {
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-.02em' }}>Client settings</h1>
             <div className="small muted">{clientDisplayName(client)} · changes apply across projects and invoices</div>
+            <div className="row-sm" style={{ marginTop: 6 }}>
+              <button type="button" className="btn btn-sm" disabled={uploading} onClick={() => logoRef.current?.click()}>
+                <Image className="i i-sm" />{uploading ? 'Uploading…' : f.logo_url ? 'Replace logo' : 'Upload logo'}
+              </button>
+              <input ref={logoRef} type="file" className="sr" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadLogo(file); e.target.value = '' }} />
+              {f.logo_url && <button className="btn btn-ghost btn-sm" type="button" onClick={() => set('logo_url', null)}>Remove</button>}
+            </div>
           </div>
         </div>
         <SettingsLayout
@@ -160,19 +167,6 @@ export function ClientSettingsPage() {
           ]}
         >
           <Section id="general" title="General & identity" desc="How this client appears across MyDesk.">
-            <div className="upload">
-              <ClientMark client={{ ...client, brand_color: f.brand_color, name: f.name || client.name, logo_url: f.logo_url }} size="xl" />
-              <div className="stack-sm">
-                <div className="row-sm">
-                  <button type="button" className="btn btn-sm" disabled={uploading} onClick={() => logoRef.current?.click()}>
-                    <Image className="i i-sm" />{uploading ? 'Uploading…' : f.logo_url ? 'Replace logo' : 'Upload logo'}
-                  </button>
-                  <input ref={logoRef} type="file" className="sr" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadLogo(file); e.target.value = '' }} />
-                  {f.logo_url && <button className="btn btn-ghost btn-sm" type="button" onClick={() => set('logo_url', null)}>Remove</button>}
-                </div>
-                <span className="hint">Square PNG or SVG works best. Shown instead of the initials.</span>
-              </div>
-            </div>
             <div className="f2">
               <Field label="Contact name" required><input className="inp" value={f.name} onChange={(e) => set('name', e.target.value)} /></Field>
               <Field label="Company name"><input className="inp" placeholder="e.g. Ananas Digital" value={f.company_name} onChange={(e) => set('company_name', e.target.value)} /></Field>

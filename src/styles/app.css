@@ -270,9 +270,8 @@ a.client-chip:hover { background: color-mix(in srgb, var(--cc) 20%, transparent)
 
 /* ---- client colours: badge + logo, and lift dark brand colours in dark mode ---- */
 .cl.tint { background: color-mix(in srgb, var(--cm) 12%, transparent); color: var(--cm); }
-.cl.has-logo { background: #fff; box-shadow: inset 0 0 0 1px var(--line2); overflow: hidden; padding: 12%; }
-.cl.has-logo img { object-fit: contain; border-radius: 0; }
-.cl.xs.has-logo { padding: 1px; }
+.cl.has-logo { background: #fff; box-shadow: inset 0 0 0 1px var(--line2); overflow: hidden; padding: 0; }
+.cl.has-logo img { width: 100%; height: 100%; object-fit: contain; border-radius: 0; }
 .sq.cc { background: var(--cc); }
 .theme-tg { margin-right: -8px; }
 .dark .cl.tint { --cm-ui: oklch(from var(--cm) max(l, .74) c h); color: var(--cm-ui); background: color-mix(in srgb, var(--cm-ui) 15%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cm-ui) 22%, transparent); }
