@@ -19,6 +19,7 @@ const ProjectPage = lazy(() => import('@/features/projects/ProjectPage').then((m
 const ClientsPage = lazy(() => import('@/features/clients/ClientsPage').then((m) => ({ default: m.ClientsPage })))
 const ClientPage = lazy(() => import('@/features/clients/ClientPage').then((m) => ({ default: m.ClientPage })))
 const ClientSettingsPage = lazy(() => import('@/features/clients/ClientSettingsPage').then((m) => ({ default: m.ClientSettingsPage })))
+const ClockPage = lazy(() => import('@/features/clock/ClockPage').then((m) => ({ default: m.ClockPage })))
 const TeamPage = lazy(() => import('@/features/team/TeamPage').then((m) => ({ default: m.TeamPage })))
 const MemberPage = lazy(() => import('@/features/team/MemberPage').then((m) => ({ default: m.MemberPage })))
 const PaymentsPage = lazy(() => import('@/features/payments/PaymentsPage').then((m) => ({ default: m.PaymentsPage })))
@@ -51,6 +52,7 @@ function Routed() {
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/clients/:id" element={<ClientPage />} />
           <Route path="/clients/:id/settings" element={<AdminOnly><ClientSettingsPage /></AdminOnly>} />
+          <Route path="/clock" element={<ClockPage />} />
           <Route path="/team" element={<TeamPage />} />
           <Route path="/team/:id" element={<MemberPage />} />
           <Route path="/payments" element={<AdminOnly><PaymentsPage /></AdminOnly>} />

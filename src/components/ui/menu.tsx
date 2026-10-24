@@ -1,5 +1,6 @@
 import { Check } from 'lucide-react'
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 
 const MenuCtx = createContext<{ close: () => void }>({ close: () => {} })
@@ -12,17 +13,48 @@ interface MenuProps {
   wide?: boolean
   className?: string
   popClassName?: string
+  /** Make the popover at least as wide as the trigger. */
+  matchWidth?: boolean
 }
 
-/** Dropdown menu matching the design's details.menu, with outside-click + Esc to close. */
-export function Menu({ trigger, children, align = 'right', wide, className, popClassName }: MenuProps) {
+/** Dropdown menu matching the design's details.menu, with outside-click + Esc to close.
+ *  The popover renders in a portal with fixed positioning, so scrolling tables and
+ *  cards with overflow can't clip it. */
+export function Menu({ trigger, children, align = 'right', wide, className, popClassName, matchWidth }: MenuProps) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const popRef = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ top: number; left: number; minWidth?: number; up: boolean } | null>(null)
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setPos(null)
+      return
+    }
+    const place = () => {
+      if (!ref.current || !popRef.current) return
+      const a = ref.current.getBoundingClientRect()
+      const p = popRef.current.getBoundingClientRect()
+      const minWidth = matchWidth ? a.width : undefined
+      const w = Math.max(p.width, minWidth ?? 0)
+      let up = align === 'up'
+      if (!up && a.bottom + 6 + p.height > window.innerHeight - 8 && a.top - 6 - p.height > 8) up = true
+      if (up && a.top - 6 - p.height < 8) up = false
+      const top = up ? a.top - 6 - p.height : a.bottom + 6
+      let left = align === 'right' ? a.right - w : a.left
+      left = Math.min(Math.max(8, left), window.innerWidth - w - 8)
+      setPos({ top, left, minWidth, up })
+    }
+    place()
+    window.addEventListener('resize', place)
+    return () => window.removeEventListener('resize', place)
+  }, [open, align, matchWidth])
 
   useEffect(() => {
     if (!open) return
+    const inside = (t: EventTarget | null) => Boolean(ref.current?.contains(t as Node) || popRef.current?.contains(t as Node))
     const onDown = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+      if (!inside(e.target)) setOpen(false)
     }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -30,24 +62,37 @@ export function Menu({ trigger, children, align = 'right', wide, className, popC
         setOpen(false)
       }
     }
+    // The popover is fixed to the screen, so close it when the page underneath scrolls.
+    const onScroll = (e: Event) => {
+      if (!popRef.current?.contains(e.target as Node)) setOpen(false)
+    }
     document.addEventListener('mousedown', onDown)
     document.addEventListener('keydown', onKey, true)
+    window.addEventListener('scroll', onScroll, true)
     return () => {
       document.removeEventListener('mousedown', onDown)
       document.removeEventListener('keydown', onKey, true)
+      window.removeEventListener('scroll', onScroll, true)
     }
   }, [open])
 
   return (
     <div ref={ref} className={cn('menu', open && 'open', className)}>
       {trigger({ open, toggle: () => setOpen((o) => !o) })}
-      {open && (
-        <MenuCtx.Provider value={{ close: () => setOpen(false) }}>
-          <div className={cn('menu-pop', align === 'left' && 'left', align === 'up' && 'up', wide && 'wide', popClassName)} role="menu">
-            {children}
-          </div>
-        </MenuCtx.Provider>
-      )}
+      {open &&
+        createPortal(
+          <MenuCtx.Provider value={{ close: () => setOpen(false) }}>
+            <div
+              ref={popRef}
+              className={cn('menu-pop floating', align === 'left' && 'left', pos?.up && 'up', wide && 'wide', popClassName)}
+              style={pos ? { top: pos.top, left: pos.left, minWidth: pos.minWidth } : { top: -9999, left: -9999 }}
+              role="menu"
+            >
+              {children}
+            </div>
+          </MenuCtx.Provider>,
+          document.body,
+        )}
     </div>
   )
 }

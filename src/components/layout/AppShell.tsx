@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
-  Bell, Briefcase, ChartColumn, ChevronsUpDown, CreditCard, FileText, Folder, Home, Inbox, ListChecks,
+  Bell, Briefcase, ChartColumn, ChevronsUpDown, Clock, CreditCard, FileText, Folder, Home, Inbox, ListChecks,
   LogOut, Moon, Search, Settings, Sun, User, Users,
 } from 'lucide-react'
 import { useData } from '@/data/store'
@@ -117,6 +117,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="nav-label">WORK</div>
           <NavItem to="/projects" icon={<Folder className="i" />} extra={<span className="cnt">{activeProjects}</span>}>Projects</NavItem>
           <NavItem to="/clients" icon={<Briefcase className="i" />} extra={<span className="cnt">{activeClients}</span>}>Clients</NavItem>
+          <NavItem to="/clock" icon={<Clock className="i" />}>Clock</NavItem>
           <NavItem to="/team" icon={<Users className="i" />}>Team</NavItem>
         </nav>
         {sideClients.length > 0 && (
