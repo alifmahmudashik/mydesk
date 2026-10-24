@@ -38,7 +38,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const activeProjects = projects.filter(OPEN_PROJECT).length
   const activeClients = clients.filter((c) => c.status !== 'archived').length
   const overdue = payments.filter((p) => effectivePaymentStatus(p) === 'overdue').length
-  const pinned = clients.filter((c) => c.pinned && c.status !== 'archived').slice(0, 8)
+  // Every active client, pinned ones first, then A–Z.
+  const sideClients = clients
+    .filter((c) => c.status !== 'archived')
+    .sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || clientDisplayName(a).localeCompare(clientDisplayName(b)))
 
   // Global keyboard shortcuts: ⌘K search, T/P new task/project, G+D/T/P/$ jump.
   useEffect(() => {
@@ -113,26 +116,26 @@ export function AppShell({ children }: { children: ReactNode }) {
           <NavItem to="/projects" icon={<Folder className="i" />} extra={<span className="cnt">{activeProjects}</span>}>Projects</NavItem>
           <NavItem to="/clients" icon={<Briefcase className="i" />} extra={<span className="cnt">{activeClients}</span>}>Clients</NavItem>
           <NavItem to="/team" icon={<Users className="i" />}>Team</NavItem>
-          {isAdmin && (
-            <>
+        </nav>
+        {sideClients.length > 0 && (
+          <div className="nav pins">
+            <div className="nav-label">CLIENTS</div>
+            {sideClients.map((c) => (
+              <NavLink key={c.id} to={`/clients/${c.id}`} className={({ isActive }) => (isActive ? 'active' : undefined)} title={clientDisplayName(c)}>
+                <span className="sq" style={{ background: clientColor(c) }} />
+                <span className="trunc">{clientDisplayName(c)}</span>
+                <span className="cnt">{projects.filter((p) => p.client_id === c.id && OPEN_PROJECT(p)).length || ''}</span>
+              </NavLink>
+            ))}
+          </div>
+        )}
+        {isAdmin && (
+          <nav className="nav" aria-label="Money">
               <div className="nav-label">MONEY</div>
               <NavItem to="/payments" icon={<CreditCard className="i" />} extra={overdue ? <span className="badge red">{overdue}</span> : null}>Payments</NavItem>
               <NavItem to="/invoices" icon={<FileText className="i" />}>Invoices</NavItem>
               <NavItem to="/analytics" icon={<ChartColumn className="i" />}>Analytics</NavItem>
-            </>
-          )}
-        </nav>
-        {pinned.length > 0 && (
-          <div className="nav pins">
-            <div className="nav-label">PINNED CLIENTS</div>
-            {pinned.map((c) => (
-              <NavLink key={c.id} to={`/clients/${c.id}`} className={({ isActive }) => (isActive ? 'active' : undefined)}>
-                <span className="sq" style={{ background: clientColor(c) }} />
-                <span className="trunc">{clientDisplayName(c)}</span>
-                <span className="cnt">{projects.filter((p) => p.client_id === c.id).length}</span>
-              </NavLink>
-            ))}
-          </div>
+          </nav>
         )}
         <div className="side-foot">
           <Menu
