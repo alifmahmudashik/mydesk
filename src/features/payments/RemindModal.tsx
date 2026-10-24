@@ -106,7 +106,7 @@ export function RemindModal({ payment, onClose }: { payment: Payment | null; onC
       {/* Off-screen copy of the invoice used to render the PDF attachment. */}
       {invoice &&
         createPortal(
-          <div style={{ position: 'fixed', left: -10000, top: 0, width: 794 }} aria-hidden>
+          <div style={{ position: 'fixed', left: -10000, top: 0, width: 794, animation: 'none' }} aria-hidden>
             <InvoicePaper
               ref={paperRef}
               number={invoice.number}

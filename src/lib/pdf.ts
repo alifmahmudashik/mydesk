@@ -5,7 +5,18 @@ async function renderPdf(el: HTMLElement) {
   // Wait for web fonts, or the capture can rasterize a fallback font mid-swap.
   await document.fonts.ready
   // 300 DPI over the browser's 96 baseline: anything lower looks soft once printed.
-  const canvas = await html2canvas(el, { scale: 300 / 96, backgroundColor: '#ffffff' })
+  const canvas = await html2canvas(el, {
+    scale: 300 / 96,
+    backgroundColor: '#ffffff',
+    // html2canvas renders a copy of the page; a fade-in animation restarting in that copy
+    // got captured half-transparent (the old "washed out" PDF). Freeze the invoice only.
+    onclone: (_doc, clone) => {
+      for (const node of [clone, ...clone.querySelectorAll<HTMLElement>('*')]) {
+        node.style.animation = 'none'
+        node.style.transition = 'none'
+      }
+    },
+  })
   // JPEG keeps a one-page invoice at a few hundred KB (PNG ballooned to 20MB+).
   const img = canvas.toDataURL('image/jpeg', 0.92)
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true })

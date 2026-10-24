@@ -9,7 +9,7 @@ import { Topbar, Empty, Section } from '@/components/ui/layout'
 import { Field } from '@/components/ui/field'
 import { StatusPill } from '@/components/ui/pill'
 import { Modal } from '@/components/ui/modal'
-import { InvoicePaper } from '@/features/invoices/InvoicePaper'
+import { A4_WIDTH, InvoicePaper, ScaledInvoice } from '@/features/invoices/InvoicePaper'
 import { invoiceTotal } from '@/features/invoices/InvoicesPage'
 import { SUPPORTED_CURRENCIES } from '@/lib/currency'
 import { exportElementToPdf, invoiceFilename } from '@/lib/pdf'
@@ -311,14 +311,14 @@ export function InvoiceEditor() {
           </form>
           <div className="col-main" style={{ flex: '2 1 520px' }}>
             <div className="paper-wrap">
-              <InvoicePaper {...paperProps} />
+              <ScaledInvoice {...paperProps} />
             </div>
           </div>
         </div>
       </div>
       {/* Fixed-width copy for a crisp A4 PDF regardless of screen size. */}
       {createPortal(
-        <div style={{ position: 'fixed', left: -10000, top: 0, width: 794 }} aria-hidden>
+        <div style={{ position: 'fixed', left: -10000, top: 0, width: A4_WIDTH }} aria-hidden>
           <InvoicePaper ref={exportRef} {...paperProps} />
         </div>,
         document.body,
