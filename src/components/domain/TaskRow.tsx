@@ -3,8 +3,9 @@ import { MessageSquare } from 'lucide-react'
 import { useData } from '@/data/store'
 import { toggleTaskDone } from '@/data/actions'
 import { Avatar } from '@/components/ui/avatar'
+import { ClientChip } from '@/components/domain/ClientGroup'
 import { DateChip, PrioBars, StatusRing } from '@/components/ui/pill'
-import { clientDisplayName, isOpenPayment, shortProjectTitle, taskRef } from '@/lib/derive'
+import { isOpenPayment, shortProjectTitle, taskRef } from '@/lib/derive'
 import { isOverdue } from '@/lib/format'
 import type { Task } from '@/types'
 import { cn } from '@/lib/utils'
@@ -48,17 +49,8 @@ export function TaskRow({ task, context = true, ring, showRef, showPrio }: Props
         <div className={cn('t trunc', done && 'faint')} style={done ? { textDecoration: 'line-through' } : undefined}>{task.title}</div>
         {(context || subs.length > 0 || (task.labels?.length ?? 0) > 0) && (
           <div className="s">
-            {context && project && (
-              <>
-                <span className="trunc" style={{ maxWidth: 260 }}>{shortProjectTitle(project.title)}</span>
-                {client && (
-                  <>
-                    <span className="dot-sep">·</span>
-                    {clientDisplayName(client)}
-                  </>
-                )}
-              </>
-            )}
+            {context && <ClientChip client={client} to={false} />}
+            {context && project && <span className="trunc" style={{ maxWidth: 260 }}>{shortProjectTitle(project.title)}</span>}
             {subs.length > 0 && <span className="mono xs">{subs.filter((s) => s.done).length}/{subs.length}</span>}
             {task.labels?.slice(0, 2).map((l) => (
               <span key={l} className={`tag ${labelTone(l)}`}>{l}</span>

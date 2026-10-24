@@ -150,3 +150,20 @@ button.prop { border: 0; background: transparent; font: inherit; color: inherit;
   .task-main { padding: 20px 16px 32px; }
   .task-side { padding: 20px 16px 40px; border-left: 0 !important; border-top: 1px solid var(--line-s); }
 }
+
+/* ---- client grouping ---- */
+.client-group { overflow: hidden; border-left: 4px solid var(--cg); }
+.client-group-h { display: flex; align-items: center; gap: 12px; padding: 14px 18px; background: color-mix(in srgb, var(--cg) 6%, var(--panel)); border-bottom: 1px solid var(--line-s); }
+.client-group-name { display: block; font-size: 15px; font-weight: 600; letter-spacing: -.01em; color: var(--ink); }
+.client-group-name:hover { text-decoration: underline; text-underline-offset: 3px; }
+.client-group-b .tbl th { background: transparent; }
+.client-group-b > .list > .li:first-child { border-top: 0; }
+.client-groups { display: flex; flex-direction: column; gap: 16px; }
+.client-chip { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 6px; font-size: 12px; font-weight: 600; white-space: nowrap; color: color-mix(in srgb, var(--cc) 75%, var(--ink)); background: color-mix(in srgb, var(--cc) 12%, transparent); max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.client-chip i { width: 7px; height: 7px; border-radius: 99px; flex: none; }
+a.client-chip:hover { background: color-mix(in srgb, var(--cc) 20%, transparent); }
+.tcard .client-chip { margin-bottom: 6px; }
+.group-total { font-weight: 600; font-variant-numeric: tabular-nums; font-size: 14px; }
+
+/* ---- brand logo (fire) ---- */
+.logo img { width: 22px; height: 22px; display: block; }

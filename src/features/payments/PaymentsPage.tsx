@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { addDays, format, startOfMonth } from 'date-fns'
 import { ChartColumn, Check, CreditCard, Plus, Search, Send } from 'lucide-react'
@@ -9,6 +9,7 @@ import { markPaymentPaid, paymentTitle } from '@/data/actions'
 import { Topbar, Content, Empty, PageHead } from '@/components/ui/layout'
 import { Tabs } from '@/components/ui/tabs'
 import { ClientMark } from '@/components/ui/avatar'
+import { ClientGroup, groupByClient } from '@/components/domain/ClientGroup'
 import { StatusPill } from '@/components/ui/pill'
 import { Modal } from '@/components/ui/modal'
 import { PaymentModal } from '@/features/payments/PaymentModal'
@@ -149,107 +150,125 @@ export function PaymentsPage() {
               </label>
             }
           />
-          <div className="card tbl-wrap panel-in" key={tab}>
+          <div className="panel-in" key={tab}>
             {tab === 'open' &&
               (groups.length === 0 ? (
-                <Empty icon={<CreditCard className="i" />} title={payments.length ? 'Nothing open' : 'No payments yet'} action={<button type="button" className="btn btn-sm" onClick={() => openCreate('payment')}><Plus className="i i-sm" />Record payment</button>}>
-                  {payments.length ? 'Every payment is settled. Nice.' : 'Payments are created automatically when a project has a budget, or record one here.'}
-                </Empty>
+                <div className="card">
+                  <Empty icon={<CreditCard className="i" />} title={payments.length ? 'Nothing open' : 'No payments yet'} action={<button type="button" className="btn btn-sm" onClick={() => openCreate('payment')}><Plus className="i i-sm" />Record payment</button>}>
+                    {payments.length ? 'Every payment is settled. Nice.' : 'Payments are created automatically when a project has a budget, or record one here.'}
+                  </Empty>
+                </div>
               ) : (
-                <>
-                  <table className="tbl" style={{ minWidth: 860 }}>
-                    <thead><tr><th>Project</th><th className="r">Amount</th><th>Status</th><th>Due</th><th className="r" /></tr></thead>
-                    <tbody>
-                      {groups.map((g) => (
-                        <Fragment key={g.client?.id ?? 'x'}>
-                          <tr className="grp">
-                            <td colSpan={5}>
-                              <span className="row-sm">
-                                <ClientMark client={g.client} size="xs" />
-                                {g.client ? <Link to={`/clients/${g.client.id}`}>{clientDisplayName(g.client)}</Link> : 'Unknown client'}
-                                <span className={g.late ? 't-bad' : 't-warn'}>· {sumByCurrency(g.rows)} open</span>
-                              </span>
-                            </td>
-                          </tr>
-                          {g.rows.map((p) => {
-                            const st = effectivePaymentStatus(p)
-                            return (
-                              <tr key={p.id} className="hov">
-                                <td><button type="button" className="m cover" style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', color: 'inherit' }} onClick={() => setEdit(p)}>{paymentTitle(p)}</button></td>
-                                <td className="r num b">{formatMoney(p.amount, p.currency)}</td>
-                                <td><StatusPill meta={st === 'unpaid' ? { ...paymentStatus.unpaid, tone: 'warn' } : paymentStatus[st]} /></td>
-                                {dueCell(p)}
-                                <td className="r">{actions(p, st === 'overdue' || Boolean(p.due_date && (daysUntil(p.due_date) ?? 99) <= 3))}</td>
-                              </tr>
-                            )
-                          })}
-                        </Fragment>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="client-groups">
+                  {groups.map((g) => {
+                    const lateN = g.rows.filter((r) => effectivePaymentStatus(r) === 'overdue').length
+                    return (
+                      <ClientGroup
+                        key={g.client?.id ?? 'x'}
+                        client={g.client}
+                        meta={`${g.rows.length} open payment${g.rows.length === 1 ? '' : 's'}${lateN ? ` \u00b7 ${lateN} overdue` : ''}`}
+                        right={<span className={`group-total ${g.late ? 't-bad' : 't-warn'}`}>{sumByCurrency(g.rows)}</span>}
+                      >
+                        <div className="tbl-wrap">
+                          <table className="tbl" style={{ minWidth: 760 }}>
+                            <thead><tr><th>Project</th><th className="r">Amount</th><th>Status</th><th>Due</th><th className="r" /></tr></thead>
+                            <tbody>
+                              {g.rows.map((p) => {
+                                const st = effectivePaymentStatus(p)
+                                return (
+                                  <tr key={p.id} className="hov">
+                                    <td><button type="button" className="m cover" style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', color: 'inherit' }} onClick={() => setEdit(p)}>{paymentTitle(p)}</button></td>
+                                    <td className="r num b">{formatMoney(p.amount, p.currency)}</td>
+                                    <td><StatusPill meta={st === 'unpaid' ? { ...paymentStatus.unpaid, tone: 'warn' } : paymentStatus[st]} /></td>
+                                    {dueCell(p)}
+                                    <td className="r">{actions(p, st === 'overdue' || Boolean(p.due_date && (daysUntil(p.due_date) ?? 99) <= 3))}</td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </ClientGroup>
+                    )
+                  })}
                   {noDate.length > 0 && (
-                    <div className="card-f">
+                    <div className="card card-f" style={{ borderTop: 0 }}>
                       <span className="muted">{noDate.length} open payment{noDate.length === 1 ? ' has' : 's have'} no due date, so {noDate.length === 1 ? 'it never turns' : 'they never turn'} overdue.</span>
                       <button type="button" className="btn btn-sm" onClick={() => setDatesOpen(true)}>Set due dates</button>
                     </div>
                   )}
-                </>
+                </div>
               ))}
 
             {tab === 'overdue' &&
               (overdue.filter(matchQ).length === 0 ? (
-                <Empty icon={<Check className="i" />} title="Nothing overdue">When a payment passes its due date it shows up here, and owners and admins get one email about it.</Empty>
+                <div className="card">
+                  <Empty icon={<Check className="i" />} title="Nothing overdue">When a payment passes its due date it shows up here, and owners and admins get one email about it.</Empty>
+                </div>
               ) : (
-                <table className="tbl" style={{ minWidth: 760 }}>
-                  <thead><tr><th>Client</th><th>Project</th><th className="r">Amount</th><th>Due</th><th>Last reminder</th><th className="r" /></tr></thead>
-                  <tbody>
-                    {overdue.filter(matchQ).map((p) => {
-                      const c = clients.find((x) => x.id === p.client_id)
-                      return (
-                        <tr key={p.id} className="hov">
-                          <td><span className="row-sm"><ClientMark client={c} size="sm" />{clientDisplayName(c)}</span></td>
-                          <td><button type="button" className="m cover" style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', color: 'inherit' }} onClick={() => setEdit(p)}>{paymentTitle(p)}</button></td>
-                          <td className="r num b">{formatMoney(p.amount, p.currency)}</td>
-                          <td className="t-bad">{lateLabel(p.due_date)}</td>
-                          <td className="small muted">{p.last_reminded_at ? formatDate(p.last_reminded_at.slice(0, 10)) : 'Never'}</td>
-                          <td className="r">{actions(p, true)}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+                <div className="client-groups">
+                  {groupByClient(overdue.filter(matchQ), (p) => p.client_id, clients).map((g) => (
+                    <ClientGroup key={g.id} client={g.client} meta={`${g.rows.length} overdue \u00b7 oldest ${lateLabel(g.rows[0].due_date)}`} right={<span className="group-total t-bad">{sumByCurrency(g.rows)}</span>}>
+                      <div className="tbl-wrap">
+                        <table className="tbl" style={{ minWidth: 700 }}>
+                          <thead><tr><th>Project</th><th className="r">Amount</th><th>Due</th><th>Last reminder</th><th className="r" /></tr></thead>
+                          <tbody>
+                            {g.rows.map((p) => (
+                              <tr key={p.id} className="hov">
+                                <td><button type="button" className="m cover" style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', color: 'inherit' }} onClick={() => setEdit(p)}>{paymentTitle(p)}</button></td>
+                                <td className="r num b">{formatMoney(p.amount, p.currency)}</td>
+                                <td><div>{formatDate(p.due_date)}</div><div className="xs t-bad">{lateLabel(p.due_date)}</div></td>
+                                <td className="small muted">{p.last_reminded_at ? formatDate(p.last_reminded_at.slice(0, 10)) : 'Never'}</td>
+                                <td className="r">{actions(p, true)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </ClientGroup>
+                  ))}
+                </div>
               ))}
 
             {tab === 'paid' &&
               (paid.filter(matchQ).length === 0 ? (
-                <Empty title="No paid payments yet" />
+                <div className="card"><Empty title="No paid payments yet" /></div>
               ) : (
-                <>
-                  <table className="tbl" style={{ minWidth: 760 }}>
-                    <thead><tr><th>Client</th><th>Invoice / project</th><th className="r">Amount</th><th>Paid on</th><th>Method</th></tr></thead>
-                    <tbody>
-                      {paid.filter(matchQ).slice(0, paidLimit).map((p) => {
-                        const c = clients.find((x) => x.id === p.client_id)
-                        const inv = invoices.find((i) => i.id === p.invoice_id)
-                        return (
-                          <tr key={p.id} className="hov">
-                            <td><span className="row-sm"><ClientMark client={c} size="sm" />{clientDisplayName(c)}</span></td>
-                            <td>
-                              {inv ? <Link className="mono m cover" to={`/invoices/${inv.id}`}>{inv.number}</Link> : <button type="button" className="m cover trunc" style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', color: 'inherit', maxWidth: 320 }} onClick={() => setEdit(p)}>{paymentTitle(p)}</button>}
-                            </td>
-                            <td className="r num b">{formatMoney(p.amount, p.currency, { cents: true })}</td>
-                            <td>{formatDate(p.payment_date)}</td>
-                            <td className="muted">{p.payment_method ?? '—'}</td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                  <div className="card-f">
-                    <span className="muted">Showing {Math.min(paidLimit, paid.length)} of {paid.length} · {paidThisMonth.length} this month</span>
-                    {paid.length > paidLimit ? <button type="button" className="btn btn-sm" onClick={() => setPaidLimit((l) => l + 25)}>Load more</button> : <Link className="link" to="/analytics">See trends</Link>}
-                  </div>
-                </>
+                <div className="client-groups">
+                  {groupByClient(paid.filter(matchQ), (p) => p.client_id, clients).slice(0, paidLimit).map((g, gi) => (
+                    <ClientGroup
+                      key={g.id}
+                      client={g.client}
+                      defaultOpen={gi < 6}
+                      meta={`${g.rows.length} payment${g.rows.length === 1 ? '' : 's'} \u00b7 last paid ${formatDate(g.rows[0].payment_date)}`}
+                      right={<span className="group-total t-ok">{sumByCurrency(g.rows)}</span>}
+                    >
+                      <div className="tbl-wrap">
+                        <table className="tbl" style={{ minWidth: 640 }}>
+                          <thead><tr><th>Invoice / project</th><th className="r">Amount</th><th>Paid on</th><th>Method</th></tr></thead>
+                          <tbody>
+                            {g.rows.map((p) => {
+                              const inv = invoices.find((i) => i.id === p.invoice_id)
+                              return (
+                                <tr key={p.id} className="hov">
+                                  <td>
+                                    {inv ? <Link className="mono m cover" to={`/invoices/${inv.id}`}>{inv.number}</Link> : <button type="button" className="m cover trunc" style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', color: 'inherit', maxWidth: 360 }} onClick={() => setEdit(p)}>{paymentTitle(p)}</button>}
+                                  </td>
+                                  <td className="r num b">{formatMoney(p.amount, p.currency, { cents: true })}</td>
+                                  <td>{formatDate(p.payment_date)}</td>
+                                  <td className="muted">{p.payment_method ?? '\u2014'}</td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </ClientGroup>
+                  ))}
+                  {groupByClient(paid.filter(matchQ), (p) => p.client_id, clients).length > paidLimit && (
+                    <button type="button" className="btn" style={{ alignSelf: 'center' }} onClick={() => setPaidLimit((l) => l + 25)}>Show more clients</button>
+                  )}
+                </div>
               ))}
           </div>
         </div>

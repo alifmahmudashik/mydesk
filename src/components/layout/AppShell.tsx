@@ -91,7 +91,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="app">
       <aside className="side" aria-label="Sidebar">
         <div className="brand">
-          <div className="logo">M</div>
+          <div className="logo"><img src="/mydesk-fire.png" alt="" /></div>
           <div className="name">
             <b>MyDesk</b>
             <small>{invoiceSettings?.workspace_name || (demoMode ? 'Demo workspace' : 'Workspace')}</small>

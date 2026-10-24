@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { addDays, format, parseISO } from 'date-fns'
-import { Download, Folder, Loader2, Plus, Settings, X } from 'lucide-react'
+import { Check, Download, Folder, Loader2, Plus, Settings, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
+import { markInvoicePaid } from '@/data/actions'
+import { celebrateFrom } from '@/lib/confetti'
 import { Topbar, Empty, Section } from '@/components/ui/layout'
 import { Field } from '@/components/ui/field'
 import { StatusPill } from '@/components/ui/pill'
@@ -141,7 +143,10 @@ export function InvoiceEditor() {
   const save = () => {
     if (!f.client_id) return toast.error('Pick a client first')
     if (!f.number.trim()) return toast.error('Give the invoice a number')
-    if (invoices.some((i) => i.number.trim() === f.number.trim() && i.id !== existing?.id)) return toast.error(`Invoice ${f.number} already exists`)
+    // Only check for a clash when the number is new or was changed. Older data can hold
+    // duplicate numbers, and that must not block saving an existing invoice.
+    const numberChanged = !existing || existing.number.trim() !== f.number.trim()
+    if (numberChanged && invoices.some((i) => i.number.trim() === f.number.trim() && i.id !== existing?.id)) return toast.error(`Invoice ${f.number} already exists`)
     const items = f.line_items.filter((li) => li.description.trim() || Number(li.price)).map((li) => ({ description: li.description.trim(), price: Number(li.price) || 0, qty: Number(li.qty) || 1 }))
     const data = {
       client_id: f.client_id,
@@ -252,6 +257,11 @@ export function InvoiceEditor() {
         <button type="button" className="btn" onClick={() => void exportPdf()} disabled={exporting}>
           {exporting ? <Loader2 className="i" style={{ animation: 'spin 1s linear infinite' }} /> : <Download className="i" />}Export PDF
         </button>
+        {existing && linkedStatus !== 'paid' && (
+          <button type="button" className="btn" onClick={(e) => { markInvoicePaid(existing); celebrateFrom(e.currentTarget) }}>
+            <Check className="i" />Mark as paid
+          </button>
+        )}
         <button type="button" className="btn btn-pri" onClick={save}>Save invoice</button>
       </Topbar>
       <div className="content full" style={{ maxWidth: 1320 }}>

@@ -7,14 +7,15 @@ import { setTaskStatus, toggleTaskDone } from '@/data/actions'
 import { Avatar } from '@/components/ui/avatar'
 import { DateChip, PrioBars, StatusRing } from '@/components/ui/pill'
 import { labelTone } from '@/components/domain/TaskRow'
-import { clientDisplayName, shortProjectTitle, taskRef } from '@/lib/derive'
+import { ClientChip } from '@/components/domain/ClientGroup'
+import { shortProjectTitle, taskRef } from '@/lib/derive'
 import { formatDate } from '@/lib/format'
 import { taskRing, taskStatus } from '@/lib/status'
 import type { Task, TaskStatus } from '@/types'
 import { cn } from '@/lib/utils'
 
 /** Full task row (My tasks / project Tasks tab): ref, title, meta, status pill, date, assignee. */
-export function TaskListRow({ task, showProject = true }: { task: Task; showProject?: boolean }) {
+export function TaskListRow({ task, showProject = true, showClient = true }: { task: Task; showProject?: boolean; showClient?: boolean }) {
   const { projects, clients, profiles, comments, subtasks } = useData()
   const project = projects.find((p) => p.id === task.project_id)
   const client = clients.find((c) => c.id === project?.client_id)
@@ -30,12 +31,8 @@ export function TaskListRow({ task, showProject = true }: { task: Task; showProj
       <Link className="grow cover" to={`/tasks/${task.id}`} style={{ minWidth: 0 }}>
         <div className="t trunc" style={done ? { textDecoration: 'line-through', color: 'var(--faint)' } : undefined}>{task.title}</div>
         <div className="s">
-          {showProject && project && (
-            <>
-              <span className="trunc" style={{ maxWidth: 240 }}>{shortProjectTitle(project.title)}</span>
-              {client && <><span className="dot-sep">·</span>{clientDisplayName(client)}</>}
-            </>
-          )}
+          {showProject && showClient && <ClientChip client={client} to={false} />}
+          {showProject && project && <span className="trunc" style={{ maxWidth: 260 }}>{shortProjectTitle(project.title)}</span>}
           {subs.length > 0 && <span className="row-sm"><ListChecks className="i i-xs" />{subs.filter((s) => s.done).length}/{subs.length}</span>}
           {nComments > 0 && <span className="row-sm"><MessageSquare className="i i-xs" />{nComments}</span>}
           {task.labels?.slice(0, 3).map((l) => <span key={l} className={`tag ${labelTone(l)}`}>{l}</span>)}
@@ -153,10 +150,11 @@ export function TaskBoard({ tasks, projectId }: { tasks: Task[]; projectId?: str
                   onClick={() => navigate(`/tasks/${t.id}`)}
                   onKeyDown={(e) => e.key === 'Enter' && navigate(`/tasks/${t.id}`)}
                 >
-                  <span className="mono xs faint">{taskRef(t, project)}</span>
+                  {!projectId && <ClientChip client={client} to={false} />}
+                  <div className="row-sm between"><span className="mono xs faint">{taskRef(t, project)}</span>{!projectId && project && <span className="xs faint trunc" style={{ maxWidth: 150 }}>{shortProjectTitle(project.title)}</span>}</div>
                   <div className="t" style={status === 'done' ? { color: 'var(--mute)' } : undefined}>{t.title}</div>
                   <div className="meta">
-                    {t.labels?.[0] ? <span className={`tag ${labelTone(t.labels[0])}`}>{t.labels[0]}</span> : !projectId && client ? <span className="trunc">{clientDisplayName(client)}</span> : null}
+                    {t.labels?.[0] ? <span className={`tag ${labelTone(t.labels[0])}`}>{t.labels[0]}</span> : null}
                     {t.due_date && <DateChip date={t.due_date} done={status === 'done'} />}
                     <span className="spacer" />
                     <Avatar profile={assignee} size="sm" />

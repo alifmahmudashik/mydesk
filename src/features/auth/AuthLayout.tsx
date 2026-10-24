@@ -6,14 +6,14 @@ export function AuthLayout({ children }: { children: ReactNode }) {
     <div className="auth-screen">
       <div className="login-l">
         <div className="row" style={{ marginBottom: 40 }}>
-          <div className="logo">M</div>
+          <div className="logo"><img src="/mydesk-fire.png" alt="" /></div>
           <b style={{ fontSize: 15 }}>MyDesk</b>
         </div>
         <div style={{ maxWidth: 380, width: '100%' }}>{children}</div>
       </div>
       <div className="login-r">
         <div className="row">
-          <div className="logo" style={{ background: '#fff', color: '#0F0F14' }}>M</div>
+          <div className="logo"><img src="/mydesk-fire.png" alt="" /></div>
           <b>MyDesk</b>
         </div>
         <div>

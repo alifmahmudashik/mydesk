@@ -8,13 +8,14 @@ import { Tabs } from '@/components/ui/tabs'
 import { Menu, MenuItem, MenuSearch, MenuTitle } from '@/components/ui/menu'
 import { Avatar, ClientMark } from '@/components/ui/avatar'
 import { StatusRing } from '@/components/ui/pill'
-import { DoneRow, TaskBoard, TaskGroup } from '@/components/domain/TaskViews'
+import { DoneRow, TaskBoard, TaskGroup, TaskListRow } from '@/components/domain/TaskViews'
+import { ClientGroup, groupByClient } from '@/components/domain/ClientGroup'
 import { clientDisplayName, profileDisplayName, shortProjectTitle, taskRef } from '@/lib/derive'
 import { taskStatus } from '@/lib/status'
 import type { Task, TaskStatus } from '@/types'
 
-type Group = 'due' | 'project' | 'status' | 'assignee'
-const groupLabel: Record<Group, string> = { due: 'Due date', project: 'Project', status: 'Status', assignee: 'Assignee' }
+type Group = 'client' | 'due' | 'project' | 'status' | 'assignee'
+const groupLabel: Record<Group, string> = { client: 'Client', due: 'Due date', project: 'Project', status: 'Status', assignee: 'Assignee' }
 
 function usePersisted<T extends string>(key: string, initial: T) {
   const [v, setV] = useState<T>(() => {
@@ -42,7 +43,7 @@ export function TasksPage() {
   const { openCreate } = useUI()
   const [view, setView] = usePersisted<'list' | 'board'>('mydesk-tasks-view', 'list')
   const [who, setWho] = usePersisted<string>('mydesk-tasks-who', me?.role === 'member' ? 'me' : 'everyone')
-  const [group, setGroup] = usePersisted<Group>('mydesk-tasks-group', 'due')
+  const [group, setGroup] = usePersisted<Group>('mydesk-tasks-group-v2', 'client')
   const [projectId, setProjectId] = useState('all')
   const [q, setQ] = useState('')
   const [projectQ, setProjectQ] = useState('')
@@ -73,6 +74,10 @@ export function TasksPage() {
 
   const groups: { key: string; title: string; icon?: React.ReactNode; tasks: Task[] }[] = useMemo(() => {
     const sorted = [...open].sort(byDue)
+    if (group === 'client') {
+      const clientOf = (t: Task) => projects.find((p) => p.id === t.project_id)?.client_id ?? ''
+      return groupByClient(sorted, clientOf, clients).map((g) => ({ key: g.id, title: clientDisplayName(g.client), tasks: g.rows }))
+    }
     if (group === 'due') {
       return [
         { key: 'late', title: 'Overdue', icon: <AlertCircle className="i i-sm t-bad" />, tasks: sorted.filter((t) => t.due_date && t.due_date < today) },
@@ -165,7 +170,23 @@ export function TasksPage() {
                 </div>
               )}
               {open.length === 0 && done.length > 0 && <div className="card"><Empty small title="All clear">Nothing open here.</Empty></div>}
-              {groups.map((g) => (
+              {group === 'client' && open.length > 0 && (
+                <div className="client-groups">
+                  {groups.map((g) => {
+                    const lateN = g.tasks.filter((t) => t.due_date && t.due_date < today).length
+                    return (
+                      <ClientGroup
+                        key={g.key}
+                        client={clients.find((c) => c.id === g.key)}
+                        meta={`${g.tasks.length} open task${g.tasks.length === 1 ? '' : 's'} \u00b7 ${new Set(g.tasks.map((t) => t.project_id)).size} project${new Set(g.tasks.map((t) => t.project_id)).size === 1 ? '' : 's'}${lateN ? ` \u00b7 ${lateN} overdue` : ''}`}
+                      >
+                        <div className="list">{g.tasks.map((t) => <TaskListRow key={t.id} task={t} showClient={false} />)}</div>
+                      </ClientGroup>
+                    )
+                  })}
+                </div>
+              )}
+              {group !== 'client' && groups.map((g) => (
                 <TaskGroup key={g.key} icon={g.icon} title={g.title} tasks={g.tasks} />
               ))}
               <TaskGroup collapsible defaultOpen={false} icon={<span className="st done" />} title="Wrapped up" tasks={done.slice(0, 50)} render={(t) => <DoneRow key={t.id} task={t} />} />

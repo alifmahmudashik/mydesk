@@ -1,14 +1,16 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { format, startOfMonth } from 'date-fns'
-import { Download, Edit3, FileText, Plus, Search, Settings, Trash2 } from 'lucide-react'
+import { Check, Download, Edit3, FileText, Plus, Search, Settings, Trash2 } from 'lucide-react'
 import { useData } from '@/data/store'
 import { Topbar, Content, Empty, PageHead } from '@/components/ui/layout'
-import { ClientMark } from '@/components/ui/avatar'
+import { ClientGroup, groupByClient } from '@/components/domain/ClientGroup'
+import { markInvoicePaid } from '@/data/actions'
+import { celebrateFrom } from '@/lib/confetti'
 import { StatusPill } from '@/components/ui/pill'
 import { ConfirmDialog } from '@/components/ui/modal'
 import { sumUSD, useUsdRates } from '@/lib/currency'
-import { clientDisplayName, invoicePaymentStatus, isInvoiceable } from '@/lib/derive'
+import { clientDisplayName, invoicePaymentStatus, isInvoiceable, sumByCurrency } from '@/lib/derive'
 import { formatDate, formatMoney } from '@/lib/format'
 import { paymentStatus } from '@/lib/status'
 import type { Invoice } from '@/types'
@@ -79,39 +81,62 @@ export function InvoicesPage() {
             <input placeholder="Search number or client…" aria-label="Search invoices" value={q} onChange={(e) => setQ(e.target.value)} />
           </label>
         </div>
-        <div className="card tbl-wrap">
-          {sorted.length === 0 ? (
+        {sorted.length === 0 ? (
+          <div className="card">
             <Empty icon={<FileText className="i" />} title={invoices.length ? 'No matches' : 'No invoices yet'} action={!invoices.length ? <Link className="btn btn-pri btn-sm" to="/invoices/new"><Plus className="i i-sm" />New invoice</Link> : undefined}>
               {invoices.length ? 'Try another search.' : 'Set your business details once in Business settings, then make a branded invoice in a minute.'}
             </Empty>
-          ) : (
-            <table className="tbl" style={{ minWidth: 820 }}>
-              <thead><tr><th>Invoice</th><th>Client</th><th>Issued</th><th>Status</th><th className="r">Amount</th><th className="r" /></tr></thead>
-              <tbody>
-                {sorted.map((inv) => {
-                  const c = clients.find((x) => x.id === inv.client_id)
-                  const st = statusOf(inv)
-                  return (
-                    <tr key={inv.id} className="hov">
-                      <td><Link className="mono m cover" to={`/invoices/${inv.id}`}>{inv.number}</Link></td>
-                      <td><span className="row-sm"><ClientMark client={c} size="sm" />{clientDisplayName(c)}</span></td>
-                      <td>{formatDate(inv.issue_date)}</td>
-                      <td>{st ? <StatusPill meta={paymentStatus[st]} /> : <span className="pill gray">Not tracked</span>}</td>
-                      <td className="r num b">{formatMoney(invoiceTotal(inv), inv.currency, { cents: true })}</td>
-                      <td className="r">
-                        <span className="row-sm above" style={{ justifyContent: 'flex-end' }}>
-                          <button className="btn btn-sm btn-icon" type="button" aria-label="Download PDF" title="Download PDF" onClick={() => navigate(`/invoices/${inv.id}?export=1`)}><Download className="i i-sm" /></button>
-                          <Link className="btn btn-sm btn-icon" to={`/invoices/${inv.id}`} aria-label="Edit" title="Edit"><Edit3 className="i i-sm" /></Link>
-                          <button className="btn btn-sm btn-icon" type="button" aria-label="Delete" title="Delete" onClick={() => setDeleting(inv)}><Trash2 className="i i-sm" /></button>
-                        </span>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="client-groups">
+            {groupByClient(sorted, (i) => i.client_id, clients).map((g, gi) => {
+              const unpaid = g.rows.filter((i) => { const st = statusOf(i); return st && st !== 'paid' && st !== 'refunded' }).length
+              return (
+                <ClientGroup
+                  key={g.id}
+                  client={g.client}
+                  defaultOpen={gi < 8 || Boolean(q.trim())}
+                  meta={`${g.rows.length} invoice${g.rows.length === 1 ? '' : 's'} \u00b7 last ${formatDate(g.rows[0].issue_date)}${unpaid ? ` \u00b7 ${unpaid} unpaid` : ''}`}
+                  right={
+                    <>
+                      <span className="group-total">{sumByCurrency(g.rows.map((i) => ({ amount: invoiceTotal(i), currency: i.currency })))}</span>
+                      <Link className="btn btn-sm btn-ghost" to={`/invoices/new?client=${g.id}`} title="New invoice for this client"><Plus className="i i-sm" /></Link>
+                    </>
+                  }
+                >
+                  <div className="tbl-wrap">
+                    <table className="tbl" style={{ minWidth: 680 }}>
+                      <thead><tr><th>Invoice</th><th>Issued</th><th>Status</th><th className="r">Amount</th><th className="r" /></tr></thead>
+                      <tbody>
+                        {g.rows.map((inv) => {
+                          const st = statusOf(inv)
+                          return (
+                            <tr key={inv.id} className="hov">
+                              <td><Link className="mono m cover" to={`/invoices/${inv.id}`}>{inv.number}</Link></td>
+                              <td>{formatDate(inv.issue_date)}</td>
+                              <td>{st ? <StatusPill meta={paymentStatus[st]} /> : <span className="pill gray">Not tracked</span>}</td>
+                              <td className="r num b">{formatMoney(invoiceTotal(inv), inv.currency, { cents: true })}</td>
+                              <td className="r">
+                                <span className="row-sm above" style={{ justifyContent: 'flex-end' }}>
+                                  {st !== 'paid' && (
+                                    <button className="btn btn-sm" type="button" title="Mark as paid" onClick={(e) => { markInvoicePaid(inv); celebrateFrom(e.currentTarget) }}><Check className="i i-sm" />Paid</button>
+                                  )}
+                                  <button className="btn btn-sm btn-icon" type="button" aria-label="Download PDF" title="Download PDF" onClick={() => navigate(`/invoices/${inv.id}?export=1`)}><Download className="i i-sm" /></button>
+                                  <Link className="btn btn-sm btn-icon" to={`/invoices/${inv.id}`} aria-label="Edit" title="Edit"><Edit3 className="i i-sm" /></Link>
+                                  <button className="btn btn-sm btn-icon" type="button" aria-label="Delete" title="Delete" onClick={() => setDeleting(inv)}><Trash2 className="i i-sm" /></button>
+                                </span>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </ClientGroup>
+              )
+            })}
+          </div>
+        )}
       </Content>
       <ConfirmDialog
         open={Boolean(deleting)}

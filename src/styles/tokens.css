@@ -19,21 +19,22 @@
 }
 
 :root.dark {
+  /* Softer dark: charcoal surfaces instead of near-black, so cards and lines stay readable. */
   color-scheme: dark;
-  --bg: #0B0B0F; --panel: #141419; --soft: #1A1A21; --soft2: #17171D;
-  --line: #26262E; --line2: #2E2E37; --line3: #3A3A45;
-  --line-s: #23232B; --line-xs: #202028; --line-main: #26262E;
-  --ink: #EDEDF0; --ink2: #D4D4DA; --ink3: #B4B4BE; --mute: #9A9AA6; --faint: #8B8B96;
-  --on-ink: #0F0F14;
-  --pri: #6366F1; --pri-h: #818CF8; --pri-soft: rgba(99, 102, 241, .16); --pri-mid: #3F3F8F; --pri-deep: #A5B4FC;
-  --ok: #4ADE80; --ok-bg: rgba(34, 197, 94, .14); --ok-dot: #22C55E;
-  --warn: #FBBF24; --warn-bg: rgba(245, 158, 11, .14); --warn-dot: #F59E0B;
-  --bad: #F87171; --bad-bg: rgba(239, 68, 68, .14); --bad-dot: #EF4444; --bad-soft: rgba(239, 68, 68, .06); --bad-line: rgba(239, 68, 68, .3);
-  --pin-bg: rgba(245, 158, 11, .08); --pin-line: rgba(245, 158, 11, .25);
-  --hover: rgba(255, 255, 255, .06);
-  --sel-bg: rgba(99, 102, 241, .1);
-  --glass: rgba(20, 20, 25, .86);
-  --shadow-pop: 0 16px 40px rgba(0, 0, 0, .5), 0 2px 6px rgba(0, 0, 0, .3);
+  --bg: #1A1A1F; --panel: #222228; --soft: #2A2A31; --soft2: #26262C;
+  --line: #34343C; --line2: #3C3C45; --line3: #4B4B56;
+  --line-s: #303037; --line-xs: #2C2C33; --line-main: #34343C;
+  --ink: #F2F2F5; --ink2: #DCDCE2; --ink3: #C3C3CC; --mute: #A6A6B1; --faint: #92929E;
+  --on-ink: #16161A;
+  --pri: #6D70F5; --pri-h: #8B8FFA; --pri-soft: rgba(109, 112, 245, .18); --pri-mid: #4B4DA6; --pri-deep: #B4BCFD;
+  --ok: #5EE08F; --ok-bg: rgba(34, 197, 94, .16); --ok-dot: #22C55E;
+  --warn: #FCC94D; --warn-bg: rgba(245, 158, 11, .16); --warn-dot: #F59E0B;
+  --bad: #FB8A8A; --bad-bg: rgba(239, 68, 68, .16); --bad-dot: #EF4444; --bad-soft: rgba(239, 68, 68, .07); --bad-line: rgba(239, 68, 68, .32);
+  --pin-bg: rgba(245, 158, 11, .09); --pin-line: rgba(245, 158, 11, .28);
+  --hover: rgba(255, 255, 255, .07);
+  --sel-bg: rgba(109, 112, 245, .12);
+  --glass: rgba(34, 34, 40, .88);
+  --shadow-pop: 0 16px 40px rgba(0, 0, 0, .45), 0 2px 6px rgba(0, 0, 0, .25);
 }
 
 :root.no-motion *, :root.no-motion *::before, :root.no-motion *::after {
