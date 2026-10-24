@@ -20,8 +20,8 @@ interface TabsProps<T extends string> {
 }
 
 export function Tabs<T extends string>({ tabs, value, onChange, variant = 'line', before, after, pad, className }: TabsProps<T>) {
-  return (
-    <div className={cn('tablist', variant === 'seg' && 'seg', variant === 'sm' && 'sm', pad && 'pad', className)} role="tablist">
+  const list = (
+    <div className={cn('tablist', variant === 'seg' && 'seg', variant === 'sm' && 'sm', pad && 'pad', after && 'in-bar', className)} role="tablist">
       {before}
       {tabs.map((t) => (
         <button
@@ -36,12 +36,15 @@ export function Tabs<T extends string>({ tabs, value, onChange, variant = 'line'
           {t.count !== undefined && <span className="n">{t.count}</span>}
         </button>
       ))}
-      {after && (
-        <>
-          <span className="spacer" />
-          {after}
-        </>
-      )}
+    </div>
+  )
+  if (!after) return list
+  // Actions (search, filters) live next to the tab list, not inside it: the tab list
+  // scrolls sideways on small screens and would clip their borders.
+  return (
+    <div className={cn('tabs-bar', pad && 'pad')}>
+      {list}
+      <div className="tabs-after">{after}</div>
     </div>
   )
 }

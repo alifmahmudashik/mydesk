@@ -137,8 +137,6 @@ button.prop { border: 0; background: transparent; font: inherit; color: inherit;
 .ag span { min-width: 0; display: block; }
 .ag { overflow: hidden; }
 .col-side .line-item { grid-template-columns: minmax(0, 1fr) 72px 48px 80px 28px; }
-.tablist > .inp-wrap, .tablist > .menu, .tablist > .chip { margin-bottom: 4px !important; flex: none; }
-.tablist { overflow-y: hidden; }
 .bars > div:last-child .tip { left: auto; right: 0; transform: translate(0, 4px); }
 .bars > div:last-child .tip.show, .bars > div:last-child:hover .tip { transform: none; }
 .bars > div:first-child .tip { left: 0; transform: translate(0, 4px); }
@@ -152,8 +150,10 @@ button.prop { border: 0; background: transparent; font: inherit; color: inherit;
 }
 
 /* ---- client grouping ---- */
-.client-group { overflow: hidden; border-left: 4px solid var(--cg); }
-.client-group-h { display: flex; align-items: center; gap: 12px; padding: 14px 18px; background: color-mix(in srgb, var(--cg) 6%, var(--panel)); border-bottom: 1px solid var(--line-s); }
+.client-group { overflow: hidden; }
+.client-group-h { display: flex; align-items: center; gap: 12px; padding: 14px 18px; background: color-mix(in srgb, var(--cg) 10%, var(--panel)); border-bottom: 1px solid color-mix(in srgb, var(--cg) 18%, var(--line-s)); }
+.client-group { border-color: color-mix(in srgb, var(--cg) 22%, var(--line)); }
+.client-group-h .client-group-name { color: color-mix(in srgb, var(--cg) 55%, var(--ink)); }
 .client-group-name { display: block; font-size: 15px; font-weight: 600; letter-spacing: -.01em; color: var(--ink); }
 .client-group-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .client-group-b .tbl th { background: transparent; }
@@ -185,3 +185,18 @@ a.client-chip:hover { background: color-mix(in srgb, var(--cc) 20%, transparent)
 .dash > .dash-col > * { align-self: stretch; }
 /* selecting projects to export is not "done": no strike-through */
 .select-list .li:has(.cb:checked) .t { text-decoration: none; color: var(--ink); }
+
+/* ---- tab bar with actions beside it ---- */
+.tabs-bar { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--line-s); flex-wrap: wrap; }
+.tabs-bar.pad { padding: 0 14px 0 18px; }
+.tabs-bar > .tablist { border-bottom: 0; flex: 1 1 auto; min-width: 0; }
+.tabs-bar > .tablist.pad { padding: 0; }
+.tabs-after { display: flex; align-items: center; gap: 6px; padding: 5px 0; flex-wrap: wrap; }
+.tabs-after .inp-wrap { margin: 0 !important; }
+.tabs-after .chip { margin: 0 !important; }
+
+/* ---- clients page ---- */
+.ccard { background: linear-gradient(180deg, color-mix(in srgb, var(--cc) 9%, var(--panel)) 0, var(--panel) 92px); border-color: color-mix(in srgb, var(--cc) 20%, var(--line)); }
+.ccard .mini-stats { background: color-mix(in srgb, var(--cc) 5%, var(--soft2)); }
+.client-row td:first-child { box-shadow: inset 3px 0 0 var(--cc); }
+.client-row .cmeta { font-size: 12px; color: var(--mute); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
