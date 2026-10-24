@@ -36,6 +36,8 @@ export interface Client {
   company_address?: string | null
   /** Accent color (hex) used on this client's invoices. */
   brand_color?: string | null
+  /** Public URL of the client's logo (stored in the avatars bucket under clients/). */
+  logo_url?: string | null
   /** Extra label/value rows shown on this client's invoices, e.g. VAT Number. */
   invoice_fields?: InvoiceField[]
   pinned?: boolean

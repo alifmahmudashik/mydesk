@@ -197,7 +197,7 @@ export function TeamPage() {
                               <tr className="grp"><td colSpan={3 + members.length}>Archived</td></tr>
                             )}
                             <tr className="hov" style={focusClient === c.id ? { background: 'var(--sel-bg)' } : undefined}>
-                              <td><span className="row"><span className="sq" style={{ background: clientColor(c) }} /><span className={c.status === 'archived' ? 'muted' : 'm'}>{clientDisplayName(c)}</span></span></td>
+                              <td><span className="row"><span className="sq cc" style={{ ['--cc' as string]: clientColor(c) }} /><span className={c.status === 'archived' ? 'muted' : 'm'}>{clientDisplayName(c)}</span></span></td>
                               <td className="muted">{projects.filter((p) => p.client_id === c.id).length}</td>
                               <td className="c"><span className="st done" style={{ display: 'block', margin: 'auto' }} title="Owners and admins see every client" /></td>
                               {members.map((p) => {

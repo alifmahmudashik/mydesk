@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { CurrencySelect } from '@/components/ui/currency-picker'
 import { useNavigate, useParams } from 'react-router-dom'
-import { AlertTriangle, Archive, Edit3, FileText, Mail, Plus, Trash2, User, X } from 'lucide-react'
+import { AlertTriangle, Archive, Edit3, FileText, Image, Mail, Plus, Trash2, User, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
+import { supabase } from '@/lib/supabase'
 import { Topbar, Content, Empty, Section, SaveBar } from '@/components/ui/layout'
 import { SettingsLayout, useUnsavedGuard } from '@/components/ui/settings-layout'
 import { Field, ToggleRow } from '@/components/ui/field'
@@ -47,6 +48,7 @@ export function ClientSettingsPage() {
         default_currency: client.default_currency ?? 'USD',
         payment_terms: client.payment_terms ?? 'net_7',
         brand_color: clientColor(client),
+        logo_url: client.logo_url ?? null,
         invoice_fields: client.invoice_fields ?? [],
         notes: client.notes ?? '',
       },
@@ -55,6 +57,8 @@ export function ClientSettingsPage() {
   )
   const [f, setF] = useState(initial)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const logoRef = useRef<HTMLInputElement>(null)
   useEffect(() => setF(initial), [initial])
 
   const dirty = JSON.stringify(f) !== JSON.stringify(initial)
@@ -94,11 +98,32 @@ export function ClientSettingsPage() {
         brand_color: /^#[0-9a-f]{6}$/i.test(f.brand_color) ? f.brand_color : client.brand_color,
         invoice_fields: f.invoice_fields.filter((x) => x.label.trim() || x.value.trim()),
         notes: f.notes.trim() || null,
+        // Only send the logo when it changed, so saving still works before the logo_url column exists.
+        ...(f.logo_url !== (client.logo_url ?? null) ? { logo_url: f.logo_url } : {}),
       },
       { entity: 'client', entityId: client.id, action: 'updated', message: `updated client ${f.name.trim()}` },
     )
     toast.success('Client saved')
     navigate(`/clients/${client.id}`)
+  }
+
+  const uploadLogo = async (file: File) => {
+    if (!file.type.startsWith('image/')) return toast.error('Pick a PNG, JPG, WebP or SVG image')
+    if (file.size > 2 * 1024 * 1024) return toast.error('Logos must be under 2 MB')
+    if (!supabase) {
+      // Demo mode: keep it in memory.
+      const reader = new FileReader()
+      reader.onload = () => set('logo_url', String(reader.result))
+      reader.readAsDataURL(file)
+      return
+    }
+    setUploading(true)
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'png'
+    const path = `clients/${client.id}/${crypto.randomUUID()}.${ext}`
+    const { error } = await supabase.storage.from('avatars').upload(path, file, { contentType: file.type, cacheControl: '31536000' })
+    setUploading(false)
+    if (error) return toast.error('Upload failed', { description: error.message })
+    set('logo_url', supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl)
   }
 
   const archive = () => {
@@ -119,7 +144,7 @@ export function ClientSettingsPage() {
       </Topbar>
       <Content>
         <div className="row" style={{ gap: 14 }}>
-          <ClientMark client={{ ...client, brand_color: f.brand_color, name: f.name || client.name }} size="lg" />
+          <ClientMark client={{ ...client, brand_color: f.brand_color, name: f.name || client.name, logo_url: f.logo_url }} size="lg" />
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-.02em' }}>Client settings</h1>
             <div className="small muted">{clientDisplayName(client)} · changes apply across projects and invoices</div>
@@ -135,6 +160,19 @@ export function ClientSettingsPage() {
           ]}
         >
           <Section id="general" title="General & identity" desc="How this client appears across MyDesk.">
+            <div className="upload">
+              <ClientMark client={{ ...client, brand_color: f.brand_color, name: f.name || client.name, logo_url: f.logo_url }} size="xl" />
+              <div className="stack-sm">
+                <div className="row-sm">
+                  <button type="button" className="btn btn-sm" disabled={uploading} onClick={() => logoRef.current?.click()}>
+                    <Image className="i i-sm" />{uploading ? 'Uploading…' : f.logo_url ? 'Replace logo' : 'Upload logo'}
+                  </button>
+                  <input ref={logoRef} type="file" className="sr" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadLogo(file); e.target.value = '' }} />
+                  {f.logo_url && <button className="btn btn-ghost btn-sm" type="button" onClick={() => set('logo_url', null)}>Remove</button>}
+                </div>
+                <span className="hint">Square PNG or SVG works best. Shown instead of the initials.</span>
+              </div>
+            </div>
             <div className="f2">
               <Field label="Contact name" required><input className="inp" value={f.name} onChange={(e) => set('name', e.target.value)} /></Field>
               <Field label="Company name"><input className="inp" placeholder="e.g. Ananas Digital" value={f.company_name} onChange={(e) => set('company_name', e.target.value)} /></Field>

@@ -438,6 +438,7 @@ alter table profiles add column if not exists notification_prefs jsonb not null
 alter table clients add column if not exists pinned boolean not null default false;
 alter table clients add column if not exists default_currency text;
 alter table clients add column if not exists payment_terms text;
+alter table clients add column if not exists logo_url text;
 
 alter table projects add column if not exists key text;
 alter table projects add column if not exists billing_type text;

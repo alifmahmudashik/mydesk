@@ -2,11 +2,12 @@ import { useEffect, type ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   Bell, Briefcase, ChartColumn, ChevronsUpDown, CreditCard, FileText, Folder, Home, Inbox, ListChecks,
-  LogOut, Search, Settings, User, Users,
+  LogOut, Moon, Search, Settings, Sun, User, Users,
 } from 'lucide-react'
 import { useData } from '@/data/store'
 import { useUI } from '@/data/ui'
 import { useIsAdmin } from '@/hooks/usePermissions'
+import { isDarkNow, usePrefs } from '@/hooks/usePrefs'
 import { signOut } from '@/hooks/useAuth'
 import { Avatar } from '@/components/ui/avatar'
 import { Menu, MenuItem, MenuSep, MenuTitle } from '@/components/ui/menu'
@@ -99,6 +100,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <b>MyDesk</b>
             <small>{invoiceSettings?.workspace_name || (demoMode ? 'Demo workspace' : 'Workspace')}</small>
           </div>
+          <ThemeToggle />
           <button type="button" className={`bell${unread ? ' has-unread' : ''}`} aria-label={`Inbox, ${unread} unread`} onClick={() => navigate('/inbox')}>
             <Bell className="i" />
           </button>
@@ -122,7 +124,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="nav-label">CLIENTS</div>
             {sideClients.map((c) => (
               <NavLink key={c.id} to={`/clients/${c.id}`} className={({ isActive }) => (isActive ? 'active' : undefined)} title={clientDisplayName(c)}>
-                <span className="sq" style={{ background: clientColor(c) }} />
+                <span className="sq cc" style={{ ['--cc' as string]: clientColor(c) }} />
                 <span className="trunc">{clientDisplayName(c)}</span>
                 <span className="cnt">{projects.filter((p) => p.client_id === c.id && OPEN_PROJECT(p)).length || ''}</span>
               </NavLink>
@@ -164,5 +166,16 @@ export function AppShell({ children }: { children: ReactNode }) {
       <CommandPalette />
       <CreateHost />
     </div>
+  )
+}
+
+/** Sun/moon button: flips between light and dark in one click. */
+function ThemeToggle() {
+  const { theme, setTheme } = usePrefs()
+  const dark = theme === 'dark' || (theme === 'system' && isDarkNow())
+  return (
+    <button type="button" className="bell theme-tg" aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'} title={dark ? 'Light mode' : 'Dark mode'} onClick={() => setTheme(dark ? 'light' : 'dark')}>
+      {dark ? <Sun className="i" /> : <Moon className="i" />}
+    </button>
   )
 }

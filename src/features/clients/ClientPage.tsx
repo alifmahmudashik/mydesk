@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { differenceInCalendarDays, format, parseISO } from 'date-fns'
-import { Check, Clock, CreditCard, Edit3, FileText, Folder, Globe, Mail, Phone, Plus, User } from 'lucide-react'
+import { Archive, ArchiveRestore, Check, Clock, CreditCard, Edit3, FileText, Folder, Globe, Mail, MoreHorizontal, Phone, Plus, Settings, User } from 'lucide-react'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
 import { useUI } from '@/data/ui'
@@ -66,6 +66,17 @@ export function ClientPage() {
 
   const invoiceStatus = (invId: string) => invoicePaymentStatus(invId, payments)
 
+  const setStatus = (status: 'active' | 'archived') => {
+    const prev = client.status
+    const prevPinned = Boolean(client.pinned)
+    const log = (msg: string) => ({ entity: 'client' as const, entityId: client.id, action: 'updated' as const, message: msg })
+    updateRow('clients', client.id, status === 'archived' ? { status, pinned: false } : { status }, log(`${status === 'archived' ? 'archived' : 'restored'} client ${name}`))
+    toast.success(status === 'archived' ? `${name} archived` : `${name} restored`, {
+      description: status === 'archived' ? 'Hidden from lists and the sidebar. Nothing was deleted.' : undefined,
+      action: { label: 'Undo', onClick: () => updateRow('clients', client.id, { status: prev, pinned: prevPinned }, log(`restored client ${name}`)) },
+    })
+  }
+
   const tabs = [
     { id: 'projects' as const, label: 'Projects', count: cProjects.length },
     ...(isAdmin
@@ -81,6 +92,16 @@ export function ClientPage() {
     <>
       <Topbar crumbs={[{ label: 'Clients', to: '/clients' }, { label: name }]}>
         {isAdmin && <Link className="btn" to={`/clients/${id}/settings`}><Edit3 className="i" />Edit client</Link>}
+        {isAdmin && (
+          <Menu trigger={({ toggle }) => <button type="button" className="btn btn-icon" aria-label="More actions" title="More" onClick={toggle}><MoreHorizontal className="i" /></button>}>
+            {client.status === 'archived' ? (
+              <MenuItem icon={<ArchiveRestore className="i" />} onSelect={() => setStatus('active')}>Restore client</MenuItem>
+            ) : (
+              <MenuItem icon={<Archive className="i" />} onSelect={() => setStatus('archived')}>Archive client</MenuItem>
+            )}
+            <MenuItem icon={<Settings className="i" />} onSelect={() => navigate(`/clients/${id}/settings`)}>Client settings</MenuItem>
+          </Menu>
+        )}
         <Menu trigger={({ toggle }) => <button type="button" className="btn btn-pri" onClick={toggle}><Plus className="i" />New</button>}>
           <MenuItem icon={<Folder className="i" />} onSelect={() => openCreate('project', { client_id: id })}>Project for {first}</MenuItem>
           {isAdmin && <MenuItem icon={<FileText className="i" />} onSelect={() => navigate(`/invoices/new?client=${id}`)}>Invoice</MenuItem>}

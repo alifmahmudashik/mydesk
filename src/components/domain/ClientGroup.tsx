@@ -34,14 +34,14 @@ export function ClientGroup({
             {open ? <ChevronDown className="i i-sm" /> : <ChevronRight className="i i-sm" />}
           </button>
         )}
-        <ClientMark client={client} size="md" />
-        <div className="grow" style={{ minWidth: 0 }}>
+        <ClientMark client={client} size="sm" />
+        <div className="client-group-title">
           {client ? (
             <Link to={`/clients/${client.id}`} className="client-group-name trunc">{clientDisplayName(client)}</Link>
           ) : (
             <span className="client-group-name">No client</span>
           )}
-          {meta && <div className="xs muted trunc">{meta}</div>}
+          {meta && <span className="client-group-meta trunc">{meta}</span>}
         </div>
         {right && <div className="row-sm" style={{ flex: 'none' }}>{right}</div>}
       </div>

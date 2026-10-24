@@ -30,18 +30,22 @@ export function AvatarStack({ profiles, size = 'sm', max = 4 }: { profiles: Prof
   )
 }
 
-/** Soft background from a hex colour, for client marks. */
-function soft(hex: string) {
-  const h = hex.replace('#', '')
-  if (h.length !== 6) return { background: 'var(--line-xs)', color: 'var(--ink3)' }
-  return { background: `#${h}1F`, color: `#${h}` }
-}
-
+/** Client badge: the logo if there is one, otherwise initials tinted with the brand colour.
+ *  Colours are applied in CSS (.cl.tint) so dark brand colours can be lifted in dark mode. */
 export function ClientMark({ client, size = '', className }: { client?: Client | null; size?: Size; className?: string }) {
   const color = clientColor(client)
+  const name = clientDisplayName(client)
+  if (client?.logo_url) {
+    return (
+      <span className={cn('cl has-logo', size, className)} title={name}>
+        <img src={client.logo_url} alt="" loading="lazy" />
+      </span>
+    )
+  }
+  const valid = /^#[0-9a-f]{6}$/i.test(color)
   return (
-    <span className={cn('cl', size, className)} style={soft(color)} title={clientDisplayName(client)}>
-      {initials(clientDisplayName(client))}
+    <span className={cn('cl', valid && 'tint', size, className)} style={valid ? { ['--cm' as string]: color } : { background: 'var(--line-xs)', color: 'var(--ink3)' }} title={name}>
+      {initials(name)}
     </span>
   )
 }
