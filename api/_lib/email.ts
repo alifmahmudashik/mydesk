@@ -135,6 +135,35 @@ export function renderTemplate(template: string, p: Payload): { subject: string;
         }),
         text: `${p.client} owes ${p.currency} ${p.amount}, due ${p.due} (${p.days} days ago).\n\n${link(p.link)}`,
       }
+    case 'due_soon': {
+      const isTask = p.kind === 'task'
+      const detail = isTask
+        ? `<span style="color:#5E5E6B">${ref}${esc(p.project)}</span><br><br>This task is due <b>tomorrow</b>.`
+        : `<span style="color:#5E5E6B">${esc(p.client)}</span><br><br>This project is due <b>tomorrow</b> and has <b>${esc(p.open_tasks)}</b> open task${Number(p.open_tasks) === 1 ? '' : 's'}.`
+      return {
+        subject: `Due tomorrow: ${p.title}`,
+        html: layout({
+          preheader: isTask ? `Task due tomorrow · ${p.project ?? ''}` : `Project due tomorrow · ${p.client ?? ''}`,
+          heading: `${isTask ? 'Task' : 'Project'} due tomorrow`,
+          bodyHtml: `<b>${title}</b><br>${detail}`,
+          cta: { label: isTask ? 'Open task' : 'Open project', url: link(p.link) },
+          footer: 'One reminder per due date.',
+        }),
+        text: `${isTask ? 'Task' : 'Project'} due tomorrow: ${p.title}\n\n${link(p.link)}`,
+      }
+    }
+    case 'access_granted': {
+      const by = p.actor && p.actor !== 'Someone' ? `${esc(p.actor)} gave you access` : 'You were given access'
+      return {
+        subject: `You now have access to ${p.client ?? 'a client'} in MyDesk`,
+        html: layout({
+          heading: `${by} to ${esc(p.client)}`,
+          bodyHtml: `You can now see and work on every project and task for <b>${esc(p.client)}</b>${Number(p.active) ? `: <b>${esc(p.active)}</b> active project${Number(p.active) === 1 ? '' : 's'} right now` : ''}.`,
+          cta: { label: `Open ${String(p.client ?? 'client')}`, url: link(p.link) },
+        }),
+        text: `You now have access to ${p.client} in MyDesk.\n\n${link(p.link)}`,
+      }
+    }
     case 'invite': {
       const url = `${env.appUrl}/invite/${String(p.token ?? '')}`
       const role = p.role === 'admin' ? 'an admin' : 'a member'

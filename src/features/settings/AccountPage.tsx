@@ -12,7 +12,7 @@ import { ProfileFields, draftPatch, profileDraft, type ProfileDraft } from '@/fe
 import { supabase } from '@/lib/supabase'
 import type { NotificationPrefs } from '@/types'
 
-const DEFAULT_PREFS: Required<NotificationPrefs> = { assigned: true, mentioned: true, comment: false, overdue: true, weekly: true }
+const DEFAULT_PREFS: Required<NotificationPrefs> = { assigned: true, mentioned: true, comment: false, overdue: true, weekly: true, due_soon: true, access: true }
 
 export function AccountPage() {
   const isAdmin = useIsAdmin()
@@ -98,6 +98,8 @@ export function AccountPage() {
               <ToggleRow title="A task is assigned to me" desc="Once per assignment. Editing the task never re-sends." checked={prefs.assigned} onChange={togglePref('assigned')} />
               <ToggleRow title="Someone @mentions me" desc="Once per comment or note." checked={prefs.mentioned} onChange={togglePref('mentioned')} />
               <ToggleRow title="New comment on my tasks" desc={prefs.comment ? 'One email per comment on tasks you’re assigned, created or watch.' : 'Off. These show in Inbox only.'} checked={prefs.comment} onChange={togglePref('comment')} />
+              <ToggleRow title="A task or project is due tomorrow" desc="One reminder the day before: your tasks, and projects you have access to." checked={prefs.due_soon} onChange={togglePref('due_soon')} />
+              {!isAdmin && <ToggleRow title="I'm given access to a client" desc="Once, when someone shares a client and its projects with you." checked={prefs.access} onChange={togglePref('access')} />}
               {isAdmin && <ToggleRow title="A payment becomes overdue" desc="Owner and admins only. Once per payment." checked={prefs.overdue} onChange={togglePref('overdue')} />}
               <ToggleRow title="Weekly summary" desc="Monday 9:00. Open tasks, money in, what's overdue." checked={prefs.weekly} onChange={togglePref('weekly')} />
             </div>

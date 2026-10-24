@@ -41,7 +41,7 @@ export function emptyData(): DemoData {
   }
 }
 
-const prefs = { assigned: true, mentioned: true, comment: false, overdue: true, weekly: true }
+const prefs = { assigned: true, mentioned: true, comment: false, overdue: true, weekly: true, due_soon: true, access: true }
 
 export function demoData(empty = false): DemoData {
   if (empty) return emptyData()

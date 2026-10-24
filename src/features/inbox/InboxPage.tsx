@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { AlertCircle, Check, DollarSign, ExternalLink, Inbox as InboxIcon, Mail, Settings } from 'lucide-react'
+import { AlertCircle, Check, Clock, DollarSign, KeyRound, ExternalLink, Inbox as InboxIcon, Mail, Settings } from 'lucide-react'
 import { useData } from '@/data/store'
 import { addComment } from '@/data/actions'
 import { Topbar, Content, Empty } from '@/components/ui/layout'
@@ -22,6 +22,8 @@ const verb: Record<string, string> = {
   comment: 'commented on',
   completed: 'completed',
   invite_accepted: '',
+  due_soon: '',
+  access_granted: '',
   overdue: '',
   paid: '',
 }
@@ -30,6 +32,8 @@ function NotifIcon({ n }: { n: AppNotification }) {
   const actor = useData((s) => s.profiles.find((p) => p.id === n.actor_id))
   if (n.type === 'overdue') return <span className="av md bad"><AlertCircle className="i i-sm" /></span>
   if (n.type === 'paid') return <span className="av md ok"><DollarSign className="i i-sm" /></span>
+  if (n.type === 'due_soon') return <span className="av md warn"><Clock className="i i-sm" /></span>
+  if (n.type === 'access_granted') return <span className="av md pri"><KeyRound className="i i-sm" /></span>
   return <Avatar profile={actor} size="md" />
 }
 
@@ -39,7 +43,8 @@ function NotifText({ n }: { n: AppNotification }) {
     const [, rest] = n.title.split('Payment overdue')
     return <><b>Payment overdue</b>{rest}</>
   }
-  if (n.type === 'paid' || n.type === 'invite_accepted') return <><b>{n.title}</b></>
+  if (n.type === 'paid' || n.type === 'invite_accepted' || n.type === 'access_granted') return <><b>{n.title}</b></>
+  if (n.type === 'due_soon') return <><b>Due tomorrow</b> · {n.title}</>
   return (
     <>
       <b>{profileDisplayName(actor)}</b> {verb[n.type] ?? ''} <b>{n.type === 'mentioned_note' ? shortProjectTitle(n.title) : n.title}</b>

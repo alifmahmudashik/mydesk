@@ -156,6 +156,45 @@ ok(p3?.role === 'member' && p3.full_name === 'New Person' && cm3 === 1, 'signup 
 n = await q(`select count(*)::int c from notifications where user_id = $1 and type = 'invite_accepted'`, [U1])
 ok(n.rows[0].c === 1, 'inviter is told the invite was accepted')
 
+// Invite acceptance must not also send a separate "you have access" email.
+n = await q(`select count(*)::int c from email_outbox where template = 'access_granted' and user_id = $1`, [U3])
+ok(n.rows[0].c === 0, 'accepting an invite sends no extra access email')
+
+// A member assigning / @mentioning the owner emails the owner too (works both ways).
+const t5 = await as(U2, `insert into tasks (project_id, title, assignee_id) values ('bbbbbbbb-0000-0000-0000-000000000001', 'For the owner', $1) returning id`, [U1])
+n = await q(`select count(*)::int c from email_outbox where template = 'assigned' and user_id = $1`, [U1])
+ok(n.rows[0].c === 1, 'member assigning a task to the owner emails the owner')
+await as(U2, `insert into task_comments (task_id, body, mentions) values ($1, 'ping', $2)`, [t5.rows[0].id, `{${U1}}`])
+n = await q(`select count(*)::int c from email_outbox where template = 'mentioned' and user_id = $1`, [U1])
+ok(n.rows[0].c === 2, 'member @mentioning the owner emails the owner')
+await as(U1, `insert into tasks (project_id, title, assignee_id) values ('bbbbbbbb-0000-0000-0000-000000000001', 'Self', $1)`, [U1])
+n = await q(`select count(*)::int c from email_outbox where template = 'assigned' and user_id = $1`, [U1])
+ok(n.rows[0].c === 1, 'assigning yourself sends nothing')
+
+// Access granted email when a member is given another client.
+await as(U1, `insert into clients (id, name, owner_id) values ('aaaaaaaa-0000-0000-0000-000000000002', 'Tony', $1)`, [U1])
+await as(U1, `insert into client_members (client_id, user_id) values ('aaaaaaaa-0000-0000-0000-000000000002', $1)`, [U2])
+n = await q(`select payload->>'client' as client from email_outbox where template = 'access_granted' and user_id = $1`, [U2])
+ok(n.rows.length === 1 && n.rows[0].client === 'Tony', 'giving a member access to a client emails them once')
+
+// Due soon: a task and a project due tomorrow.
+await as(U1, `update projects set due_date = current_date + 1 where id = 'bbbbbbbb-0000-0000-0000-000000000001'`)
+await as(U1, `update tasks set due_date = current_date + 1 where id = $1`, [t4.rows[0].id])
+await as(null, `select run_daily()`)
+await as(null, `select run_daily()`)
+const dueTask = (await q(`select count(*)::int c from email_outbox where template = 'due_soon' and payload->>'kind' = 'task' and user_id = $1`, [U2])).rows[0].c
+const dueProj = (await q(`select count(distinct user_id)::int c, count(*)::int n from email_outbox where template = 'due_soon' and payload->>'kind' = 'project'`)).rows[0]
+ok(dueTask === 1, 'task due tomorrow emails its assignee once (two daily runs)')
+ok(dueProj.c === 3 && dueProj.n === 3, `project due tomorrow emails owner + members with access, once each (${dueProj.c} people, ${dueProj.n} emails)`)
+
+// Turning the preference off stops it.
+await as(U2, `update profiles set notification_prefs = notification_prefs || '{"due_soon": false}' where id = $1`, [U2])
+await as(U2, `update tasks set due_date = current_date + 1, title = 'x' where id = $1`, [t5.rows[0].id])
+await as(U1, `update tasks set assignee_id = $1 where id = $2`, [U2, t5.rows[0].id])
+await as(null, `select run_daily()`)
+const afterOff = (await q(`select count(*)::int c from email_outbox where template = 'due_soon' and payload->>'kind' = 'task' and user_id = $1`, [U2])).rows[0].c
+ok(afterOff === 1, 'due-soon email respects the person turning it off')
+
 const owner = (await q(`select role from profiles where id = $1`, [U1])).rows[0].role
 ok(owner === 'owner', 'first user is still the owner')
 

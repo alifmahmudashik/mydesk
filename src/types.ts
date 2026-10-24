@@ -200,6 +200,8 @@ export interface NotificationPrefs {
   comment?: boolean
   overdue?: boolean
   weekly?: boolean
+  due_soon?: boolean
+  access?: boolean
 }
 
 /** Grants a user every project (and task) under this client — see migration-005. */
@@ -281,7 +283,7 @@ export interface TaskWatcher {
 
 export type NotificationType =
   | 'assigned' | 'mentioned' | 'mentioned_note' | 'comment' | 'completed'
-  | 'overdue' | 'paid' | 'invite_accepted'
+  | 'overdue' | 'paid' | 'invite_accepted' | 'due_soon' | 'access_granted'
 
 export interface AppNotification {
   id: string

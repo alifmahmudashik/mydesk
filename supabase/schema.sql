@@ -664,7 +664,7 @@ $$ select coalesce(nullif(display_name, ''), nullif(full_name, ''), split_part(e
 create or replace function public.wants_email(p_user uuid, p_kind text) returns boolean
 language sql stable security definer set search_path = public as $$
   select coalesce((select (notification_prefs ->> p_kind)::boolean from profiles where id = p_user),
-                  p_kind in ('assigned','mentioned','overdue','weekly'))
+                  p_kind in ('assigned','mentioned','overdue','weekly','due_soon','access'))
 $$;
 
 -- Queue an email. Returns false (and does nothing) if this dedupe_key was already queued.
@@ -938,7 +938,7 @@ revoke execute on function public.claim_outbox(int, uuid) from public, anon, aut
 -- per due date) + Monday weekly summaries (once per person per week).
 create or replace function public.run_daily() returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare r record; v_admin uuid; v_client text; v_days int; v_overdue int := 0; v_weekly int := 0;
+declare r record; v_admin uuid; v_client text; v_days int; v_overdue int := 0; v_weekly int := 0; v_due int := 0; v_uid uuid;
 begin
   for r in
     select * from payments
@@ -957,6 +957,42 @@ begin
     end loop;
   end loop;
 
+  -- Due soon: open tasks due tomorrow -> their assignee (once per task per due date).
+  for r in
+    select t.id, t.title, t.due_date, t.assignee_id, t.project_id, p.title as project_title, task_ref(t.id) as ref
+    from tasks t join projects p on p.id = t.project_id
+    where t.due_date = current_date + 1 and t.status not in ('done','cancelled') and t.assignee_id is not null
+  loop
+    perform notify(r.assignee_id, 'due_soon', null, 'task', r.id, r.project_id,
+      r.title, 'Task due tomorrow · ' || r.project_title, '/tasks/' || r.id,
+      'due_task:' || r.id || ':' || r.due_date || ':' || r.assignee_id, 'due_soon',
+      jsonb_build_object('kind', 'task', 'project', r.project_title, 'ref', r.ref, 'due', r.due_date));
+    v_due := v_due + 1;
+  end loop;
+
+  -- Due soon: open projects due tomorrow -> owner/admins + members with access to the client.
+  for r in
+    select p.id, p.title, p.due_date, p.client_id,
+      (select coalesce(case when c.use_company_name then c.company_name end, c.name) from clients c where c.id = p.client_id) as client_name,
+      (select count(*) from tasks t where t.project_id = p.id and t.status not in ('done','cancelled')) as open_tasks
+    from projects p
+    where p.due_date = current_date + 1 and p.archived_at is null
+      and p.status not in ('completed','finished','cancelled')
+  loop
+    for v_uid in
+      select id from profiles where role in ('owner','admin')
+      union
+      select user_id from client_members where client_id = r.client_id
+    loop
+      perform notify(v_uid, 'due_soon', null, 'project', r.id, r.id,
+        r.title, 'Project due tomorrow · ' || coalesce(r.client_name, '') || ' · ' || r.open_tasks || ' open task' || case when r.open_tasks = 1 then '' else 's' end,
+        '/projects/' || r.id,
+        'due_project:' || r.id || ':' || r.due_date || ':' || v_uid, 'due_soon',
+        jsonb_build_object('kind', 'project', 'client', r.client_name, 'open_tasks', r.open_tasks, 'due', r.due_date));
+      v_due := v_due + 1;
+    end loop;
+  end loop;
+
   if extract(isodow from now() at time zone 'Asia/Dhaka') = 1 then
     for r in select id, email from profiles loop
       if wants_email(r.id, 'weekly') then
@@ -967,7 +1003,7 @@ begin
       end if;
     end loop;
   end if;
-  return jsonb_build_object('overdue_checked', v_overdue, 'weekly_queued', v_weekly);
+  return jsonb_build_object('overdue_checked', v_overdue, 'due_soon_checked', v_due, 'weekly_queued', v_weekly);
 end $$;
 revoke execute on function public.run_daily() from public, anon, authenticated;
 
@@ -997,11 +1033,13 @@ begin
   on conflict (id) do nothing;
 
   if v_inv.id is not null then
+    perform set_config('mydesk.skip_access_email', 'on', true);
     insert into client_members (client_id, user_id)
     select c, new.id from unnest(v_inv.client_ids) c
     where exists (select 1 from clients where id = c)
     on conflict (client_id, user_id) do nothing;
     update invites set accepted_at = now() where id = v_inv.id;
+    perform set_config('mydesk.skip_access_email', 'off', true);
     if v_inv.invited_by is not null then
       perform notify(v_inv.invited_by, 'invite_accepted', new.id, 'member', new.id, null,
         coalesce(v_name, new.email) || ' accepted your invite', null, '/team/' || new.id,
@@ -1010,6 +1048,31 @@ begin
   end if;
   return new;
 end $$;
+
+-- Access granted: a member is given a client (Team page, project Team checkboxes,
+-- member page) -> one inbox item + email, once per client per person.
+create or replace function public.client_members_after_insert() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare v_client text; v_active int;
+begin
+  if coalesce(current_setting('mydesk.skip_access_email', true), 'off') = 'on' then return null; end if;
+  if new.user_id = auth.uid() then return null; end if;
+  if exists (select 1 from profiles where id = new.user_id and role in ('owner','admin')) then return null; end if;
+  select coalesce(case when use_company_name then company_name end, name) into v_client from clients where id = new.client_id;
+  select count(*) into v_active from projects
+  where client_id = new.client_id and archived_at is null and status not in ('completed','finished','cancelled');
+  perform notify(new.user_id, 'access_granted', auth.uid(), 'client', new.client_id, null,
+    'You now have access to ' || coalesce(v_client, 'a client'),
+    v_active || ' active project' || case when v_active = 1 then '' else 's' end,
+    '/clients/' || new.client_id,
+    'access:' || new.client_id || ':' || new.user_id || ':' || extract(epoch from now())::bigint, 'access',
+    jsonb_build_object('client', v_client, 'active', v_active));
+  return null;
+end $$;
+
+drop trigger if exists client_members_after_insert on client_members;
+create trigger client_members_after_insert after insert on client_members
+  for each row execute function public.client_members_after_insert();
 
 -- Removing a member: unassign their work first; the server then deletes the login.
 create or replace function public.prepare_member_removal(p_user uuid) returns void
