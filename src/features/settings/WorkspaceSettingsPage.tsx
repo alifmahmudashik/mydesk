@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { CurrencySelect } from '@/components/ui/currency-picker'
 import { Briefcase, CreditCard, Edit3, FileText, Plus, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
@@ -146,9 +147,7 @@ export function WorkspaceSettingsPage() {
           <Section id="invoice" title="Invoice defaults">
             <div className="f3">
               <Field label="Default currency">
-                <select className="inp" value={f.default_currency} onChange={(e) => set('default_currency', e.target.value)}>
-                  {SUPPORTED_CURRENCIES.map((c) => <option key={c}>{c}</option>)}
-                </select>
+                <CurrencySelect value={f.default_currency} onChange={(v) => set('default_currency', v)} currencies={[...SUPPORTED_CURRENCIES]} />
               </Field>
               <Field label="Default due in">
                 <select className="inp" value={f.default_due_days} onChange={(e) => set('default_due_days', Number(e.target.value))}>

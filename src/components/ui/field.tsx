@@ -1,5 +1,6 @@
 import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
 import { cn } from '@/lib/utils'
+import { CurrencySelect } from './currency-picker'
 
 export function Field({ label, required, hint, children, className }: { label?: ReactNode; required?: boolean; hint?: ReactNode; children: ReactNode; className?: string }) {
   return (
@@ -87,13 +88,7 @@ export function MoneyInput({ amount, currency, onAmount, onCurrency, currencies 
   return (
     <div className="prefix">
       <span style={{ padding: 0 }}>
-        <select value={currency} onChange={(e) => onCurrency(e.target.value)} aria-label="Currency" style={{ border: 0, background: 'transparent', height: '100%', padding: '0 8px', fontSize: 13, color: 'var(--mute)', cursor: 'pointer', outline: 0 }}>
-          {currencies.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
+        <CurrencySelect variant="prefix" value={currency} onChange={onCurrency} currencies={currencies} />
       </span>
       <input className="inp num" inputMode="decimal" value={amount} onChange={(e) => onAmount(e.target.value.replace(/[^\d.]/g, ''))} placeholder="0.00" />
     </div>

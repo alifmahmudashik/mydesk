@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { CurrencySelect } from '@/components/ui/currency-picker'
 import { createPortal } from 'react-dom'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { addDays, format, parseISO } from 'date-fns'
@@ -284,9 +285,7 @@ export function InvoiceEditor() {
               <div className="f2" style={{ gridTemplateColumns: '1fr 1fr' }}>
                 <Field label="Invoice number"><input className="inp mono" value={f.number} onChange={(e) => set('number', e.target.value)} /></Field>
                 <Field label="Currency">
-                  <select className="inp" value={f.currency} onChange={(e) => set('currency', e.target.value)}>
-                    {SUPPORTED_CURRENCIES.map((c) => <option key={c}>{c}</option>)}
-                  </select>
+                  <CurrencySelect value={f.currency} onChange={(v) => set('currency', v)} currencies={[...SUPPORTED_CURRENCIES]} />
                 </Field>
                 <Field label="Issue date"><DateInput value={f.issue_date} onChange={(v) => set('issue_date', v ?? todayISO())} clearable={false} /></Field>
                 <Field label="Due date"><DateInput value={f.due_date} onChange={(v) => set('due_date', v ?? '')} placeholder="No due date" /></Field>

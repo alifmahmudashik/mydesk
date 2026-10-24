@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { CurrencySelect } from '@/components/ui/currency-picker'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AlertTriangle, Archive, Edit3, FileText, Mail, Plus, Trash2, User, X } from 'lucide-react'
 import { toast } from 'sonner'
@@ -198,9 +199,7 @@ export function ClientSettingsPage() {
             </Field>
             <div className="f2">
               <Field label="Default currency">
-                <select className="inp" value={f.default_currency} onChange={(e) => set('default_currency', e.target.value)}>
-                  {SUPPORTED_CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <CurrencySelect value={f.default_currency} onChange={(v) => set('default_currency', v)} currencies={[...SUPPORTED_CURRENCIES]} />
               </Field>
               <Field label="Payment terms">
                 <select className="inp" value={f.payment_terms} onChange={(e) => set('payment_terms', e.target.value)}>
