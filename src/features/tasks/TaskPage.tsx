@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { Calendar, Check, ChevronDown, ChevronUp, Copy, Eye, EyeOff, Folder, Link2, Mail, MoreHorizontal, Paperclip, Plus, Trash2, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, Copy, Eye, EyeOff, Folder, Link2, Mail, MoreHorizontal, Paperclip, Plus, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
 import { addComment, assignTask, deleteTask, duplicateTask, setTaskStatus, toggleSubtask, updateTask } from '@/data/actions'
@@ -13,6 +13,7 @@ import { PrioBars, StatusRing } from '@/components/ui/pill'
 import { RichText } from '@/components/ui/rich-text'
 import { Composer, MentionText } from '@/components/ui/mentions'
 import { ConfirmDialog, Modal } from '@/components/ui/modal'
+import { DateButton } from '@/components/ui/date-button'
 import { Field } from '@/components/ui/field'
 import { labelTone } from '@/components/domain/TaskRow'
 import { supabase } from '@/lib/supabase'
@@ -423,17 +424,14 @@ export function TaskPage() {
             </Menu>
 
             <span>Due date</span>
-            <label className={`prop ${due !== null && due < 0 && task.status !== 'done' ? 't-bad' : due !== null && due <= 2 && task.status !== 'done' ? 't-warn' : ''}`} style={{ position: 'relative' }}>
-              <Calendar className="i i-sm" />
+            <DateButton
+              label="Due date"
+              value={task.due_date}
+              className={due !== null && due < 0 && task.status !== 'done' ? 't-bad' : due !== null && due <= 2 && task.status !== 'done' ? 't-warn' : ''}
+              onChange={(v) => updateTask(task, { due_date: v }, v ? `set due date to ${formatDate(v)}` : 'removed the due date')}
+            >
               {task.due_date ? format(parseISO(task.due_date), 'EEE, MMM d') : <span className="faint">Add date</span>}
-              <input
-                type="date"
-                value={task.due_date ?? ''}
-                onChange={(e) => updateTask(task, { due_date: e.target.value || null }, e.target.value ? `set due date to ${formatDate(e.target.value)}` : 'removed the due date')}
-                style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
-                aria-label="Due date"
-              />
-            </label>
+            </DateButton>
 
             <span>Labels</span>
             <div className="row-sm wrap" style={{ padding: '4px 8px' }}>
