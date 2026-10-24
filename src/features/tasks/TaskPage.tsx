@@ -23,6 +23,7 @@ import { priorityMeta, taskRing, taskStatus } from '@/lib/status'
 import { copyText } from '@/lib/utils'
 import type { Priority, Subtask, TaskAttachment, TaskStatus, TaskWatcher, TimeEntry } from '@/types'
 import { format, parseISO } from 'date-fns'
+import { DateInput } from '@/components/ui/date-picker'
 
 const STATUSES: TaskStatus[] = ['todo', 'in_progress', 'review', 'done']
 
@@ -591,7 +592,7 @@ function LogTimeModal({ open, onClose, taskId, projectId, taskTitle }: { open: b
             <input data-autofocus className="inp" value={f.duration} onChange={(e) => setF({ ...f, duration: e.target.value })} placeholder="1h 30m" />
           </Field>
           <Field label="Date">
-            <input className="inp" type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} />
+            <DateInput value={f.date} onChange={(v) => setF({ ...f, date: v ?? todayISO() })} clearable={false} />
           </Field>
         </div>
         <Field label="Note">

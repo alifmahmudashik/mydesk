@@ -2,8 +2,12 @@
 :root {
   color-scheme: light;
   --bg: #F4F4F6; --panel: #fff; --soft: #F7F7F9; --soft2: #FAFAFB;
-  --line: #ECECEF; --line2: #E3E3E8; --line3: #D4D4DA;
-  --line-s: #EEEEF1; --line-xs: #F1F1F4; --line-main: #E6E6EA;
+  /* Borders a step stronger than the original design, so cards and rows separate
+     clearly on a white page without needing shadows. */
+  --line: #DFDFE6; --line2: #D6D6DE; --line3: #C4C4CE;
+  --line-s: #E4E4EA; --line-xs: #EAEAEF; --line-main: #DCDCE3;
+  /* Very light grey work area so white cards and lists stand out from it. */
+  --canvas: #F8F8FA;
   --ink: #0F0F14; --ink2: #2A2A33; --ink3: #45454F; --mute: #5E5E6B; --faint: #6B6B78;
   --on-ink: #fff;
   --pri: #4F46E5; --pri-h: #4338CA; --pri-soft: #EEF0FF; --pri-mid: #C7C9F5; --pri-deep: #312E81;
@@ -24,6 +28,7 @@
   --bg: #1A1A1F; --panel: #222228; --soft: #2A2A31; --soft2: #26262C;
   --line: #34343C; --line2: #3C3C45; --line3: #4B4B56;
   --line-s: #303037; --line-xs: #2C2C33; --line-main: #34343C;
+  --canvas: #1E1E23;
   --ink: #F2F2F5; --ink2: #DCDCE2; --ink3: #C3C3CC; --mute: #A6A6B1; --faint: #92929E;
   --on-ink: #16161A;
   --pri: #6D70F5; --pri-h: #8B8FFA; --pri-soft: rgba(109, 112, 245, .18); --pri-mid: #4B4DA6; --pri-deep: #B4BCFD;

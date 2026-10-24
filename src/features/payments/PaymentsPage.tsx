@@ -20,6 +20,7 @@ import { clientDisplayName, effectivePaymentStatus, isOpenPayment, sumByCurrency
 import { daysUntil, formatDate, formatMoney, lateLabel } from '@/lib/format'
 import { paymentStatus, paymentTerms } from '@/lib/status'
 import type { Payment } from '@/types'
+import { DateInput } from '@/components/ui/date-picker'
 
 type Tab = 'open' | 'overdue' | 'paid'
 
@@ -322,7 +323,7 @@ function SetDueDatesModal({ open, onClose, rows, projects }: { open: boolean; on
                 <div className="t trunc" style={{ fontSize: 13.5 }}>{paymentTitle(p)}</div>
                 <div className="s">{clientDisplayName(c)} · {formatMoney(p.amount, p.currency)}</div>
               </div>
-              <input className="inp sm" type="date" style={{ width: 160 }} value={dates[p.id] ?? ''} onChange={(e) => setDates((d) => ({ ...d, [p.id]: e.target.value }))} />
+              <DateInput sm style={{ width: 200 }} value={dates[p.id]} onChange={(v) => setDates((d) => ({ ...d, [p.id]: v ?? '' }))} />
             </div>
           )
         })}

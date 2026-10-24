@@ -11,6 +11,7 @@ import { celebrateFrom } from '@/lib/confetti'
 import { clientDisplayName, effectivePaymentStatus } from '@/lib/derive'
 import { formatDate, formatMoney, lateLabel, todayISO } from '@/lib/format'
 import type { Payment, PaymentStatus } from '@/types'
+import { DateInput } from '@/components/ui/date-picker'
 
 interface Props {
   open: boolean
@@ -182,11 +183,11 @@ export function PaymentModal({ open, onClose, payment, defaults = {}, onRemind }
               <Select value={f.status} onChange={(e) => set('status', e.target.value as PaymentStatus)} options={[{ value: 'unpaid', label: 'Unpaid' }, { value: 'partial', label: 'Partial' }, { value: 'paid', label: 'Paid' }, { value: 'overdue', label: 'Overdue' }, { value: 'refunded', label: 'Refunded' }]} />
             </Field>
             <Field label="Due date" hint={!f.due_date && f.status !== 'paid' ? 'Without a due date it never turns overdue.' : undefined}>
-              <input className="inp" type="date" value={f.due_date} onChange={(e) => set('due_date', e.target.value)} />
+              <DateInput value={f.due_date} onChange={(v) => set('due_date', v ?? '')} placeholder="No due date" />
             </Field>
             {f.status === 'paid' || payment ? (
               <Field label="Paid on">
-                <input className="inp" type="date" value={f.payment_date} onChange={(e) => set('payment_date', e.target.value)} />
+                <DateInput value={f.payment_date} onChange={(v) => set('payment_date', v ?? '')} placeholder="Not paid yet" />
               </Field>
             ) : null}
             <Field label="Method">

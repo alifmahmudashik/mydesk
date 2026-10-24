@@ -10,6 +10,7 @@ import { eligibleAssignees, OPEN_PROJECT, profileDisplayName, shortProjectTitle 
 import { parseDuration } from '@/lib/format'
 import { options, priorityMeta, taskStatus } from '@/lib/status'
 import type { Priority, TaskStatus } from '@/types'
+import { DateInput } from '@/components/ui/date-picker'
 
 interface Props {
   open: boolean
@@ -109,7 +110,7 @@ export function TaskCreateModal({ open, onClose, defaults = {} }: Props) {
             <Select value={f.priority} onChange={(e) => set('priority', e.target.value as Priority)} options={options(priorityMeta)} />
           </Field>
           <Field label="Due date">
-            <input className="inp" type="date" value={f.due_date} onChange={(e) => set('due_date', e.target.value)} />
+            <DateInput value={f.due_date} onChange={(v) => set('due_date', v ?? '')} placeholder="No due date" />
           </Field>
           <Field label="Estimate">
             <input className="inp" placeholder="e.g. 3h" value={f.estimate} onChange={(e) => set('estimate', e.target.value)} />

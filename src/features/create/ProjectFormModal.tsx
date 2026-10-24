@@ -11,6 +11,7 @@ import { SUPPORTED_CURRENCIES } from '@/lib/currency'
 import { clientDisplayName, deriveProjectKey, profileDisplayName } from '@/lib/derive'
 import { options, priorityMeta, projectStatus } from '@/lib/status'
 import type { BillingType, ClientMember, Priority, Project, ProjectStatus } from '@/types'
+import { DateInput } from '@/components/ui/date-picker'
 
 interface Props {
   open: boolean
@@ -140,10 +141,10 @@ export function ProjectFormModal({ open, onClose, project, defaults = {} }: Prop
             <Select value={f.billing_type} onChange={(e) => set('billing_type', e.target.value as BillingType)} options={[{ value: 'retainer', label: 'Monthly retainer' }, { value: 'fixed', label: 'Fixed price' }, { value: 'hourly', label: 'Hourly' }]} />
           </Field>
           <Field label="Start date">
-            <input className="inp" type="date" value={f.start_date} onChange={(e) => set('start_date', e.target.value)} />
+            <DateInput value={f.start_date} onChange={(v) => set('start_date', v ?? '')} placeholder="Start date" />
           </Field>
           <Field label="Due date">
-            <input className="inp" type="date" value={f.due_date} onChange={(e) => set('due_date', e.target.value)} />
+            <DateInput value={f.due_date} onChange={(v) => set('due_date', v ?? '')} placeholder="Due date" />
           </Field>
           {isAdmin && (
             <Field label="Budget" hint={!project ? 'A payment is created automatically when you set a budget.' : undefined}>

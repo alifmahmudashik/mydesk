@@ -19,6 +19,7 @@ import { clientColor, clientDisplayName, effectivePaymentStatus, invoicePaymentS
 import { formatDate, formatMoney, todayISO } from '@/lib/format'
 import { paymentStatus, paymentTerms } from '@/lib/status'
 import type { Client, Invoice, InvoiceLineItem, Payment } from '@/types'
+import { DateInput } from '@/components/ui/date-picker'
 
 const COLORS = ['#4F46E5', '#DB2777', '#0284C7', '#0D9488', '#0F0F14']
 
@@ -287,8 +288,8 @@ export function InvoiceEditor() {
                     {SUPPORTED_CURRENCIES.map((c) => <option key={c}>{c}</option>)}
                   </select>
                 </Field>
-                <Field label="Issue date"><input className="inp" type="date" value={f.issue_date} onChange={(e) => set('issue_date', e.target.value)} /></Field>
-                <Field label="Due date"><input className="inp" type="date" value={f.due_date} onChange={(e) => set('due_date', e.target.value)} /></Field>
+                <Field label="Issue date"><DateInput value={f.issue_date} onChange={(v) => set('issue_date', v ?? todayISO())} clearable={false} /></Field>
+                <Field label="Due date"><DateInput value={f.due_date} onChange={(v) => set('due_date', v ?? '')} placeholder="No due date" /></Field>
               </div>
             </Section>
 
