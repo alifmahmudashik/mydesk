@@ -354,7 +354,7 @@ a.client-chip:hover { background: color-mix(in srgb, var(--cc) 20%, transparent)
 .tp-grid button { height: 30px; border: 0; border-radius: 7px; background: none; font-size: 13px; font-variant-numeric: tabular-nums; color: var(--ink2); cursor: pointer; transition: background .12s; }
 .tp-grid button:hover { background: var(--hover); color: var(--ink); }
 .tp-grid button.on { background: var(--pri); color: #fff; font-weight: 600; }
-.tp-quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 8px 10px 10px; border-top: 1px solid var(--line-s); background: var(--soft2); }
-.tp-chip { height: 26px; padding: 0; border: 1px solid var(--line2); border-radius: 7px; background: var(--panel); font-size: 11.5px; font-weight: 500; color: var(--ink2); cursor: pointer; white-space: nowrap; }
+.tp-quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 10px 12px 12px; border-top: 1px solid var(--line-s); background: var(--soft2); }
+.tp-chip { height: 28px; padding: 0 4px; border: 1px solid var(--line2); border-radius: 7px; background: var(--panel); font-size: 12px; font-weight: 500; color: var(--ink2); cursor: pointer; white-space: nowrap; }
 .tp-chip:hover { background: var(--hover); }
 .tp-chip.on { background: var(--pri-soft); border-color: var(--pri-mid); color: var(--pri-h); }

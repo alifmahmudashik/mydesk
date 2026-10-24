@@ -82,14 +82,14 @@ function TimePopover({ anchor, value, onChange, onClose }: { anchor: HTMLElement
         <span className="tp-h">Minute</span>
         <div className="tp-grid">
           {MINUTES.map((x) => (
-            <button key={x} type="button" className={cn(x === m && 'on')} onClick={() => { set(h, x); onClose() }}>:{pad(x)}</button>
+            <button key={x} type="button" className={cn(x === m && 'on')} onClick={() => { set(h, x); onClose() }}>{pad(x)}</button>
           ))}
         </div>
       </div>
       <div className="tp-quick">
         {QUICK.map((q) => (
           <button key={q} type="button" className={cn('tp-chip', q === value && 'on')} onClick={() => { onChange(q); onClose() }}>
-            {label12(q)}
+            {label12(q).replace(":00", "")}
           </button>
         ))}
       </div>
