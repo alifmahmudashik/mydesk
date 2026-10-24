@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeftRight, ArrowRight, ChevronDown, Radio } from 'lucide-react'
 import { useData } from '@/data/store'
+import { useIsAdmin } from '@/hooks/usePermissions'
 import { Topbar, Content, PageHead, Empty } from '@/components/ui/layout'
 import { Menu, MenuItem } from '@/components/ui/menu'
 import { ClientMark } from '@/components/ui/avatar'
@@ -115,6 +116,7 @@ type Dir = 'mine' | 'theirs'
 
 export function ClockPage() {
   const { clients, me } = useData()
+  const isAdmin = useIsAdmin()
   const myTz = validTz(me?.timezone) ? me!.timezone! : BROWSER_TZ
   const active = clients.filter((c) => c.status !== 'archived')
   const withTz = useMemo(
@@ -140,7 +142,7 @@ export function ClockPage() {
           <p className="xs muted" style={{ marginTop: -8 }}>
             Not shown (no timezone):{' '}
             {missing.map((c, i) => (
-              <span key={c.id}>{i > 0 && ', '}<Link className="clk-link" to={`/clients/${c.id}/settings#contact`}>{clientDisplayName(c)}</Link></span>
+              <span key={c.id}>{i > 0 && ', '}{isAdmin ? <Link className="clk-link" to={`/clients/${c.id}/settings#contact`}>{clientDisplayName(c)}</Link> : clientDisplayName(c)}</span>
             ))}
           </p>
         )}
