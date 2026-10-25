@@ -26,6 +26,9 @@ const verb: Record<string, string> = {
   access_granted: '',
   overdue: '',
   paid: '',
+  learning_shared: 'shared something for you to learn:',
+  learning_done: 'finished learning',
+  topic_added: 'added you to the learning topic',
 }
 
 function NotifIcon({ n }: { n: AppNotification }) {
@@ -148,7 +151,7 @@ export function InboxPage() {
                       {selected.emailed && <span className="xs faint row-sm"><Mail className="i i-xs" />Emailed</span>}
                       {selected.link && (
                         <Link className="btn btn-sm" to={selected.link}>
-                          Open {task ? 'task' : selected.entity === 'payment' ? 'payment' : selected.entity === 'member' ? 'profile' : 'project'}
+                          Open {task ? 'task' : selected.entity === 'payment' ? 'payment' : selected.entity === 'member' ? 'profile' : selected.entity === 'learning' ? 'resource' : selected.entity === 'learning_topic' ? 'topic' : 'project'}
                           <ExternalLink className="i i-sm" />
                         </Link>
                       )}

@@ -2,7 +2,7 @@ import { useEffect, type ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   Bell, Briefcase, ChartColumn, ChevronsUpDown, Clock, CreditCard, FileText, Folder, Home, Inbox, ListChecks,
-  LogOut, Moon, Search, Settings, Sun, User, Users,
+  LogOut, Moon, Search, Settings, Sprout, Sun, User, Users,
 } from 'lucide-react'
 import { useData } from '@/data/store'
 import { useUI } from '@/data/ui'
@@ -29,7 +29,7 @@ function NavItem({ to, icon, children, end, extra }: { to: string; icon: ReactNo
 
 export function AppShell({ children }: { children: ReactNode }) {
   const isAdmin = useIsAdmin()
-  const { me, notifications, tasks, projects, clients, payments, invoiceSettings, demoMode } = useData()
+  const { me, notifications, tasks, projects, clients, payments, invoiceSettings, demoMode, learning } = useData()
   const { openCreate, setSearch } = useUI()
   const navigate = useNavigate()
   const location = useLocation()
@@ -91,6 +91,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (!location.hash) window.scrollTo({ top: 0 })
   }, [location.pathname, location.hash])
 
+  const toLearn = learning.filter((i) => i.assignee_id === me?.id && i.status !== 'done').length
+
   return (
     <div className="app">
       <aside className="side" aria-label="Sidebar">
@@ -119,6 +121,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <NavItem to="/clients" icon={<Briefcase className="i" />} extra={<span className="cnt">{activeClients}</span>}>Clients</NavItem>
           <NavItem to="/clock" icon={<Clock className="i" />}>Clock</NavItem>
           <NavItem to="/team" icon={<Users className="i" />}>Team</NavItem>
+          <NavItem to="/improvement" icon={<Sprout className="i" />} extra={toLearn ? <span className="cnt">{toLearn}</span> : null}>Improvement</NavItem>
         </nav>
         {sideClients.length > 0 && (
           <div className="nav pins">

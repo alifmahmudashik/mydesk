@@ -1,9 +1,5 @@
 import { addDays, formatISO, subDays, subHours, subMinutes } from 'date-fns'
-import type {
-  AccessItem, ActivityEvent, AppNotification, Client, ClientMember, Invite, Invoice, InvoiceSettings,
-  Payment, PaymentReminder, Profile, Project, ProjectNote, Subtask, Task, TaskAttachment, TaskComment,
-  TaskWatcher, TimeEntry,
-} from '@/types'
+import type { AccessItem, ActivityEvent, AppNotification, Client, ClientMember, Invite, Invoice, InvoiceSettings, Payment, PaymentReminder, Profile, Project, ProjectNote, Subtask, Task, TaskAttachment, TaskComment, TaskWatcher, TimeEntry, LearningGoal, LearningItem, LearningTopic, LearningLesson, LearningResource, LearningTopicMember, LearningProgress } from '@/types'
 
 // Dates are relative to "today" so demo mode always shows live overdue/upcoming states.
 const day = (offset: number) => formatISO(addDays(new Date(), offset), { representation: 'date' })
@@ -31,6 +27,13 @@ export interface DemoData {
   notifications: AppNotification[]
   invites: Invite[]
   reminders: PaymentReminder[]
+  learning: LearningItem[]
+  goals: LearningGoal[]
+  topics: LearningTopic[]
+  lessons: LearningLesson[]
+  resources: LearningResource[]
+  topicMembers: LearningTopicMember[]
+  progress: LearningProgress[]
 }
 
 export function emptyData(): DemoData {
@@ -38,6 +41,7 @@ export function emptyData(): DemoData {
     clients: [], projects: [], tasks: [], accessItems: [], payments: [], notes: [], activity: [],
     profiles: [], clientMembers: [], invoices: [], invoiceSettings: null, subtasks: [], comments: [],
     attachments: [], timeEntries: [], watchers: [], notifications: [], invites: [], reminders: [],
+    learning: [], goals: [], topics: [], lessons: [], resources: [], topicMembers: [], progress: [],
   }
 }
 
@@ -228,6 +232,57 @@ export function demoData(empty = false): DemoData {
   return {
     clients, projects, tasks, accessItems, payments, notes, activity, profiles, clientMembers,
     invoices, invoiceSettings, subtasks, comments, attachments, timeEntries, watchers, notifications,
-    invites, reminders,
+    invites, reminders, learning: demoLearning(), goals: demoGoals(), ...demoTopics(),
   }
+}
+
+function demoGoals(): LearningGoal[] {
+  const ago = (d: number) => new Date(Date.now() - d * 86400000).toISOString()
+  return [
+    { id: 'lg1', user_id: 'u2', created_by: 'u2', title: 'Get confident with server-side GTM', target_date: null, status: 'active', created_at: ago(20) },
+    { id: 'lg2', user_id: 'u1', created_by: 'u1', title: 'Learn Looker Studio dashboards', target_date: null, status: 'active', created_at: ago(15) },
+  ]
+}
+
+function demoLearning(): LearningItem[] {
+  const ago = (d: number) => new Date(Date.now() - d * 86400000).toISOString()
+  return [
+    { id: 'li1', created_by: 'u1', assignee_id: 'u2', goal_id: 'lg1', title: 'Server-side tagging fundamentals', url: 'https://www.youtube.com/watch?v=example', kind: 'video', note: 'Watch this before the Stape setup next week.', status: 'learning', started_at: ago(2), created_at: ago(3) },
+    { id: 'li2', created_by: 'u2', assignee_id: 'u2', goal_id: 'lg1', title: 'Simo Ahava: GTM server container guide', url: 'https://www.simoahava.com/', kind: 'article', status: 'done', takeaway: 'Run the server container on a subdomain so cookies stay first-party.', started_at: ago(6), completed_at: ago(4), created_at: ago(7) },
+    { id: 'li3', created_by: 'u1', assignee_id: 'u1', goal_id: 'lg2', title: 'Looker Studio blending explained', url: 'https://support.google.com/looker-studio', kind: 'article', status: 'todo', created_at: ago(1) },
+  ]
+}
+
+function demoTopics() {
+  const ago = (d: number) => new Date(Date.now() - d * 86400000).toISOString()
+  const topics: LearningTopic[] = [
+    { id: 'tp1', created_by: 'u1', title: 'Google Tag Manager', description: 'From a clean container to server-side tagging. Everyone on tracking work should finish this.', color: '#2563EB', created_at: ago(10) },
+    { id: 'tp2', created_by: 'u2', title: 'Google Analytics 4', description: 'Events, conversions and the reports clients actually ask about.', color: '#D97706', created_at: ago(6) },
+  ]
+  const lessons: LearningLesson[] = [
+    { id: 'ls1', topic_id: 'tp1', created_by: 'u1', title: 'How to set it up', details: 'Create the account and container, install the snippet, and check it with Tag Assistant.', position: 1, created_at: ago(10) },
+    { id: 'ls2', topic_id: 'tp1', created_by: 'u1', title: 'Tags, triggers and variables', details: 'How the three pieces fit together. Build a GA4 page_view and a click trigger.', position: 2, created_at: ago(10) },
+    { id: 'ls3', topic_id: 'tp1', created_by: 'u1', title: 'Data layer basics', details: 'What developers push and how to read it in GTM.', position: 3, created_at: ago(9) },
+    { id: 'ls4', topic_id: 'tp1', created_by: 'u2', title: 'Server-side tagging with Stape', position: 4, created_at: ago(5) },
+    { id: 'ls5', topic_id: 'tp2', created_by: 'u2', title: 'Events vs. conversions', position: 1, created_at: ago(6) },
+    { id: 'ls6', topic_id: 'tp2', created_by: 'u2', title: 'Explorations for client reports', position: 2, created_at: ago(6) },
+  ]
+  const resources: LearningResource[] = [
+    { id: 'rs1', lesson_id: 'ls1', created_by: 'u1', title: 'Google Tag Manager setup walkthrough', url: 'https://www.youtube.com/watch?v=example', kind: 'video', created_at: ago(10) },
+    { id: 'rs2', lesson_id: 'ls1', created_by: 'u1', title: 'Official GTM install guide', url: 'https://support.google.com/tagmanager', kind: 'article', created_at: ago(10) },
+    { id: 'rs3', lesson_id: 'ls2', created_by: 'u1', title: 'Triggers explained', url: 'https://www.simoahava.com/', kind: 'article', note: 'Read the part on trigger groups.', created_at: ago(9) },
+    { id: 'rs4', lesson_id: 'ls4', created_by: 'u2', title: 'Stape server GTM course', url: 'https://stape.io/', kind: 'course', created_at: ago(5) },
+  ]
+  const topicMembers: LearningTopicMember[] = [
+    { id: 'tm1', topic_id: 'tp1', user_id: 'u1', added_by: 'u1', created_at: ago(10) },
+    { id: 'tm2', topic_id: 'tp1', user_id: 'u2', added_by: 'u1', created_at: ago(10) },
+    { id: 'tm3', topic_id: 'tp1', user_id: 'u3', added_by: 'u1', created_at: ago(9) },
+    { id: 'tm4', topic_id: 'tp2', user_id: 'u2', added_by: 'u2', created_at: ago(6) },
+  ]
+  const progress: LearningProgress[] = [
+    { id: 'pg1', lesson_id: 'ls1', user_id: 'u2', status: 'done', takeaway: 'Always publish a version with a clear name so rollbacks are easy.', completed_at: ago(4), created_at: ago(8) },
+    { id: 'pg2', lesson_id: 'ls2', user_id: 'u2', status: 'learning', created_at: ago(2) },
+    { id: 'pg3', lesson_id: 'ls1', user_id: 'u1', status: 'done', completed_at: ago(9), created_at: ago(9) },
+  ]
+  return { topics, lessons, resources, topicMembers, progress }
 }

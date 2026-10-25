@@ -288,6 +288,7 @@ export interface TaskWatcher {
 export type NotificationType =
   | 'assigned' | 'mentioned' | 'mentioned_note' | 'comment' | 'completed'
   | 'overdue' | 'paid' | 'invite_accepted' | 'due_soon' | 'access_granted'
+  | 'learning_shared' | 'learning_done' | 'topic_added'
 
 export interface AppNotification {
   id: string
@@ -323,5 +324,92 @@ export interface PaymentReminder {
   sent_by?: string | null
   to_email: string
   subject?: string | null
+  created_at: string
+}
+
+// ---------------------------------------------------------------- improvement (team learning)
+
+export type LearningKind = 'article' | 'video' | 'course' | 'book' | 'podcast' | 'tool' | 'other'
+export type LearningStatus = 'todo' | 'learning' | 'done'
+
+/** One resource for one person to learn (sharing with several people makes one row each). */
+export interface LearningItem {
+  id: string
+  created_by?: string | null
+  assignee_id: string
+  goal_id?: string | null
+  title: string
+  url?: string | null
+  kind: LearningKind
+  /** Why it's worth learning (from whoever shared it). */
+  note?: string | null
+  status: LearningStatus
+  /** What the learner took away from it. */
+  takeaway?: string | null
+  started_at?: string | null
+  completed_at?: string | null
+  created_at: string
+}
+
+export interface LearningGoal {
+  id: string
+  user_id: string
+  created_by?: string | null
+  title: string
+  target_date?: string | null
+  status: 'active' | 'done'
+  created_at: string
+}
+
+/** A shared learning path, e.g. "Google Tag Manager". */
+export interface LearningTopic {
+  id: string
+  created_by?: string | null
+  title: string
+  description?: string | null
+  color?: string | null
+  archived_at?: string | null
+  created_at: string
+}
+
+/** A step inside a topic, e.g. "How to set it up". */
+export interface LearningLesson {
+  id: string
+  topic_id: string
+  created_by?: string | null
+  title: string
+  details?: string | null
+  position: number
+  created_at: string
+}
+
+/** A link / video / doc attached to a lesson. */
+export interface LearningResource {
+  id: string
+  lesson_id: string
+  created_by?: string | null
+  title: string
+  url?: string | null
+  kind: LearningKind
+  note?: string | null
+  created_at: string
+}
+
+export interface LearningTopicMember {
+  id: string
+  topic_id: string
+  user_id: string
+  added_by?: string | null
+  created_at: string
+}
+
+/** One person's progress on one lesson. */
+export interface LearningProgress {
+  id: string
+  lesson_id: string
+  user_id: string
+  status: 'learning' | 'done'
+  takeaway?: string | null
+  completed_at?: string | null
   created_at: string
 }

@@ -198,5 +198,25 @@ ok(afterOff === 1, 'due-soon email respects the person turning it off')
 const owner = (await q(`select role from profiles where id = $1`, [U1])).rows[0].role
 ok(owner === 'owner', 'first user is still the owner')
 
+// Improvement: sharing a resource notifies the learner; finishing it notifies the sharer.
+const li = await as(U1, `insert into learning_items (title, assignee_id, created_by) values ('Server-side GTM course', $1, $2) returning id`, [U2, U1])
+const shared = (await q(`select count(*)::int c from notifications where type = 'learning_shared' and user_id = $1`, [U2])).rows[0].c
+ok(shared === 1, 'sharing a learning resource notifies the learner')
+await as(U2, `update learning_items set status = 'done', takeaway = 'Use a custom loader' where id = $1`, [li.rows[0].id])
+const doneN = (await q(`select count(*)::int c from notifications where type = 'learning_done' and user_id = $1`, [U1])).rows[0].c
+ok(doneN === 1, 'finishing it notifies the person who shared it')
+
+// Topics: lessons + resources + per-person progress; adding someone to a topic notifies them.
+const topic = await as(U1, `insert into learning_topics (title, created_by) values ('Google Tag Manager', $1) returning id`, [U1])
+const lesson = await as(U1, `insert into learning_lessons (topic_id, title, position, created_by) values ($1, 'How to set it up', 1, $2) returning id`, [topic.rows[0].id, U1])
+await as(U1, `insert into learning_resources (lesson_id, title, url, kind, created_by) values ($1, 'Setup video', 'https://youtube.com/x', 'video', $2)`, [lesson.rows[0].id, U1])
+await as(U1, `insert into learning_topic_members (topic_id, user_id, added_by) values ($1, $2, $3)`, [topic.rows[0].id, U2, U1])
+const added = (await q(`select count(*)::int c from notifications where type = 'topic_added' and user_id = $1`, [U2])).rows[0].c
+ok(added === 1, 'adding someone to a topic notifies them')
+await as(U2, `insert into learning_progress (lesson_id, user_id, status, completed_at) values ($1, $2, 'done', now())`, [lesson.rows[0].id, U2])
+await as(U1, `delete from learning_topics where id = $1`, [topic.rows[0].id])
+const left = (await q(`select (select count(*) from learning_lessons) + (select count(*) from learning_resources) + (select count(*) from learning_progress) + (select count(*) from learning_topic_members) as n`)).rows[0].n
+ok(Number(left) === 0, 'deleting a topic removes its lessons, resources, members and progress')
+
 console.log(failures ? `\n${failures} check(s) failed` : '\nAll schema checks passed')
 process.exit(failures ? 1 : 0)

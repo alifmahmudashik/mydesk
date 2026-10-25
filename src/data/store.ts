@@ -6,9 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
 import { deriveProjectKey } from '@/lib/derive'
 import type {
-  AccessItem, ActivityAction, ActivityEntity, ActivityEvent, AppNotification, Client, ClientMember,
-  Invite, Invoice, InvoiceSettings, Payment, PaymentReminder, Profile, Project, ProjectNote, Subtask,
-  Task, TaskAttachment, TaskComment, TaskWatcher, TimeEntry,
+  AccessItem, ActivityAction, ActivityEntity, ActivityEvent, AppNotification, Client, ClientMember, Invite, Invoice, InvoiceSettings, Payment, PaymentReminder, Profile, Project, ProjectNote, Subtask, Task, TaskAttachment, TaskComment, TaskWatcher, TimeEntry, LearningGoal, LearningItem, LearningTopic, LearningLesson, LearningResource, LearningTopicMember, LearningProgress,
 } from '@/types'
 
 const LOCAL_KEY = 'mydesk-data-v3'
@@ -18,12 +16,14 @@ export type Table =
   | 'clients' | 'projects' | 'tasks' | 'access_items' | 'payments' | 'project_notes'
   | 'profiles' | 'client_members' | 'invoices'
   | 'subtasks' | 'task_comments' | 'task_attachments' | 'time_entries' | 'task_watchers'
-  | 'notifications' | 'invites' | 'payment_reminders'
+  | 'notifications' | 'invites' | 'payment_reminders' | 'learning_items' | 'learning_goals'
+  | 'learning_topics' | 'learning_lessons' | 'learning_resources' | 'learning_topic_members' | 'learning_progress'
 
 type StateKey =
   | 'clients' | 'projects' | 'tasks' | 'accessItems' | 'payments' | 'notes' | 'profiles'
   | 'clientMembers' | 'invoices' | 'subtasks' | 'comments' | 'attachments' | 'timeEntries'
-  | 'watchers' | 'notifications' | 'invites' | 'reminders'
+  | 'watchers' | 'notifications' | 'invites' | 'reminders' | 'learning' | 'goals'
+  | 'topics' | 'lessons' | 'resources' | 'topicMembers' | 'progress'
 
 const tableToKey: Record<Table, StateKey> = {
   clients: 'clients',
@@ -43,6 +43,13 @@ const tableToKey: Record<Table, StateKey> = {
   notifications: 'notifications',
   invites: 'invites',
   payment_reminders: 'reminders',
+  learning_items: 'learning',
+  learning_goals: 'goals',
+  learning_topics: 'topics',
+  learning_lessons: 'lessons',
+  learning_resources: 'resources',
+  learning_topic_members: 'topicMembers',
+  learning_progress: 'progress',
 }
 
 type AnyRow = { id: string; created_at: string }
@@ -58,6 +65,10 @@ export interface LogInput {
 
 interface DataState extends DemoData {
   ready: boolean
+  /** False when the learning tables don't exist yet (SQL not run). */
+  learningReady: boolean
+  /** False when the topic tables don't exist yet (improvement-topics.sql not run). */
+  topicsReady: boolean
   demoMode: boolean
   me: Profile | null
   /** Ids of teammates with the app open right now (realtime presence). */
@@ -80,6 +91,8 @@ function snapshot(s: DataState): DemoData {
     clientMembers: s.clientMembers, invoices: s.invoices, invoiceSettings: s.invoiceSettings,
     subtasks: s.subtasks, comments: s.comments, attachments: s.attachments, timeEntries: s.timeEntries,
     watchers: s.watchers, notifications: s.notifications, invites: s.invites, reminders: s.reminders,
+    learning: s.learning, goals: s.goals, topics: s.topics, lessons: s.lessons, resources: s.resources,
+    topicMembers: s.topicMembers, progress: s.progress,
   }
 }
 
@@ -256,6 +269,8 @@ export const useData = create<DataState>((set, get) => {
   return {
     ...demoData(true),
     ready: false,
+    learningReady: true,
+    topicsReady: true,
     demoMode: !supabase,
     me: null,
     onlineIds: [],
@@ -304,6 +319,13 @@ export const useData = create<DataState>((set, get) => {
           all<Invite>('invites'),
           all<PaymentReminder>('payment_reminders'),
           sb.auth.getUser(),
+          all<LearningItem>('learning_items'),
+          all<LearningGoal>('learning_goals', 'created_at', true),
+          all<LearningTopic>('learning_topics', 'created_at', false),
+          all<LearningLesson>('learning_lessons', 'position', true),
+          all<LearningResource>('learning_resources', 'created_at', true),
+          all<LearningTopicMember>('learning_topic_members', 'created_at', true),
+          all<LearningProgress>('learning_progress', 'created_at', true),
         ] as const)
 
       let res = await fetchAll()
@@ -319,7 +341,7 @@ export const useData = create<DataState>((set, get) => {
       const [
         clients, projects, tasks, accessItems, payments, notes, activity, profiles, members, invoices,
         invoiceSettings, subtasks, comments, attachments, timeEntries, watchers, notifications, invites,
-        reminders, user,
+        reminders, user, learning, goals, topics, lessons, resources, topicMembers, progress,
       ] = res
       const profileRows = profiles.data ?? []
       const meId = user.data.user?.id
@@ -344,6 +366,16 @@ export const useData = create<DataState>((set, get) => {
         notifications: notifications.data ?? [],
         invites: invites.data ?? [],
         reminders: reminders.data ?? [],
+        // Improvement tables: empty until improvement.sql has been run.
+        learning: learning.data ?? [],
+        goals: goals.data ?? [],
+        learningReady: !learning.error,
+        topics: topics.data ?? [],
+        lessons: lessons.data ?? [],
+        resources: resources.data ?? [],
+        topicMembers: topicMembers.data ?? [],
+        progress: progress.data ?? [],
+        topicsReady: !topics.error,
         me: profileRows.find((p) => p.id === meId) ?? null,
         ready: true,
       })
