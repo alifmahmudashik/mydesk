@@ -15,7 +15,7 @@ import { RevenueChart, Spark, monthlyBuckets } from '@/components/domain/Revenue
 import { ActivityItem } from '@/components/domain/ActivityItem'
 import { RemindModal } from '@/features/payments/RemindModal'
 import { sumUSD, useUsdRates } from '@/lib/currency'
-import { clientDisplayName, effectivePaymentStatus, isOpenPayment, OPEN_PROJECT, OPEN_TASK, profileDisplayName, shortProjectTitle, workDate } from '@/lib/derive'
+import { clientDisplayName, effectivePaymentStatus, isOpenPayment, OPEN_PROJECT, OPEN_TASK, profileDisplayName, shortProjectTitle, workDate, isAssignedTo } from '@/lib/derive'
 import { daysUntil, formatFeedAgo, formatMoney, lateLabel } from '@/lib/format'
 import type { Payment } from '@/types'
 
@@ -55,7 +55,7 @@ export function DashboardPage() {
   const inProgress = activeProjects.filter((p) => p.status === 'in_progress').length
 
   const openTasks = tasks.filter(OPEN_TASK)
-  const myTasks = openTasks.filter((t) => t.assignee_id === me?.id)
+  const myTasks = openTasks.filter((t) => isAssignedTo(t, me?.id))
   const mentions = notifications.filter((n) => n.type === 'mentioned' || n.type === 'mentioned_note')
   const sortTasks = (list: typeof tasks) =>
     [...list].sort((a, b) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999') || b.created_at.localeCompare(a.created_at))
@@ -191,7 +191,7 @@ export function DashboardPage() {
             <Link className="kpi lift" to="/tasks"><span className="lbl">My open tasks</span><span className="val">{myTasks.length}</span></Link>
             <Link className="kpi lift" to="/tasks"><span className="lbl">Overdue</span><span className="val">{myTasks.filter((t) => (daysUntil(t.due_date) ?? 0) < 0).length}</span></Link>
             <Link className="kpi lift" to="/projects"><span className="lbl">Active projects</span><span className="val">{activeProjects.length}</span></Link>
-            <Link className="kpi lift" to="/tasks"><span className="lbl">Done this month</span><span className="val">{tasks.filter((t) => t.assignee_id === me?.id && t.status === 'done' && (t.completed_at ?? '') >= format(startOfMonth(new Date()), 'yyyy-MM-dd')).length}</span></Link>
+            <Link className="kpi lift" to="/tasks"><span className="lbl">Done this month</span><span className="val">{tasks.filter((t) => isAssignedTo(t, me?.id) && t.status === 'done' && (t.completed_at ?? '') >= format(startOfMonth(new Date()), 'yyyy-MM-dd')).length}</span></Link>
           </div>
         )}
 

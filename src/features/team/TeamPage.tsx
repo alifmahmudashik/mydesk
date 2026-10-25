@@ -10,7 +10,7 @@ import { Tabs } from '@/components/ui/tabs'
 import { Menu, MenuItem } from '@/components/ui/menu'
 import { Avatar } from '@/components/ui/avatar'
 import { supabase } from '@/lib/supabase'
-import { clientColor, clientDisplayName, OPEN_PROJECT, OPEN_TASK, profileDisplayName, profileFullName } from '@/lib/derive'
+import { clientColor, clientDisplayName, OPEN_PROJECT, OPEN_TASK, profileDisplayName, profileFullName, isAssignedTo } from '@/lib/derive'
 import { formatFeedAgo } from '@/lib/format'
 import { copyText } from '@/lib/utils'
 import type { ClientMember, Invite } from '@/types'
@@ -108,7 +108,7 @@ export function TeamPage() {
                       const granted = clients.filter((c) => clientMembers.some((m) => m.client_id === c.id && m.user_id === p.id))
                       // Current work only: open projects under the clients they can see (not every project ever made).
                       const nProjects = projects.filter((x) => OPEN_PROJECT(x) && granted.some((c) => c.id === x.client_id)).length
-                      const open = tasks.filter((t) => t.assignee_id === p.id && OPEN_TASK(t)).length
+                      const open = tasks.filter((t) => isAssignedTo(t, p.id) && OPEN_TASK(t)).length
                       const to = p.id === me?.id ? '/account' : `/team/${p.id}`
                       return (
                         <tr key={p.id} className="hov">

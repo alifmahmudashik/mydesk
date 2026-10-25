@@ -21,6 +21,8 @@ export const label12 = (v: string) => {
 function TimePopover({ anchor, value, onChange, onClose }: { anchor: HTMLElement | null; value: string; onChange: (v: string) => void; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+  // Bumped on page scroll so the popover follows its field instead of closing.
+  const [tick, setTick] = useState(0)
   const { h, m } = parse(value)
   const pm = h >= 12
   const h12 = h % 12 || 12
@@ -34,10 +36,12 @@ function TimePopover({ anchor, value, onChange, onClose }: { anchor: HTMLElement
     let left = a.left
     if (left + p.width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - p.width - 8)
     setPos({ top, left })
-  }, [anchor])
+  }, [anchor, tick])
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
+      // Clicking/dragging the page scrollbar isn't a click outside.
+      if (e.clientX >= document.documentElement.clientWidth || e.clientY >= document.documentElement.clientHeight) return
       if (!ref.current?.contains(e.target as Node) && !anchor?.contains(e.target as Node)) onClose()
     }
     const onKey = (e: KeyboardEvent) => {
@@ -47,7 +51,7 @@ function TimePopover({ anchor, value, onChange, onClose }: { anchor: HTMLElement
       }
     }
     const onScroll = (e: Event) => {
-      if (!ref.current?.contains(e.target as Node)) onClose()
+      if (!ref.current?.contains(e.target as Node)) setTick((t) => t + 1)
     }
     document.addEventListener('mousedown', onDown)
     document.addEventListener('keydown', onKey, true)

@@ -362,7 +362,77 @@ const ALL_ZONES: string[] = (() => {
     return ['UTC', 'Europe/London', 'Europe/Berlin', 'America/New_York', 'America/Chicago', 'America/Los_Angeles', 'Asia/Dubai', 'Asia/Kolkata', 'Asia/Dhaka', 'Asia/Singapore', 'Asia/Tokyo', 'Australia/Sydney']
   }
 })()
-const POPULAR = ['America/New_York', 'America/Los_Angeles', 'Europe/London', 'Europe/Berlin', 'Asia/Dubai', 'Asia/Singapore', 'Australia/Sydney']
+/** Shown before you type, grouped by region. */
+const POPULAR: { region: string; zones: string[] }[] = [
+  { region: 'Americas', zones: ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Toronto', 'America/Mexico_City', 'America/Sao_Paulo'] },
+  { region: 'Europe', zones: ['Europe/London', 'Europe/Dublin', 'Europe/Paris', 'Europe/Berlin', 'Europe/Amsterdam', 'Europe/Madrid', 'Europe/Stockholm', 'Europe/Istanbul'] },
+  { region: 'Middle East & Africa', zones: ['Asia/Dubai', 'Asia/Riyadh', 'Asia/Jerusalem', 'Africa/Cairo', 'Africa/Lagos', 'Africa/Johannesburg'] },
+  { region: 'Asia & Pacific', zones: ['Asia/Dhaka', 'Asia/Kolkata', 'Asia/Karachi', 'Asia/Singapore', 'Asia/Hong_Kong', 'Asia/Tokyo', 'Australia/Sydney', 'Pacific/Auckland'] },
+]
+
+/** Countries, abbreviations and nicknames people actually type. */
+const ALIASES: Record<string, string[]> = {
+  'America/New_York': ['usa', 'us', 'united states', 'east coast', 'est', 'edt', 'eastern', 'nyc', 'miami', 'boston', 'washington'],
+  'America/Chicago': ['central', 'cst', 'cdt', 'texas', 'dallas', 'houston'],
+  'America/Denver': ['mountain', 'mst', 'mdt', 'colorado', 'utah'],
+  'America/Phoenix': ['arizona'],
+  'America/Los_Angeles': ['west coast', 'pacific', 'pst', 'pdt', 'california', 'san francisco', 'la', 'seattle'],
+  'America/Toronto': ['canada', 'ontario'],
+  'America/Vancouver': ['british columbia'],
+  'America/Mexico_City': ['mexico'],
+  'America/Sao_Paulo': ['brazil', 'brasil'],
+  'America/Argentina/Buenos_Aires': ['argentina'],
+  'Europe/London': ['uk', 'united kingdom', 'england', 'britain', 'gmt', 'bst', 'scotland', 'wales'],
+  'Europe/Dublin': ['ireland'],
+  'Europe/Paris': ['france', 'cet', 'cest'],
+  'Europe/Berlin': ['germany', 'deutschland', 'cet', 'cest'],
+  'Europe/Amsterdam': ['netherlands', 'holland'],
+  'Europe/Madrid': ['spain'],
+  'Europe/Rome': ['italy'],
+  'Europe/Stockholm': ['sweden'],
+  'Europe/Oslo': ['norway'],
+  'Europe/Copenhagen': ['denmark'],
+  'Europe/Helsinki': ['finland'],
+  'Europe/Warsaw': ['poland'],
+  'Europe/Zurich': ['switzerland'],
+  'Europe/Istanbul': ['turkey', 'turkiye'],
+  'Europe/Kyiv': ['ukraine', 'kiev'],
+  'Asia/Dubai': ['uae', 'emirates', 'abu dhabi', 'gst'],
+  'Asia/Riyadh': ['saudi', 'saudi arabia', 'ksa'],
+  'Asia/Qatar': ['qatar', 'doha'],
+  'Asia/Jerusalem': ['israel', 'tel aviv', 'idt'],
+  'Africa/Cairo': ['egypt'],
+  'Africa/Lagos': ['nigeria'],
+  'Africa/Nairobi': ['kenya'],
+  'Africa/Johannesburg': ['south africa', 'sast'],
+  'Asia/Dhaka': ['bangladesh', 'bd', 'bst'],
+  'Asia/Kolkata': ['india', 'ist', 'delhi', 'mumbai', 'bangalore', 'calcutta'],
+  'Asia/Karachi': ['pakistan', 'pkt', 'lahore'],
+  'Asia/Kathmandu': ['nepal'],
+  'Asia/Colombo': ['sri lanka'],
+  'Asia/Singapore': ['sgt'],
+  'Asia/Kuala_Lumpur': ['malaysia'],
+  'Asia/Bangkok': ['thailand'],
+  'Asia/Jakarta': ['indonesia'],
+  'Asia/Manila': ['philippines'],
+  'Asia/Ho_Chi_Minh': ['vietnam', 'saigon'],
+  'Asia/Hong_Kong': ['hk', 'hkt'],
+  'Asia/Shanghai': ['china', 'beijing'],
+  'Asia/Tokyo': ['japan', 'jst'],
+  'Asia/Seoul': ['korea', 'south korea', 'kst'],
+  'Australia/Sydney': ['australia', 'aest', 'aedt', 'nsw'],
+  'Australia/Melbourne': ['victoria'],
+  'Australia/Perth': ['western australia', 'awst'],
+  'Pacific/Auckland': ['new zealand', 'nz', 'nzst'],
+}
+
+/** "gmt+6", "+5:30", "utc-4" → offset in minutes, or null. */
+function parseOffset(q: string): number | null {
+  const m = /^(?:gmt|utc)?\s*([+\-−])\s*(\d{1,2})(?::?(\d{2}))?$/i.exec(q.trim())
+  if (!m) return null
+  const mins = Number(m[2]) * 60 + Number(m[3] ?? 0)
+  return m[1] === '+' ? mins : -mins
+}
 const region = (tz: string) => tz.split('/').slice(0, -1).join(' / ').replace(/_/g, ' ') || tz
 const gmt = (tz: string) => {
   const m = offsetMin(tz, new Date())
@@ -370,9 +440,27 @@ const gmt = (tz: string) => {
   return `GMT${m >= 0 ? '+' : '−'}${Math.floor(a / 60)}${a % 60 ? `:${String(a % 60).padStart(2, '0')}` : ''}`
 }
 const zoneMatches = (q: string, exclude: string[] = []) => {
-  const s = q.trim().toLowerCase().replace(/\s+/g, '_')
-  if (!s) return []
-  return ALL_ZONES.filter((z) => !exclude.includes(z) && z.toLowerCase().includes(s)).slice(0, 30)
+  const raw = q.trim().toLowerCase()
+  if (!raw) return []
+  const now = new Date()
+  const off = parseOffset(raw)
+  if (off !== null) return ALL_ZONES.filter((z) => !exclude.includes(z) && offsetMin(z, now) === off).slice(0, 40)
+  const s = raw.replace(/\s+/g, '_')
+  const score = (z: string) => {
+    const lc = z.toLowerCase()
+    const cityLc = lc.split('/').pop()!
+    const alias = ALIASES[z]?.some((a) => a === raw) ? 0 : ALIASES[z]?.some((a) => a.startsWith(raw)) ? 1 : null
+    if (cityLc === s) return 0
+    if (alias !== null) return alias
+    if (cityLc.startsWith(s)) return 2
+    if (lc.includes(s)) return 3
+    return null
+  }
+  return ALL_ZONES.map((z) => ({ z, sc: exclude.includes(z) ? null : score(z) }))
+    .filter((x): x is { z: string; sc: number } => x.sc !== null)
+    .sort((a, b) => a.sc - b.sc || a.z.localeCompare(b.z))
+    .slice(0, 40)
+    .map((x) => x.z)
 }
 
 /** Time zones you added yourself, remembered on this device. */
@@ -398,16 +486,32 @@ function useSavedZones(): [string[], (z: string[]) => void] {
 }
 
 function ZoneItems({ q, onPick, exclude = [] }: { q: string; onPick: (tz: string) => void; exclude?: string[] }) {
-  const list = q.trim() ? zoneMatches(q, exclude) : POPULAR.filter((z) => !exclude.includes(z))
+  const item = (z: string) => (
+    <MenuItem key={z} icon={<Globe className="i" />} hint={gmt(z)} onSelect={() => onPick(z)}>
+      {city(z)} <span className="faint">· {region(z)}</span>
+    </MenuItem>
+  )
+  if (q.trim()) {
+    const list = zoneMatches(q, exclude)
+    return (
+      <>
+        <MenuTitle>Time zones</MenuTitle>
+        {list.length === 0 ? <div className="xs faint" style={{ padding: '4px 10px 8px' }}>No time zone matches “{q}”. Try a city, country, or “gmt+6”.</div> : list.map(item)}
+      </>
+    )
+  }
   return (
     <>
-      <MenuTitle>{q.trim() ? 'Time zones' : 'Popular time zones'}</MenuTitle>
-      {list.length === 0 && <div className="xs faint" style={{ padding: '4px 10px 8px' }}>No time zone matches “{q}”.</div>}
-      {list.map((z) => (
-        <MenuItem key={z} icon={<Globe className="i" />} hint={gmt(z)} onSelect={() => onPick(z)}>
-          {city(z)} <span className="faint">· {region(z)}</span>
-        </MenuItem>
-      ))}
+      <div className="xs faint" style={{ padding: '6px 10px 2px' }}>Search {ALL_ZONES.length}+ time zones by city, country (Bangladesh, UK), code (EST, CET) or offset (gmt+6).</div>
+      {POPULAR.map((g) => {
+        const zs = g.zones.filter((z) => !exclude.includes(z) && ALL_ZONES.includes(z))
+        return zs.length ? (
+          <div key={g.region}>
+            <MenuTitle>{g.region}</MenuTitle>
+            {zs.map(item)}
+          </div>
+        ) : null
+      })}
     </>
   )
 }
@@ -431,7 +535,7 @@ function TargetPicker({ targets, value, onPick, onPickZone }: { targets: Target[
         </button>
       )}
     >
-      <MenuSearch value={q} onChange={setQ} placeholder="Search clients or any city…" />
+      <MenuSearch value={q} onChange={setQ} placeholder="Search a client, city, country or GMT offset…" />
       {shown.length > 0 && <MenuTitle>Yours</MenuTitle>}
       {shown.map((t) => (
         <MenuItem key={t.id} icon={<span className="clk-mark-xs">{t.mark}</span>} on={t.id === value.id} hint={city(t.tz)} onSelect={() => onPick(t.id)}>
@@ -451,7 +555,7 @@ function ZoneAdder({ onPick, exclude }: { onPick: (tz: string) => void; exclude:
       wide
       trigger={({ toggle }) => <button type="button" className="btn btn-sm" onClick={() => { setQ(''); toggle() }}><Plus className="i i-sm" />Add time zone</button>}
     >
-      <MenuSearch value={q} onChange={setQ} placeholder="Search a city, e.g. London" />
+      <MenuSearch value={q} onChange={setQ} placeholder="City, country, EST, gmt+6…" />
       <ZoneItems q={q} onPick={onPick} exclude={exclude} />
     </Menu>
   )

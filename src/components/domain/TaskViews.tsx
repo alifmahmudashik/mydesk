@@ -1,14 +1,14 @@
+import { Assignees } from '@/components/domain/AssigneePicker'
 import { useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ChevronDown, ChevronRight, ListChecks, MessageSquare, Plus } from 'lucide-react'
 import { useData } from '@/data/store'
 import { useUI } from '@/data/ui'
 import { setTaskStatus, toggleTaskDone } from '@/data/actions'
-import { Avatar } from '@/components/ui/avatar'
 import { DateChip, PrioBars, StatusRing } from '@/components/ui/pill'
 import { labelTone } from '@/components/domain/TaskRow'
 import { ClientChip } from '@/components/domain/ClientGroup'
-import { shortProjectTitle, taskRef } from '@/lib/derive'
+import { shortProjectTitle, taskRef, taskAssigneeIds } from '@/lib/derive'
 import { formatDate } from '@/lib/format'
 import { taskRing, taskStatus } from '@/lib/status'
 import type { Task, TaskStatus } from '@/types'
@@ -19,7 +19,6 @@ export function TaskListRow({ task, showProject = true, showClient = true }: { t
   const { projects, clients, profiles, comments, subtasks } = useData()
   const project = projects.find((p) => p.id === task.project_id)
   const client = clients.find((c) => c.id === project?.client_id)
-  const assignee = profiles.find((p) => p.id === task.assignee_id)
   const nComments = comments.filter((c) => c.task_id === task.id).length
   const subs = subtasks.filter((s) => s.task_id === task.id)
   const done = task.status === 'done'
@@ -44,7 +43,7 @@ export function TaskListRow({ task, showProject = true, showClient = true }: { t
         {taskStatus[task.status].label}
       </span>
       <DateChip date={task.due_date} done={done} empty="" />
-      <Avatar profile={assignee} />
+      <Assignees ids={taskAssigneeIds(task)} profiles={profiles} />
     </div>
   )
 }
@@ -53,7 +52,6 @@ export function TaskListRow({ task, showProject = true, showClient = true }: { t
 export function DoneRow({ task }: { task: Task }) {
   const { projects, profiles } = useData()
   const project = projects.find((p) => p.id === task.project_id)
-  const assignee = profiles.find((p) => p.id === task.assignee_id)
   return (
     <div className="li hover">
       <span className="above"><StatusRing status={task.status} onToggle={() => toggleTaskDone(task)} /></span>
@@ -62,7 +60,7 @@ export function DoneRow({ task }: { task: Task }) {
         <div className="t muted trunc">{task.title}</div>
       </Link>
       <span className="xs muted">{formatDate((task.completed_at ?? task.created_at).slice(0, 10))}</span>
-      <Avatar profile={assignee} />
+      <Assignees ids={taskAssigneeIds(task)} profiles={profiles} />
     </div>
   )
 }
@@ -130,7 +128,6 @@ export function TaskBoard({ tasks, projectId }: { tasks: Task[]; projectId?: str
             {laneTasks.map((t) => {
               const project = projects.find((p) => p.id === t.project_id)
               const client = clients.find((c) => c.id === project?.client_id)
-              const assignee = profiles.find((p) => p.id === t.assignee_id)
               return (
                 <div
                   key={t.id}
@@ -157,7 +154,7 @@ export function TaskBoard({ tasks, projectId }: { tasks: Task[]; projectId?: str
                     {t.labels?.[0] ? <span className={`tag ${labelTone(t.labels[0])}`}>{t.labels[0]}</span> : null}
                     {t.due_date && <DateChip date={t.due_date} done={status === 'done'} />}
                     <span className="spacer" />
-                    <Avatar profile={assignee} size="sm" />
+                    <Assignees ids={taskAssigneeIds(t)} profiles={profiles} size="sm" />
                   </div>
                 </div>
               )

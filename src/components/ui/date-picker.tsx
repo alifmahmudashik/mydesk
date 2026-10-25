@@ -25,6 +25,8 @@ interface PopoverProps {
 function CalendarPopover({ anchor, value, onChange, onClose, clearable }: PopoverProps) {
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+  // Bumped on page scroll so the popover follows its field instead of closing.
+  const [tick, setTick] = useState(0)
   const selected = fromISO(value)
 
   useLayoutEffect(() => {
@@ -36,10 +38,12 @@ function CalendarPopover({ anchor, value, onChange, onClose, clearable }: Popove
     let left = a.left
     if (left + p.width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - p.width - 8)
     setPos({ top, left })
-  }, [anchor])
+  }, [anchor, tick])
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
+      // Clicking/dragging the page scrollbar isn't a click outside.
+      if (e.clientX >= document.documentElement.clientWidth || e.clientY >= document.documentElement.clientHeight) return
       if (!ref.current?.contains(e.target as Node) && !anchor?.contains(e.target as Node)) onClose()
     }
     // Capture phase so Esc closes the calendar without also closing a dialog behind it.
@@ -50,7 +54,7 @@ function CalendarPopover({ anchor, value, onChange, onClose, clearable }: Popove
       }
     }
     const onScroll = (e: Event) => {
-      if (!ref.current?.contains(e.target as Node)) onClose()
+      if (!ref.current?.contains(e.target as Node)) setTick((t) => t + 1)
     }
     document.addEventListener('mousedown', onDown)
     document.addEventListener('keydown', onKey, true)

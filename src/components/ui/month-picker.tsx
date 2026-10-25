@@ -20,6 +20,8 @@ export function monthLabel(v?: string | null) {
 export function MonthPopover({ anchor, value, onChange, onClose, clearable }: { anchor: HTMLElement | null; value?: string | null; onChange: (v: string | null) => void; onClose: () => void; clearable?: boolean }) {
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+  // Bumped on page scroll so the popover follows its field instead of closing.
+  const [tick, setTick] = useState(0)
   const sel = parse(value)
   const now = new Date()
   const [year, setYear] = useState(sel?.y ?? now.getFullYear())
@@ -33,10 +35,12 @@ export function MonthPopover({ anchor, value, onChange, onClose, clearable }: { 
     let left = a.left
     if (left + p.width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - p.width - 8)
     setPos({ top, left })
-  }, [anchor])
+  }, [anchor, tick])
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
+      // Clicking/dragging the page scrollbar isn't a click outside.
+      if (e.clientX >= document.documentElement.clientWidth || e.clientY >= document.documentElement.clientHeight) return
       if (!ref.current?.contains(e.target as Node) && !anchor?.contains(e.target as Node)) onClose()
     }
     const onKey = (e: KeyboardEvent) => {
@@ -46,7 +50,7 @@ export function MonthPopover({ anchor, value, onChange, onClose, clearable }: { 
       }
     }
     const onScroll = (e: Event) => {
-      if (!ref.current?.contains(e.target as Node)) onClose()
+      if (!ref.current?.contains(e.target as Node)) setTick((t) => t + 1)
     }
     document.addEventListener('mousedown', onDown)
     document.addEventListener('keydown', onKey, true)

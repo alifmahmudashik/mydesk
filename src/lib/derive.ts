@@ -195,3 +195,13 @@ export function withWorkMonthNote(note: string, list: Project[]): string {
 export function hasWorkMonthColumn(projects: Project[]) {
   return projects.length === 0 || projects.some((p) => 'work_month' in p)
 }
+
+/** Everyone assigned to a task (older rows only have assignee_id). */
+export function taskAssigneeIds(t: { assignee_id?: string | null; assignee_ids?: string[] | null }): string[] {
+  if (t.assignee_ids && t.assignee_ids.length) return t.assignee_ids
+  return t.assignee_id ? [t.assignee_id] : []
+}
+
+export function isAssignedTo(t: { assignee_id?: string | null; assignee_ids?: string[] | null }, userId?: string | null) {
+  return Boolean(userId) && taskAssigneeIds(t).includes(userId!)
+}

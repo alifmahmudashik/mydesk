@@ -15,12 +15,14 @@ interface Props {
 }
 
 /** Small anchored panel for quick edits (dates, budget…). Portal + fixed position, so
- *  nothing clips it; closes on outside click, Esc or page scroll. */
+ *  nothing clips it; follows its field on scroll, closes on outside click or Esc. */
 export function Popover({ trigger, children, title, width = 300, className }: Props) {
   const [open, setOpen] = useState(false)
   const anchor = useRef<HTMLSpanElement>(null)
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+  // Bumped on page scroll so the popover follows its field instead of closing.
+  const [tick, setTick] = useState(0)
   const close = () => setOpen(false)
 
   useLayoutEffect(() => {
@@ -35,7 +37,7 @@ export function Popover({ trigger, children, title, width = 300, className }: Pr
     if (top + p.height > window.innerHeight - 8) top = Math.max(8, a.top - p.height - 6)
     const left = Math.min(Math.max(8, a.left), window.innerWidth - p.width - 8)
     setPos({ top, left })
-  }, [open])
+  }, [open, tick])
 
   useEffect(() => {
     if (!open) return
@@ -44,6 +46,8 @@ export function Popover({ trigger, children, title, width = 300, className }: Pr
       return Boolean(ref.current?.contains(el) || anchor.current?.contains(el) || el?.closest?.(NESTED))
     }
     const onDown = (e: MouseEvent) => {
+      // Clicking/dragging the page scrollbar isn't a click outside.
+      if (e.clientX >= document.documentElement.clientWidth || e.clientY >= document.documentElement.clientHeight) return
       if (!inside(e.target)) close()
     }
     const onKey = (e: KeyboardEvent) => {
@@ -54,7 +58,7 @@ export function Popover({ trigger, children, title, width = 300, className }: Pr
       }
     }
     const onScroll = (e: Event) => {
-      if (!inside(e.target)) close()
+      if (!inside(e.target)) setTick((t) => t + 1)
     }
     document.addEventListener('mousedown', onDown)
     document.addEventListener('keydown', onKey, true)

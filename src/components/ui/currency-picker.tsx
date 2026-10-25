@@ -26,6 +26,8 @@ function CurrencyPopover({ anchor, value, currencies, onChange, onClose }: PopPr
   const ref = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+  // Bumped on page scroll so the popover follows its field instead of closing.
+  const [tick, setTick] = useState(0)
   const [q, setQ] = useState('')
 
   const items = useMemo(() => {
@@ -46,7 +48,7 @@ function CurrencyPopover({ anchor, value, currencies, onChange, onClose }: PopPr
     let left = a.left
     if (left + p.width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - p.width - 8)
     setPos({ top, left })
-  }, [anchor])
+  }, [anchor, tick])
 
   // Keep the highlighted row in view.
   useEffect(() => {
@@ -55,10 +57,12 @@ function CurrencyPopover({ anchor, value, currencies, onChange, onClose }: PopPr
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
+      // Clicking/dragging the page scrollbar isn't a click outside.
+      if (e.clientX >= document.documentElement.clientWidth || e.clientY >= document.documentElement.clientHeight) return
       if (!ref.current?.contains(e.target as Node) && !anchor?.contains(e.target as Node)) onClose()
     }
     const onScroll = (e: Event) => {
-      if (!ref.current?.contains(e.target as Node)) onClose()
+      if (!ref.current?.contains(e.target as Node)) setTick((t) => t + 1)
     }
     document.addEventListener('mousedown', onDown)
     window.addEventListener('scroll', onScroll, true)

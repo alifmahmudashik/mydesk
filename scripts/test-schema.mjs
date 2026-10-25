@@ -198,6 +198,17 @@ ok(afterOff === 1, 'due-soon email respects the person turning it off')
 const owner = (await q(`select role from profiles where id = $1`, [U1])).rows[0].role
 ok(owner === 'owner', 'first user is still the owner')
 
+// Several people per task: both get notified; assignee_id follows the first; old single-assignee writes still work.
+const multi = await as(U1, `insert into tasks (project_id, title, assignee_ids) values ('bbbbbbbb-0000-0000-0000-000000000001', 'Pair task', $1) returning id, assignee_id, assignee_ids`, [[U2, U3]])
+ok(multi.rows[0].assignee_id === U2 && multi.rows[0].assignee_ids.length === 2, 'assignee_id follows the first of assignee_ids')
+const pairN = (await q(`select count(distinct user_id)::int c from notifications where type = 'assigned' and entity_id = $1`, [multi.rows[0].id])).rows[0].c
+ok(pairN === 2, 'every assignee gets the assignment notification')
+await as(U1, `update tasks set assignee_ids = $1 where id = $2`, [[U3, U2], multi.rows[0].id])
+const again2 = (await q(`select count(*)::int c from notifications where type = 'assigned' and entity_id = $1`, [multi.rows[0].id])).rows[0].c
+ok(again2 === 2, 're-ordering assignees sends nothing new')
+const legacy = await as(U1, `update tasks set assignee_id = $1 where id = $2 returning assignee_ids`, [U1, multi.rows[0].id])
+ok(legacy.rows[0].assignee_ids.length === 1 && legacy.rows[0].assignee_ids[0] === U1, 'writing only assignee_id still works (old app versions)')
+
 // Improvement: sharing a resource notifies the learner; finishing it notifies the sharer.
 const li = await as(U1, `insert into learning_items (title, assignee_id, created_by) values ('Server-side GTM course', $1, $2) returning id`, [U2, U1])
 const shared = (await q(`select count(*)::int c from notifications where type = 'learning_shared' and user_id = $1`, [U2])).rows[0].c

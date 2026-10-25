@@ -1,3 +1,4 @@
+import { AssigneePicker } from '@/components/domain/AssigneePicker'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Mail } from 'lucide-react'
@@ -27,7 +28,7 @@ export function TaskCreateModal({ open, onClose, defaults = {} }: Props) {
     title: '',
     description: '',
     project_id: defaults.project_id ?? openProjects[0]?.id ?? '',
-    assignee_id: defaults.assignee_id === undefined ? (me?.id ?? '') : (defaults.assignee_id ?? ''),
+    assignee_ids: (defaults.assignee_id === undefined ? (me?.id ? [me.id] : []) : defaults.assignee_id ? [defaults.assignee_id] : []) as string[],
     status: defaults.status ?? ('todo' as TaskStatus),
     priority: 'medium' as Priority,
     due_date: defaults.due_date ?? '',
@@ -45,8 +46,8 @@ export function TaskCreateModal({ open, onClose, defaults = {} }: Props) {
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((s) => ({ ...s, [k]: v }))
   const project = projects.find((p) => p.id === f.project_id)
   const people = eligibleAssignees(project?.client_id, profiles, clientMembers)
-  const assignee = profiles.find((p) => p.id === f.assignee_id)
-  const emailsAssignee = assignee && assignee.id !== me?.id && assignee.notification_prefs?.assigned !== false
+  const emailed = f.assignee_ids.map((id) => profiles.find((p) => p.id === id)).filter((p) => p && p.id !== me?.id && p.notification_prefs?.assigned !== false)
+  const emailsAssignee = emailed.length > 0
 
   // Options include the current project even if it's closed (opened from a finished project).
   const projectOptions = [...openProjects, ...(project && !openProjects.includes(project) ? [project] : [])].map((p) => {
@@ -63,7 +64,7 @@ export function TaskCreateModal({ open, onClose, defaults = {} }: Props) {
       project_id: f.project_id,
       title: f.title,
       description: f.description.trim() ? `<p>${f.description.trim().replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c]!).replace(/\n/g, '<br>')}</p>` : null,
-      assignee_id: f.assignee_id || null,
+      assignee_ids: f.assignee_ids,
       status: f.status,
       priority: f.priority,
       due_date: f.due_date || null,
@@ -71,7 +72,7 @@ export function TaskCreateModal({ open, onClose, defaults = {} }: Props) {
       labels: f.labels.split(',').map((l) => l.trim()).filter(Boolean),
     })
     toast.success('Task created', { action: { label: 'Open', onClick: () => navigate(`/tasks/${task.id}`) } })
-    if (another) setF({ ...blank(), project_id: f.project_id, assignee_id: f.assignee_id })
+    if (another) setF({ ...blank(), project_id: f.project_id, assignee_ids: f.assignee_ids })
     else onClose()
   }
 
@@ -81,7 +82,7 @@ export function TaskCreateModal({ open, onClose, defaults = {} }: Props) {
       onClose={onClose}
       title="New task"
       size="wide"
-      note={emailsAssignee ? <><Mail className="i i-sm" />{profileDisplayName(assignee)} gets one email when this is created</> : <label className="row-sm" style={{ cursor: 'pointer' }}><input type="checkbox" className="cb" checked={another} onChange={(e) => setAnother(e.target.checked)} /> Create another</label>}
+      note={emailsAssignee ? <><Mail className="i i-sm" />{emailed.length === 1 ? `${profileDisplayName(emailed[0])} gets` : `${emailed.length} people get`} one email when this is created</> : <label className="row-sm" style={{ cursor: 'pointer' }}><input type="checkbox" className="cb" checked={another} onChange={(e) => setAnother(e.target.checked)} /> Create another</label>}
       footer={
         <>
           <button type="button" className="btn" onClick={onClose}>Cancel</button>
@@ -96,13 +97,10 @@ export function TaskCreateModal({ open, onClose, defaults = {} }: Props) {
           <Field label="Project">
             <Select value={f.project_id} onChange={(e) => set('project_id', e.target.value)} options={projectOptions.length ? projectOptions : [{ value: '', label: 'No open projects' }]} />
           </Field>
-          <Field label="Assignee">
-            <Select
-              value={f.assignee_id}
-              onChange={(e) => set('assignee_id', e.target.value)}
-              options={[...people.map((p) => ({ value: p.id, label: p.id === me?.id ? `Me (${profileDisplayName(p)})` : profileDisplayName(p) })), { value: '', label: 'Unassigned' }]}
-            />
-          </Field>
+          <div className="field">
+            <span className="lbl">Assignees</span>
+            <AssigneePicker variant="field" people={people} value={f.assignee_ids} onChange={(ids) => set('assignee_ids', ids)} meId={me?.id} />
+          </div>
           <Field label="Status">
             <Select value={f.status} onChange={(e) => set('status', e.target.value as TaskStatus)} options={options(taskStatus).filter((o) => o.value !== 'cancelled')} />
           </Field>

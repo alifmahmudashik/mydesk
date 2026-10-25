@@ -605,3 +605,12 @@ a.ls-r-t .i { color: var(--faint); }
 .conv-li:hover .conv-li-x { opacity: 1; }
 .conv-li-x:hover { color: var(--bad); background: var(--bad-bg); }
 .conv-li:has(.conv-li-x) { padding-right: 34px; }
+
+/* Scrolling inside a dropdown/picker never scrolls the page behind it. */
+.menu-pop, .date-pop, .cur-pop, .cur-list, .tp-pop, .mp-pop, .pop-card { overscroll-behavior: contain; }
+
+/* Layering: quick-edit panels sit under the pickers/menus they open, so a date, month,
+   time or currency picker opened from a panel is always on top of it. */
+.pop-card { z-index: 88; }
+.menu-pop.floating, .menu-pop.floating.up, .menu-pop.floating.left { z-index: 96; }
+.date-pop, .mp-pop, .tp-pop, .cur-pop { z-index: 97; }

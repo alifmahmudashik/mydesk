@@ -23,7 +23,7 @@ import { MonthInput } from '@/components/ui/month-picker'
 import { MoneyInput } from '@/components/ui/field'
 import { SUPPORTED_CURRENCIES } from '@/lib/currency'
 import { monthLabel } from '@/components/ui/month-picker'
-import { clientDisplayName, effectivePaymentStatus, hasWorkMonthColumn, projectWorkDate, eligibleAssignees, profileDisplayName, profileFullName, shortProjectTitle } from '@/lib/derive'
+import { clientDisplayName, effectivePaymentStatus, hasWorkMonthColumn, projectWorkDate, eligibleAssignees, profileDisplayName, profileFullName, shortProjectTitle, isAssignedTo } from '@/lib/derive'
 import { formatDate, formatFeedAgo, formatMoney } from '@/lib/format'
 import { accessStatus, billingLabel, paymentStatus, priorityMeta, projectStatus } from '@/lib/status'
 import type { AccessItem, AccessStatus, Priority, ProjectNote, ProjectStatus, Task, TaskStatus, BillingType, Project } from '@/types'
@@ -74,7 +74,7 @@ export function ProjectPage() {
   const pinnedNote = projectNotes[0]
 
   const filtered = projectTasks.filter((t) => {
-    if (filter === 'mine') return t.assignee_id === me?.id
+    if (filter === 'mine') return isAssignedTo(t, me?.id)
     if (filter === 'dated') return Boolean(t.due_date)
     if (filter === 'late') return t.due_date && t.due_date < new Date().toISOString().slice(0, 10) && t.status !== 'done'
     return true
@@ -371,7 +371,7 @@ function QuickAdd({ projectId, people }: { projectId: string; people: { id: stri
   const submit = () => {
     const title = text.replace(/@\S+/, '').trim()
     if (!title) return
-    createTask({ project_id: projectId, title, assignee_id: who?.id ?? (me?.role === 'member' ? me.id : null) } as Task & { project_id: string; title: string })
+    createTask({ project_id: projectId, title, assignee_ids: who ? [who.id] : me?.role === 'member' ? [me.id] : [] } as Task & { project_id: string; title: string })
     setText('')
   }
   return (

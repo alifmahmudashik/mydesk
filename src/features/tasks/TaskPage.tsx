@@ -3,7 +3,8 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Check, ChevronDown, ChevronUp, Copy, Eye, EyeOff, Folder, Link2, Mail, MoreHorizontal, Paperclip, Plus, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
-import { addComment, assignTask, deleteTask, duplicateTask, setTaskStatus, toggleSubtask, updateTask } from '@/data/actions'
+import { addComment, deleteTask, duplicateTask, setTaskAssignees, setTaskStatus, toggleSubtask, updateTask } from '@/data/actions'
+import { AssigneePicker } from '@/components/domain/AssigneePicker'
 import { pushRecent } from '@/components/layout/CommandPalette'
 import { Topbar, Empty } from '@/components/ui/layout'
 import { Menu, MenuItem, MenuSep, MenuTitle, MenuSearch } from '@/components/ui/menu'
@@ -17,7 +18,7 @@ import { DateButton } from '@/components/ui/date-button'
 import { Field } from '@/components/ui/field'
 import { labelTone } from '@/components/domain/TaskRow'
 import { supabase } from '@/lib/supabase'
-import { clientDisplayName, eligibleAssignees, profileDisplayName, profileFullName, shortProjectTitle, taskRef } from '@/lib/derive'
+import { clientDisplayName, eligibleAssignees, profileDisplayName, profileFullName, shortProjectTitle, taskRef, taskAssigneeIds } from '@/lib/derive'
 import { daysUntil, formatBytes, formatDate, formatDateTime, formatFeedAgo, formatMinutes, parseDuration, todayISO } from '@/lib/format'
 import { priorityMeta, taskRing, taskStatus } from '@/lib/status'
 import { copyText } from '@/lib/utils'
@@ -92,7 +93,9 @@ export function TaskPage() {
   }
 
   const people = eligibleAssignees(project?.client_id, profiles, clientMembers)
-  const assignee = profiles.find((p) => p.id === task.assignee_id)
+  const assigneeIds = taskAssigneeIds(task)
+  const assignee = profiles.find((p) => p.id === assigneeIds[0])
+  const others = assigneeIds.slice(1).map((id) => profiles.find((p) => p.id === id)).filter(Boolean)
   const creator = profiles.find((p) => p.id === task.created_by)
   const logged = time.reduce((s, t) => s + t.minutes, 0)
   const doneSubs = subs.filter((s) => s.done).length
@@ -345,7 +348,7 @@ export function TaskPage() {
               <div className="panel-in">
                 <div className="sys">
                   <span className="dot" />
-                  <b>{creator ? profileDisplayName(creator) : 'Someone'}</b> created the task{assignee && assignee.id !== task.created_by ? <> and assigned <b>{profileDisplayName(assignee)}</b></> : null} · {formatDateTime(task.created_at)}
+                  <b>{creator ? profileDisplayName(creator) : 'Someone'}</b> created the task{assignee && assignee.id !== task.created_by ? <> and assigned <b>{others.length ? `${profileDisplayName(assignee)} +${others.length}` : profileDisplayName(assignee)}</b></> : null} · {formatDateTime(task.created_at)}
                   {assignee && assignee.id !== task.created_by && assignee.notification_prefs?.assigned !== false && <span className="pill ok" style={{ height: 20 }}><Mail className="i i-xs" />Email sent</span>}
                 </div>
                 {thread.map((c) => {
@@ -373,7 +376,7 @@ export function TaskPage() {
                   <Composer
                     people={people}
                     meId={me?.id}
-                    roleOf={(p) => (p.id === task.assignee_id ? 'assignee' : p.role)}
+                    roleOf={(p) => (assigneeIds.includes(p.id) ? 'assignee' : p.role)}
                     footnote="Mentioned people get one email per comment"
                     onSubmit={(body, mentions) => {
                       addComment(task, body, mentions)
@@ -412,12 +415,7 @@ export function TaskPage() {
             </Menu>
 
             <span>Assignee</span>
-            <Menu align="left" trigger={({ toggle }) => <button type="button" className="prop" onClick={toggle}><Avatar profile={assignee} size="xs" />{assignee ? profileDisplayName(assignee) : 'Unassigned'}</button>}>
-              <MenuTitle>Assign to</MenuTitle>
-              {people.map((p) => <MenuItem key={p.id} on={p.id === task.assignee_id} icon={<Avatar profile={p} size="xs" />} onSelect={() => assignTask(task, p.id)}>{p.id === me?.id ? 'Me' : profileFullName(p)}</MenuItem>)}
-              <MenuSep />
-              <MenuItem icon={<Avatar size="xs" />} onSelect={() => assignTask(task, null)}>Unassigned</MenuItem>
-            </Menu>
+            <AssigneePicker people={[...people, ...profiles.filter((p) => assigneeIds.includes(p.id) && !people.includes(p))]} value={assigneeIds} onChange={(ids) => setTaskAssignees(task, ids)} meId={me?.id} />
 
             <span>Priority</span>
             <Menu align="left" trigger={({ toggle }) => <button type="button" className="prop" onClick={toggle}><PrioBars priority={task.priority} />{priorityMeta[task.priority].label}</button>}>

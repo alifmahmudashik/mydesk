@@ -25,6 +25,8 @@ export function Menu({ trigger, children, align = 'right', wide, className, popC
   const ref = useRef<HTMLDivElement>(null)
   const popRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{ top: number; left: number; minWidth?: number; up: boolean } | null>(null)
+  // Bumped on page scroll so the popover follows its field instead of closing.
+  const [tick, setTick] = useState(0)
 
   useLayoutEffect(() => {
     if (!open) {
@@ -48,12 +50,14 @@ export function Menu({ trigger, children, align = 'right', wide, className, popC
     place()
     window.addEventListener('resize', place)
     return () => window.removeEventListener('resize', place)
-  }, [open, align, matchWidth])
+  }, [open, align, matchWidth, tick])
 
   useEffect(() => {
     if (!open) return
     const inside = (t: EventTarget | null) => Boolean(ref.current?.contains(t as Node) || popRef.current?.contains(t as Node))
     const onDown = (e: MouseEvent) => {
+      // Clicking/dragging the page scrollbar isn't a click outside.
+      if (e.clientX >= document.documentElement.clientWidth || e.clientY >= document.documentElement.clientHeight) return
       if (!inside(e.target)) setOpen(false)
     }
     const onKey = (e: KeyboardEvent) => {
@@ -64,7 +68,7 @@ export function Menu({ trigger, children, align = 'right', wide, className, popC
     }
     // The popover is fixed to the screen, so close it when the page underneath scrolls.
     const onScroll = (e: Event) => {
-      if (!popRef.current?.contains(e.target as Node)) setOpen(false)
+      if (!popRef.current?.contains(e.target as Node)) setTick((t) => t + 1)
     }
     document.addEventListener('mousedown', onDown)
     document.addEventListener('keydown', onKey, true)

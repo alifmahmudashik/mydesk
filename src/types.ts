@@ -82,6 +82,8 @@ export interface Task {
   priority: Priority
   due_date?: string | null
   assignee_id?: string | null
+  /** Everyone on the task (assignee_id is the first of them). */
+  assignee_ids?: string[]
   notes?: string | null
   /** Per-project sequence number (CPS-12). Assigned by the database if missing. */
   number?: number | null

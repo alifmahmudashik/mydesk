@@ -13,7 +13,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { Menu, MenuItem, MenuSep, MenuTitle } from '@/components/ui/menu'
 import { CommandPalette } from '@/components/layout/CommandPalette'
 import { CreateHost } from '@/features/create/CreateHost'
-import { clientColor, clientDisplayName, effectivePaymentStatus, OPEN_PROJECT, OPEN_TASK, profileFullName } from '@/lib/derive'
+import { clientColor, clientDisplayName, effectivePaymentStatus, OPEN_PROJECT, OPEN_TASK, profileFullName, isAssignedTo } from '@/lib/derive'
 
 const roleLabel = { owner: 'Owner', admin: 'Admin', member: 'Member' } as const
 
@@ -37,7 +37,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const inboxSeenAt = useData((s) => s.inboxSeenAt)
   // Only what arrived since you last opened the Inbox lights the bell (unread items stay bold inside).
   const unread = notifications.filter((n) => !n.read_at && n.created_at > inboxSeenAt).length
-  const myOpen = tasks.filter((t) => t.assignee_id === me?.id && OPEN_TASK(t)).length
+  const myOpen = tasks.filter((t) => isAssignedTo(t, me?.id) && OPEN_TASK(t)).length
   const activeProjects = projects.filter(OPEN_PROJECT).length
   const activeClients = clients.filter((c) => c.status !== 'archived').length
   const overdue = payments.filter((p) => effectivePaymentStatus(p) === 'overdue').length

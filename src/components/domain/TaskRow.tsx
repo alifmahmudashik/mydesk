@@ -1,11 +1,11 @@
+import { Assignees } from '@/components/domain/AssigneePicker'
 import { Link } from 'react-router-dom'
 import { MessageSquare } from 'lucide-react'
 import { useData } from '@/data/store'
 import { toggleTaskDone } from '@/data/actions'
-import { Avatar } from '@/components/ui/avatar'
 import { ClientChip } from '@/components/domain/ClientGroup'
 import { DateChip, PrioBars, StatusRing } from '@/components/ui/pill'
-import { isOpenPayment, shortProjectTitle, taskRef } from '@/lib/derive'
+import { isOpenPayment, shortProjectTitle, taskRef, taskAssigneeIds } from '@/lib/derive'
 import { isOverdue } from '@/lib/format'
 import type { Task } from '@/types'
 import { cn } from '@/lib/utils'
@@ -31,7 +31,6 @@ export function TaskRow({ task, context = true, ring, showRef, showPrio }: Props
   const { projects, clients, profiles, comments, subtasks } = useData()
   const project = projects.find((p) => p.id === task.project_id)
   const client = clients.find((c) => c.id === project?.client_id)
-  const assignee = profiles.find((p) => p.id === task.assignee_id)
   const nComments = comments.filter((c) => c.task_id === task.id).length
   const subs = subtasks.filter((s) => s.task_id === task.id)
   const done = task.status === 'done'
@@ -66,7 +65,7 @@ export function TaskRow({ task, context = true, ring, showRef, showPrio }: Props
         </span>
       )}
       {projectLate ? <span className="date bad hide-sm">Project overdue</span> : <DateChip date={task.due_date} done={done} empty="" />}
-      <Avatar profile={assignee} />
+      <Assignees ids={taskAssigneeIds(task)} profiles={profiles} />
     </div>
   )
 }

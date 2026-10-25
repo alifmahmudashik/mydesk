@@ -9,7 +9,7 @@ import { Empty } from '@/components/ui/layout'
 import { AvatarStack } from '@/components/ui/avatar'
 import { StatusPill } from '@/components/ui/pill'
 import { Modal } from '@/components/ui/modal'
-import { sumByCurrency } from '@/lib/derive'
+import { sumByCurrency, isAssignedTo } from '@/lib/derive'
 import { formatDate, formatMoney } from '@/lib/format'
 import { projectStatus } from '@/lib/status'
 import { copyText } from '@/lib/utils'
@@ -67,7 +67,7 @@ export function ClientProjects({ client }: { client: Client }) {
     const d = pt.filter((t) => t.status === 'done').length
     const open = p.status !== 'completed' && p.status !== 'finished' && p.status !== 'cancelled'
     const paid = payments.filter((x) => x.project_ids?.includes(p.id) && x.status === 'paid')
-    const team = profiles.filter((u) => pt.some((t) => t.assignee_id === u.id))
+    const team = profiles.filter((u) => pt.some((t) => isAssignedTo(t, u.id)))
     const sub = open
       ? `${p.due_date ? `Due ${formatDate(p.due_date)}` : 'No due date'} · ${d}/${pt.length} tasks`
       : `${p.status === 'cancelled' ? 'Cancelled' : 'Completed'} ${formatDate((p.completed_at ?? p.due_date ?? p.created_at).slice(0, 10))}${isAdmin && paid.length ? ` · ${sumByCurrency(paid)} paid` : ''}`

@@ -10,7 +10,7 @@ import { Menu, MenuItem, MenuSearch } from '@/components/ui/menu'
 import { AvatarStack, ClientMark } from '@/components/ui/avatar'
 import { StatusPill } from '@/components/ui/pill'
 import { ClientGroup, groupByClient } from '@/components/domain/ClientGroup'
-import { clientDisplayName, effectivePaymentStatus, OPEN_PROJECT, sumByCurrency } from '@/lib/derive'
+import { clientDisplayName, effectivePaymentStatus, OPEN_PROJECT, sumByCurrency, taskAssigneeIds } from '@/lib/derive'
 import { formatDate, formatMoney, isOverdue } from '@/lib/format'
 import { paymentStatus, projectStatus } from '@/lib/status'
 import type { Profile, Project } from '@/types'
@@ -48,7 +48,7 @@ export function ProjectsPage() {
 
   const team = (p: Project): Profile[] => {
     const granted = new Set(clientMembers.filter((m) => m.client_id === p.client_id).map((m) => m.user_id))
-    const assignees = new Set(tasks.filter((t) => t.project_id === p.id && t.assignee_id).map((t) => t.assignee_id!))
+    const assignees = new Set(tasks.filter((t) => t.project_id === p.id).flatMap((t) => taskAssigneeIds(t)))
     return profiles.filter((u) => granted.has(u.id) || assignees.has(u.id))
   }
 

@@ -1,7 +1,7 @@
 import { addMonths, format, parseISO } from 'date-fns'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
-import { clientDisplayName, profileDisplayName, taskRef } from '@/lib/derive'
+import { clientDisplayName, profileDisplayName, taskAssigneeIds, taskRef } from '@/lib/derive'
 import { formatMoney, todayISO } from '@/lib/format'
 import { projectStatus, taskStatus } from '@/lib/status'
 import type { Payment, Project, ProjectStatus, Subtask, Task, TaskComment, TaskStatus } from '@/types'
@@ -12,6 +12,12 @@ const isAdmin = () => S().me?.role !== 'member'
 // ---------------------------------------------------------------- tasks
 
 export function createTask(data: Partial<Task> & { project_id: string; title: string }) {
+  if ('assignee_ids' in data || data.assignee_id) {
+    const ids = taskAssigneeIds(data as Task)
+    const patch = assigneePatch(ids)
+    delete (data as Partial<Task>).assignee_ids
+    Object.assign(data, patch)
+  }
   const project = S().projects.find((p) => p.id === data.project_id)
   const task = S().createRow<Task>(
     'tasks',
@@ -24,9 +30,10 @@ export function createTask(data: Partial<Task> & { project_id: string; title: st
     } as Task,
     { entity: 'task', action: 'created', message: `created “${data.title.trim()}”`, projectId: data.project_id },
   )
-  if (task.assignee_id && task.assignee_id !== S().me?.id) {
-    const who = S().profiles.find((p) => p.id === task.assignee_id)
-    S().logActivity({ entity: 'task', entityId: task.id, action: 'assigned', message: `assigned ${profileDisplayName(who)}`, projectId: project?.id, meta: { emailed: who?.notification_prefs?.assigned !== false } })
+  const others = taskAssigneeIds(task).filter((id) => id !== S().me?.id)
+  if (others.length) {
+    const who = others.map((id) => S().profiles.find((p) => p.id === id))
+    S().logActivity({ entity: 'task', entityId: task.id, action: 'assigned', message: `assigned ${who.map((p) => profileDisplayName(p)).join(', ')}`, projectId: project?.id, meta: { emailed: who.some((p) => p?.notification_prefs?.assigned !== false) } })
   }
   return task
 }
@@ -46,17 +53,38 @@ export function toggleTaskDone(task: Task) {
   setTaskStatus(task, task.status === 'done' ? 'todo' : 'done')
 }
 
-export function assignTask(task: Task, assigneeId: string | null) {
-  if ((task.assignee_id ?? null) === assigneeId) return
-  const who = S().profiles.find((p) => p.id === assigneeId)
-  S().updateRow('tasks', task.id, { assignee_id: assigneeId }, {
+/** The database has the multi-assignee column once task-assignees.sql has run (demo always does). */
+function multiAssignee() {
+  return S().demoMode || S().tasks.some((t) => 'assignee_ids' in t)
+}
+
+/** What to write for a set of assignees (falls back to a single person before the SQL is run). */
+export function assigneePatch(ids: string[]) {
+  const clean = [...new Set(ids.filter(Boolean))]
+  return multiAssignee() ? { assignee_ids: clean, assignee_id: clean[0] ?? null } : { assignee_id: clean[0] ?? null }
+}
+
+export function setTaskAssignees(task: Task, ids: string[]) {
+  const before = taskAssigneeIds(task)
+  const next = [...new Set(ids)]
+  if (before.length === next.length && before.every((id, i) => id === next[i])) return
+  const added = next.filter((id) => !before.includes(id))
+  const removed = before.filter((id) => !next.includes(id))
+  const name = (id: string) => profileDisplayName(S().profiles.find((p) => p.id === id))
+  const parts = [added.length ? `assigned ${added.map(name).join(', ')}` : '', removed.length ? `removed ${removed.map(name).join(', ')}` : ''].filter(Boolean)
+  S().updateRow('tasks', task.id, assigneePatch(next), {
     entity: 'task',
     entityId: task.id,
     action: 'assigned',
-    message: assigneeId ? `assigned ${profileDisplayName(who)}` : 'removed the assignee',
+    message: parts.join(' · ') || 'changed the assignees',
     projectId: task.project_id,
-    meta: { emailed: Boolean(assigneeId && assigneeId !== S().me?.id && who?.notification_prefs?.assigned !== false) },
+    meta: { emailed: added.some((id) => id !== S().me?.id && S().profiles.find((p) => p.id === id)?.notification_prefs?.assigned !== false) },
   })
+}
+
+/** Single-person shortcut (kept for older callers). */
+export function assignTask(task: Task, assigneeId: string | null) {
+  setTaskAssignees(task, assigneeId ? [assigneeId] : [])
 }
 
 export function updateTask(task: Task, patch: Partial<Task>, message?: string) {
@@ -219,7 +247,7 @@ export function duplicateForNextMonth(project: Project) {
   for (const t of S().tasks.filter((t) => t.project_id === project.id && t.status !== 'cancelled')) {
     S().createRow<Task>('tasks', {
       project_id: copy.id, title: t.title, description: t.description, priority: t.priority, status: 'todo',
-      assignee_id: t.assignee_id, labels: t.labels ?? [], estimate_minutes: t.estimate_minutes, due_date: shift(t.due_date),
+      ...assigneePatch(taskAssigneeIds(t)), labels: t.labels ?? [], estimate_minutes: t.estimate_minutes, due_date: shift(t.due_date),
     } as Task)
   }
   toast.success(`Created “${title}”`)

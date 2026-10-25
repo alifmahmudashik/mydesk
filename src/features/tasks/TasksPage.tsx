@@ -10,7 +10,7 @@ import { Avatar, ClientMark } from '@/components/ui/avatar'
 import { StatusRing } from '@/components/ui/pill'
 import { DoneRow, TaskBoard, TaskGroup, TaskListRow } from '@/components/domain/TaskViews'
 import { ClientGroup, groupByClient } from '@/components/domain/ClientGroup'
-import { clientDisplayName, profileDisplayName, shortProjectTitle, taskRef } from '@/lib/derive'
+import { clientDisplayName, profileDisplayName, shortProjectTitle, taskRef, isAssignedTo, taskAssigneeIds } from '@/lib/derive'
 import { taskStatus } from '@/lib/status'
 import type { Task, TaskStatus } from '@/types'
 
@@ -53,9 +53,9 @@ export function TasksPage() {
     const query = q.trim().toLowerCase()
     return tasks.filter((t) => {
       if (t.status === 'cancelled') return false
-      if (who === 'me' && t.assignee_id !== me?.id) return false
-      if (who === 'none' && t.assignee_id) return false
-      if (who !== 'me' && who !== 'none' && who !== 'everyone' && t.assignee_id !== who) return false
+      if (who === 'me' && !isAssignedTo(t, me?.id)) return false
+      if (who === 'none' && taskAssigneeIds(t).length) return false
+      if (who !== 'me' && who !== 'none' && who !== 'everyone' && !isAssignedTo(t, who)) return false
       if (projectId !== 'all' && t.project_id !== projectId) return false
       if (query) {
         const p = projects.find((x) => x.id === t.project_id)
@@ -98,10 +98,10 @@ export function TasksPage() {
     if (group === 'status') {
       return (['todo', 'in_progress', 'review'] as TaskStatus[]).map((s) => ({ key: s, title: taskStatus[s].label, icon: <StatusRing status={s} />, tasks: sorted.filter((t) => t.status === s) }))
     }
-    const ids = [...new Set(sorted.map((t) => t.assignee_id ?? ''))]
+    const ids = [...new Set(sorted.flatMap((t) => (taskAssigneeIds(t).length ? taskAssigneeIds(t) : [''])))]
     return ids.map((id) => {
       const p = profiles.find((x) => x.id === id)
-      return { key: id || 'none', title: p ? (p.id === me?.id ? 'Me' : profileDisplayName(p)) : 'Unassigned', icon: <Avatar profile={p} size="xs" />, tasks: sorted.filter((t) => (t.assignee_id ?? '') === id) }
+      return { key: id || 'none', title: p ? (p.id === me?.id ? 'Me' : profileDisplayName(p)) : 'Unassigned', icon: <Avatar profile={p} size="xs" />, tasks: sorted.filter((t) => (id ? isAssignedTo(t, id) : taskAssigneeIds(t).length === 0)) }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, group, projects, profiles, clients])

@@ -182,6 +182,10 @@ alter table clients add column if not exists company_address text;
 alter table clients add column if not exists brand_color text;
 alter table clients add column if not exists invoice_fields jsonb not null default '[]'::jsonb;
 alter table tasks add column if not exists assignee_id uuid references auth.users (id);
+-- Several people can work on one task. assignee_id stays as the first of them (kept in
+-- sync by a trigger) so older code and emails keep working.
+alter table tasks add column if not exists assignee_ids uuid[] not null default '{}';
+update tasks set assignee_ids = array[assignee_id] where assignee_id is not null and cardinality(assignee_ids) = 0;
 alter table activity_log add column if not exists actor_id uuid default auth.uid();
 alter table payments add column if not exists project_ids uuid[] not null default '{}';
 alter table invoice_settings add column if not exists payment_profiles jsonb not null default '[]'::jsonb;
@@ -606,6 +610,7 @@ create index if not exists idx_outbox_pending on email_outbox (status, created_a
 create index if not exists idx_invites_email on invites (lower(email));
 create index if not exists idx_activity_project on activity_log (project_id);
 create index if not exists idx_tasks_assignee on tasks (assignee_id);
+create index if not exists idx_tasks_assignee_ids on tasks using gin (assignee_ids);
 
 -- ---------------------------------------------------------------------------
 -- One-time backfills of the new columns (only rows where they're still empty)
@@ -744,6 +749,32 @@ drop trigger if exists tasks_before_write on tasks;
 create trigger tasks_before_write before insert or update on tasks
   for each row execute function public.tasks_before_write();
 
+-- Keep assignee_ids (the list) and assignee_id (the first person) in step, whichever
+-- one the app wrote. Duplicates are dropped and order is kept.
+create or replace function public.tasks_sync_assignees() returns trigger
+language plpgsql set search_path = public as $$
+begin
+  if tg_op = 'INSERT' then
+    if cardinality(coalesce(new.assignee_ids, '{}')) = 0 and new.assignee_id is not null then
+      new.assignee_ids := array[new.assignee_id];
+    end if;
+  elsif new.assignee_ids is not distinct from old.assignee_ids and new.assignee_id is distinct from old.assignee_id then
+    new.assignee_ids := case when new.assignee_id is null then '{}'::uuid[] else array[new.assignee_id] end;
+  end if;
+  new.assignee_ids := coalesce((
+    select array_agg(u order by o) from (
+      select u, min(o) as o from unnest(coalesce(new.assignee_ids, '{}')) with ordinality as x(u, o)
+      where u is not null group by u
+    ) d
+  ), '{}');
+  new.assignee_id := new.assignee_ids[1];
+  return new;
+end $$;
+
+drop trigger if exists tasks_assignees_sync on tasks;
+create trigger tasks_assignees_sync before insert or update on tasks
+  for each row execute function public.tasks_sync_assignees();
+
 create or replace function public.projects_before_insert() returns trigger
 language plpgsql set search_path = public as $$
 begin
@@ -758,17 +789,20 @@ create trigger projects_before_insert before insert on projects
 -- Assignment + completion notifications.
 create or replace function public.tasks_after_write() returns trigger
 language plpgsql security definer set search_path = public as $$
-declare v_actor uuid := auth.uid(); v_proj text;
+declare v_actor uuid := auth.uid(); v_proj text; v_uid uuid;
 begin
   select title into v_proj from projects where id = new.project_id;
-  if new.assignee_id is not null and new.assignee_id is distinct from v_actor
-     and (tg_op = 'INSERT' or new.assignee_id is distinct from old.assignee_id) then
-    -- Keyed per task+assignee: editing the task (or re-assigning the same person) never re-sends.
-    perform notify(new.assignee_id, 'assigned', v_actor, 'task', new.id, new.project_id,
-      new.title, v_proj, '/tasks/' || new.id,
-      'assigned:' || new.id || ':' || new.assignee_id, 'assigned',
-      jsonb_build_object('project', v_proj, 'ref', task_ref(new.id), 'due', new.due_date));
-  end if;
+  -- Everyone newly added to the task (not yourself). Keyed per task+person: editing the
+  -- task, or re-adding the same person, never re-sends.
+  foreach v_uid in array coalesce(new.assignee_ids, '{}') loop
+    if v_uid is distinct from v_actor
+       and (tg_op = 'INSERT' or not (v_uid = any(coalesce(old.assignee_ids, '{}')))) then
+      perform notify(v_uid, 'assigned', v_actor, 'task', new.id, new.project_id,
+        new.title, v_proj, '/tasks/' || new.id,
+        'assigned:' || new.id || ':' || v_uid, 'assigned',
+        jsonb_build_object('project', v_proj, 'ref', task_ref(new.id), 'due', new.due_date));
+    end if;
+  end loop;
   if tg_op = 'UPDATE' and new.status = 'done' and old.status is distinct from 'done'
      and new.created_by is not null and new.created_by is distinct from v_actor then
     perform notify(new.created_by, 'completed', v_actor, 'task', new.id, new.project_id,
@@ -779,7 +813,7 @@ begin
 end $$;
 
 drop trigger if exists tasks_after_write on tasks;
-create trigger tasks_after_write after insert or update of assignee_id, status on tasks
+create trigger tasks_after_write after insert or update of assignee_id, assignee_ids, status on tasks
   for each row execute function public.tasks_after_write();
 
 -- Comments: @mentions get an email; assignee/creator/watchers get an inbox item
@@ -788,7 +822,7 @@ create or replace function public.comments_after_insert() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare v_task record; v_uid uuid; v_excerpt text;
 begin
-  select t.id, t.title, t.project_id, t.assignee_id, t.created_by, p.title as project_title into v_task
+  select t.id, t.title, t.project_id, t.assignee_ids, t.created_by, p.title as project_title into v_task
   from tasks t join projects p on p.id = t.project_id where t.id = new.task_id;
   v_excerpt := left(regexp_replace(new.body, '<[^>]+>', '', 'g'), 240);
 
@@ -803,7 +837,7 @@ begin
 
   for v_uid in
     select distinct u from (
-      select v_task.assignee_id as u
+      select unnest(coalesce(v_task.assignee_ids, '{}')) as u
       union select v_task.created_by
       union select user_id from task_watchers where task_id = new.task_id
     ) s where u is not null and u is distinct from new.author_id and not (u = any(coalesce(new.mentions, '{}')))
@@ -963,9 +997,10 @@ begin
 
   -- Due soon: open tasks due tomorrow -> their assignee (once per task per due date).
   for r in
-    select t.id, t.title, t.due_date, t.assignee_id, t.project_id, p.title as project_title, task_ref(t.id) as ref
+    select t.id, t.title, t.due_date, a.uid as assignee_id, t.project_id, p.title as project_title, task_ref(t.id) as ref
     from tasks t join projects p on p.id = t.project_id
-    where t.due_date = current_date + 1 and t.status not in ('done','cancelled') and t.assignee_id is not null
+    cross join lateral unnest(coalesce(t.assignee_ids, '{}')) as a(uid)
+    where t.due_date = current_date + 1 and t.status not in ('done','cancelled')
   loop
     perform notify(r.assignee_id, 'due_soon', null, 'task', r.id, r.project_id,
       r.title, 'Task due tomorrow · ' || r.project_title, '/tasks/' || r.id,
@@ -1085,6 +1120,7 @@ begin
   if exists (select 1 from profiles where id = p_user and role = 'owner') then
     raise exception 'The owner cannot be removed';
   end if;
+  update tasks set assignee_ids = array_remove(assignee_ids, p_user) where p_user = any(assignee_ids);
   update tasks set assignee_id = null where assignee_id = p_user;
   update subtasks set assignee_id = null where assignee_id = p_user;
   delete from client_members where user_id = p_user;

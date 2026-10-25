@@ -12,7 +12,7 @@ import { Avatar, ClientMark } from '@/components/ui/avatar'
 import { DateChip, StatusRing } from '@/components/ui/pill'
 import { ConfirmDialog } from '@/components/ui/modal'
 import { ProfileFields, draftPatch, profileDraft, type ProfileDraft } from '@/features/team/ProfileFields'
-import { clientDisplayName, OPEN_TASK, profileDisplayName, profileFullName, shortProjectTitle } from '@/lib/derive'
+import { clientDisplayName, OPEN_TASK, profileDisplayName, profileFullName, shortProjectTitle, isAssignedTo, taskAssigneeIds } from '@/lib/derive'
 import { formatDate, formatFeedAgo } from '@/lib/format'
 import type { ClientMember, Role } from '@/types'
 
@@ -57,9 +57,9 @@ export function MemberPage() {
 
   const name = profileDisplayName(person)
   const canEdit = isAdmin && person.role !== 'owner' && (person.role !== 'admin' || isOwner)
-  const open = tasks.filter((t) => t.assignee_id === id && OPEN_TASK(t))
+  const open = tasks.filter((t) => isAssignedTo(t, id) && OPEN_TASK(t))
   const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd')
-  const doneThisMonth = tasks.filter((t) => t.assignee_id === id && t.status === 'done' && (t.completed_at ?? '') >= monthStart)
+  const doneThisMonth = tasks.filter((t) => isAssignedTo(t, id) && t.status === 'done' && (t.completed_at ?? '') >= monthStart)
   const work = [...open, ...doneThisMonth.slice(0, 5)]
   const activeClients = clients.filter((c) => c.status !== 'archived')
 
@@ -79,7 +79,11 @@ export function MemberPage() {
       useData.setState((s) => ({
         profiles: s.profiles.filter((p) => p.id !== person.id),
         clientMembers: s.clientMembers.filter((m) => m.user_id !== person.id),
-        tasks: s.tasks.map((t) => (t.assignee_id === person.id ? { ...t, assignee_id: null } : t)),
+        tasks: s.tasks.map((t) => {
+          if (!isAssignedTo(t, person.id)) return t
+          const ids = taskAssigneeIds(t).filter((x) => x !== person.id)
+          return { ...t, assignee_ids: ids, assignee_id: ids[0] ?? null }
+        }),
       }))
       toast.success(`${name} was removed`)
       navigate('/team')
