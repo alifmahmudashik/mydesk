@@ -190,6 +190,9 @@ alter table activity_log add column if not exists actor_id uuid default auth.uid
 alter table payments add column if not exists project_ids uuid[] not null default '{}';
 alter table invoice_settings add column if not exists payment_profiles jsonb not null default '[]'::jsonb;
 alter table invoices add column if not exists payment_fields jsonb not null default '[]'::jsonb;
+-- Optional payment processing fee passed on to the client (percent + flat).
+alter table invoices add column if not exists fee_percent numeric not null default 0;
+alter table invoices add column if not exists fee_flat numeric not null default 0;
 
 -- Old flat payment_fields on invoice_settings: wrap into a single "Default" payment
 -- profile so nobody's saved bank details vanish, then drop it.

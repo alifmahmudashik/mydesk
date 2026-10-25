@@ -256,8 +256,18 @@ export function duplicateForNextMonth(project: Project) {
 
 // ---------------------------------------------------------------- payments
 
-export function markPaymentPaid(payment: Payment, opts: { silent?: boolean; method?: string } = {}) {
+export interface PaidUndo {
+  payment: Pick<Payment, 'id' | 'status' | 'payment_date'>
+  projects: Pick<Project, 'id' | 'status' | 'completed_at' | 'payment_status'>[]
+}
+
+/**
+ * Marks a payment paid. A project whose payments are now all paid is set to Finished too
+ * (Finished = paid), so the project and its payment never disagree.
+ */
+export function markPaymentPaid(payment: Payment, opts: { silent?: boolean; method?: string } = {}): PaidUndo {
   const client = S().clients.find((c) => c.id === payment.client_id)
+  const undo: PaidUndo = { payment: { id: payment.id, status: payment.status, payment_date: payment.payment_date ?? null }, projects: [] }
   S().updateRow('payments', payment.id, {
     status: 'paid',
     payment_date: payment.payment_date ?? todayISO(),
@@ -268,8 +278,29 @@ export function markPaymentPaid(payment: Payment, opts: { silent?: boolean; meth
     action: 'paid',
     message: `received ${formatMoney(payment.amount, payment.currency)} from ${clientDisplayName(client)}`,
   })
+  for (const pid of payment.project_ids ?? []) {
+    const project = S().projects.find((p) => p.id === pid)
+    if (!project || project.status === 'finished' || project.status === 'cancelled') continue
+    const allPaid = S().payments.filter((p) => (p.project_ids ?? []).includes(pid) && p.status !== 'refunded').every((p) => p.status === 'paid')
+    if (!allPaid) continue
+    undo.projects.push({ id: project.id, status: project.status, completed_at: project.completed_at ?? null, payment_status: project.payment_status })
+    setProjectStatus(project, 'finished')
+  }
   if (!opts.silent) {
-    toast.success(`${formatMoney(payment.amount, payment.currency)} received`, { description: `${clientDisplayName(client)}, marked as paid.` })
+    const finished = undo.projects.length ? ` ${undo.projects.length === 1 ? 'Project' : `${undo.projects.length} projects`} set to Finished.` : ''
+    toast.success(`${formatMoney(payment.amount, payment.currency)} received`, {
+      description: `${clientDisplayName(client)}, marked as paid.${finished}`,
+      action: { label: 'Undo', onClick: () => undoPaymentPaid(undo) },
+    })
+  }
+  return undo
+}
+
+/** Reverses markPaymentPaid: the payment and any project it finished go back to how they were. */
+export function undoPaymentPaid(undo: PaidUndo) {
+  S().updateRow('payments', undo.payment.id, { status: undo.payment.status, payment_date: undo.payment.payment_date ?? null })
+  for (const p of undo.projects) {
+    S().updateRow('projects', p.id, { status: p.status, completed_at: p.completed_at ?? null, payment_status: p.payment_status })
   }
 }
 

@@ -614,3 +614,9 @@ a.ls-r-t .i { color: var(--faint); }
 .pop-card { z-index: 88; }
 .menu-pop.floating, .menu-pop.floating.up, .menu-pop.floating.left { z-index: 96; }
 .date-pop, .mp-pop, .tp-pop, .cur-pop { z-index: 97; }
+
+/* invoice processing fee */
+.fee-box { padding: 12px; border: 1px solid var(--line-s); border-radius: 10px; background: var(--soft2); gap: 10px; }
+
+/* a payment just marked paid: stays in place briefly with Undo */
+.tbl tr.just-paid td { background: color-mix(in srgb, var(--ok-bg) 70%, transparent); transition: background .3s var(--ease-out); }

@@ -130,6 +130,45 @@ export function plainMentions(body: string) {
  * An invoice's status, from the payment(s) linked to it. An invoice built from several
  * projects links to each project's own payment: paid once all are paid, overdue if any is.
  */
+const sameTitle = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
+
+/** Projects an invoice is for: its line items matched to the client's projects by name,
+ *  plus any project whose payment is linked to the invoice. */
+export function invoiceProjects(
+  inv: { id: string; client_id: string; line_items: { description: string }[] },
+  projects: Project[],
+  payments: Payment[],
+): Project[] {
+  const linkedIds = new Set(payments.filter((p) => p.invoice_id === inv.id).flatMap((p) => p.project_ids ?? []))
+  return projects.filter(
+    (p) => linkedIds.has(p.id) || (p.client_id === inv.client_id && inv.line_items.some((li) => li.description.trim() && sameTitle(li.description, p.title))),
+  )
+}
+
+/**
+ * An invoice's paid status, from the projects on it: all Finished (or all their payments paid)
+ * = paid. Falls back to payments linked directly to the invoice; null when it has neither.
+ */
+export function invoiceStatus(
+  inv: { id: string; client_id: string; line_items: { description: string }[]; due_date?: string | null },
+  projects: Project[],
+  payments: Payment[],
+): PaymentStatus | null {
+  const list = invoiceProjects(inv, projects, payments)
+  if (list.length) {
+    const paidProject = (pr: Project) => {
+      const own = payments.filter((p) => (p.project_ids ?? []).includes(pr.id) && p.status !== 'refunded')
+      return pr.status === 'finished' || (own.length > 0 && own.every((p) => p.status === 'paid'))
+    }
+    const paid = list.filter(paidProject).length
+    if (paid === list.length) return 'paid'
+    const open = payments.filter((p) => isOpenPayment(p) && (p.project_ids ?? []).some((id) => list.some((pr) => pr.id === id)))
+    if (open.some((p) => effectivePaymentStatus(p) === 'overdue') || (inv.due_date && isOverdue(inv.due_date))) return 'overdue'
+    return paid > 0 ? 'partial' : 'unpaid'
+  }
+  return invoicePaymentStatus(inv.id, payments)
+}
+
 export function invoicePaymentStatus(invoiceId: string, payments: Payment[]): PaymentStatus | null {
   const linked = payments.filter((p) => p.invoice_id === invoiceId)
   if (linked.length === 0) return null

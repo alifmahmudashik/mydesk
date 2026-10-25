@@ -1,3 +1,4 @@
+import { invoiceTotal } from '@/lib/invoice-math'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { format, startOfMonth } from 'date-fns'
@@ -8,15 +9,12 @@ import { ClientGroup, groupByClient } from '@/components/domain/ClientGroup'
 import { StatusPill } from '@/components/ui/pill'
 import { ConfirmDialog } from '@/components/ui/modal'
 import { sumUSD, useUsdRates } from '@/lib/currency'
-import { clientDisplayName, invoicePaymentStatus, isInvoiceable, sumByCurrency } from '@/lib/derive'
+import { clientDisplayName, invoiceStatus, isInvoiceable, sumByCurrency } from '@/lib/derive'
 import { formatDate, formatMoney } from '@/lib/format'
 import { paymentStatus } from '@/lib/status'
 import type { Invoice } from '@/types'
 
-export function invoiceTotal(inv: Pick<Invoice, 'line_items' | 'tax_rate'>) {
-  const sub = inv.line_items.reduce((s, li) => s + Number(li.price) * Number(li.qty), 0)
-  return sub * (1 + Number(inv.tax_rate) / 100)
-}
+export { invoiceTotal } from '@/lib/invoice-math'
 
 export function InvoicesPage() {
   const { invoices, clients, payments, projects, deleteRow } = useData()
@@ -36,7 +34,7 @@ export function InvoicesPage() {
     [invoices, clients, q],
   )
 
-  const statusOf = (inv: Invoice) => invoicePaymentStatus(inv.id, payments)
+  const statusOf = (inv: Invoice) => invoiceStatus(inv, projects, payments)
 
   const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd')
   const thisMonth = invoices.filter((i) => (i.issue_date ?? '') >= monthStart)
@@ -112,7 +110,7 @@ export function InvoicesPage() {
                             <tr key={inv.id} className="hov">
                               <td><Link className="mono m cover" to={`/invoices/${inv.id}`}>{inv.number}</Link></td>
                               <td>{formatDate(inv.issue_date)}</td>
-                              <td>{st ? <StatusPill meta={paymentStatus[st]} /> : <span className="pill gray" title="Not linked to a project">No project</span>}</td>
+                              <td>{st ? <StatusPill meta={paymentStatus[st]} /> : <span className="pill gray" title="No line item matches one of this client’s projects">No project</span>}</td>
                               <td className="r num b">{formatMoney(invoiceTotal(inv), inv.currency, { cents: true })}</td>
                               <td className="r">
                                 <span className="row-sm above" style={{ justifyContent: 'flex-end' }}>

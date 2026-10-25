@@ -152,6 +152,25 @@ function loadLocal(): Partial<DemoData> | null {
 
 let channels: RealtimeChannel[] = []
 
+/** Database writes go out one after another, in the order they were made, so a row is
+ *  always created before anything that points at it (e.g. a new invoice before the payments
+ *  linked to it, a topic before its members). */
+let writeChain: Promise<unknown> = Promise.resolve()
+function queueWrite<T>(run: () => PromiseLike<T>): Promise<T> {
+  const next = writeChain.then(run, run)
+  writeChain = next.catch(() => undefined)
+  return next
+}
+
+/** Inserts still on their way to the database, by row id. */
+const pendingInserts = new Map<string, Promise<boolean>>()
+
+/** Resolves once a just-created row exists in the database (true), or failed to save (false).
+ *  Use before writing rows that reference it (foreign keys). */
+export function whenSaved(id: string): Promise<boolean> {
+  return pendingInserts.get(id) ?? Promise.resolve(true)
+}
+
 function readSeen(userId?: string | null) {
   try {
     return (userId && localStorage.getItem(`mydesk-inbox-seen:${userId}`)) || ''
@@ -423,15 +442,17 @@ export const useData = create<DataState>((set, get) => {
       if (log) logActivity({ ...log, entityId: row.id })
       persistLocal()
       if (supabase) {
-        void supabase
-          .from(table)
-          .insert(row)
-          .select()
-          .single()
-          .then(({ data: saved, error }) => {
-            if (error) revert(prev, error.message)
-            else if (saved) upsertLocal(table, saved as AnyRow)
-          })
+        const sb = supabase
+        const p = queueWrite(() => sb.from(table).insert(row).select().single()).then(({ data: saved, error }) => {
+          pendingInserts.delete(row.id)
+          if (error) {
+            revert(prev, error.message)
+            return false
+          }
+          if (saved) upsertLocal(table, saved as AnyRow)
+          return true
+        })
+        pendingInserts.set(row.id, p)
       }
       return row as never
     },
@@ -449,13 +470,8 @@ export const useData = create<DataState>((set, get) => {
       if (log) logActivity(log)
       persistLocal()
       if (supabase) {
-        void supabase
-          .from(table)
-          .update(patch)
-          .eq('id', id)
-          .select()
-          .maybeSingle()
-          .then(({ data: saved, error }) => {
+        const sb = supabase
+        void queueWrite(() => sb.from(table).update(patch).eq('id', id).select().maybeSingle()).then(({ data: saved, error }) => {
             if (error) revert(prev, error.message)
             else if (saved) upsertLocal(table, saved as AnyRow)
           })
@@ -468,11 +484,8 @@ export const useData = create<DataState>((set, get) => {
       if (log) logActivity(log)
       persistLocal()
       if (supabase) {
-        void supabase
-          .from(table)
-          .delete()
-          .eq('id', id)
-          .then(({ error }) => {
+        const sb = supabase
+        void queueWrite(() => sb.from(table).delete().eq('id', id)).then(({ error }) => {
             if (error) revert(prev, error.message)
           })
       }

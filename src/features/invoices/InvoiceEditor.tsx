@@ -5,7 +5,8 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { addDays, format, parseISO } from 'date-fns'
 import { Download, Folder, Loader2, Plus, Settings, X } from 'lucide-react'
 import { toast } from 'sonner'
-import { useData } from '@/data/store'
+import { useData, whenSaved } from '@/data/store'
+import { invoiceAmounts } from '@/lib/invoice-math'
 import { Topbar, Empty, Section } from '@/components/ui/layout'
 import { Field } from '@/components/ui/field'
 import { StatusPill } from '@/components/ui/pill'
@@ -13,7 +14,7 @@ import { Modal } from '@/components/ui/modal'
 import { A4_WIDTH, InvoicePaper, ScaledInvoice } from '@/features/invoices/InvoicePaper'
 import { SUPPORTED_CURRENCIES } from '@/lib/currency'
 import { exportElementToPdf, invoiceFilename } from '@/lib/pdf'
-import { clientColor, clientDisplayName, effectivePaymentStatus, invoicePaymentStatus, isInvoiceable, withWorkMonthNote } from '@/lib/derive'
+import { clientColor, clientDisplayName, effectivePaymentStatus, invoiceStatus, isInvoiceable, withWorkMonthNote } from '@/lib/derive'
 import { formatDate, formatMoney, todayISO } from '@/lib/format'
 import { paymentStatus, paymentTerms } from '@/lib/status'
 import type { Client, Invoice, InvoiceLineItem, Project } from '@/types'
@@ -52,6 +53,7 @@ export function InvoiceEditor() {
         due_date: existing.due_date ?? '',
         line_items: existing.line_items,
         tax_rate: String(existing.tax_rate ?? 0),
+        paid_total: existing.fee_flat ? (invoiceAmounts({ line_items: existing.line_items, tax_rate: existing.tax_rate }).base + Number(existing.fee_flat)).toFixed(2) : '',
         notes: existing.notes ?? '',
         brand_color: existing.brand_color ?? '#4F46E5',
         payment_profile_id: existing.payment_profile_id ?? 'none',
@@ -71,6 +73,7 @@ export function InvoiceEditor() {
       due_date: format(addDays(new Date(), terms), 'yyyy-MM-dd'),
       line_items: items.length ? items : [{ description: '', price: 0, qty: 1 }],
       tax_rate: String(invoiceSettings?.default_tax ?? 0),
+      paid_total: '',
       notes: withWorkMonthNote(invoiceSettings?.default_note ?? '', projects.filter((p) => fromProjects.includes(p.id))),
       brand_color: client ? clientColor(client) : invoiceSettings?.brand_color ?? '#4F46E5',
       payment_profile_id: defaultProfile?.id ?? 'none',
@@ -86,7 +89,7 @@ export function InvoiceEditor() {
   // so an invoice made from projects links to those payments instead of creating new ones.
   const linkedPayments = existing ? payments.filter((p) => p.invoice_id === existing.id) : []
   const projectIdsOnInvoice = projects
-    .filter((p) => p.client_id === f.client_id && f.line_items.some((li) => li.description.trim() && li.description.trim() === p.title.trim()))
+    .filter((p) => p.client_id === f.client_id && f.line_items.some((li) => li.description.trim() && li.description.trim().toLowerCase() === p.title.trim().toLowerCase()))
     .map((p) => p.id)
   const projectPayments = payments.filter(
     (p) =>
@@ -97,6 +100,9 @@ export function InvoiceEditor() {
   )
 
   const client = clients.find((c) => c.id === f.client_id)
+  const due = invoiceAmounts({ line_items: f.line_items, tax_rate: f.tax_rate }).base
+  // Processing fee = what the client actually paid minus the amount due (never negative).
+  const feeAmount = f.paid_total && Number(f.paid_total) > due ? Math.round((Number(f.paid_total) - due) * 100) / 100 : 0
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((s) => ({ ...s, [k]: v }))
   const setLine = (i: number, patch: Partial<InvoiceLineItem>) => set('line_items', f.line_items.map((li, idx) => (idx === i ? { ...li, ...patch } : li)))
   const profiles = invoiceSettings?.payment_profiles ?? []
@@ -107,6 +113,7 @@ export function InvoiceEditor() {
     currency: f.currency,
     lineItems: f.line_items.filter((li) => li.description.trim() || li.price),
     taxRate: Number(f.tax_rate) || 0,
+    feeFlat: feeAmount,
     notes: f.notes,
     brandColor: f.brand_color,
     client,
@@ -149,6 +156,8 @@ export function InvoiceEditor() {
       currency: f.currency,
       line_items: items,
       tax_rate: Number(f.tax_rate) || 0,
+      // Only sent once the fee columns exist (or when a fee is actually used).
+      ...(invoices.some((i) => 'fee_flat' in i) || feeAmount ? { fee_percent: 0, fee_flat: feeAmount } : {}),
       notes: f.notes.trim() || null,
       brand_color: f.brand_color || null,
       payment_fields: f.payment_fields,
@@ -163,17 +172,25 @@ export function InvoiceEditor() {
 
     // Invoices are documents. Paid/unpaid lives on each project's payment (Finished = paid),
     // so saving only links those payments to this invoice — it never creates or settles one.
-    for (const p of linkedPayments) {
-      const stillOnInvoice = projectPayments.includes(p) || (p.project_ids ?? []).length === 0
-      if (!stillOnInvoice) updateRow('payments', p.id, { invoice_id: null })
+    // A new invoice must exist in the database before payments can point at it.
+    const linkPayments = () => {
+      for (const p of linkedPayments) {
+        const stillOnInvoice = projectPayments.includes(p) || (p.project_ids ?? []).length === 0
+        if (!stillOnInvoice) updateRow('payments', p.id, { invoice_id: null })
+      }
+      for (const p of projectPayments) {
+        const patch: Record<string, unknown> = {}
+        if (p.invoice_id !== invId) patch.invoice_id = invId
+        // Remember how it's paid (Wise, Payoneer…) from the invoice's payment profile.
+        const method = profiles.find((x) => x.id === f.payment_profile_id)?.name
+        if (method && !p.payment_method) patch.payment_method = method
+        // Open payments follow the invoice's due date, so "overdue" matches what the client was sent.
+        if (p.status !== 'paid' && p.status !== 'refunded' && data.due_date && p.due_date !== data.due_date) patch.due_date = data.due_date
+        if (Object.keys(patch).length) updateRow('payments', p.id, patch)
+      }
     }
-    for (const p of projectPayments) {
-      const patch: Record<string, unknown> = {}
-      if (p.invoice_id !== invId) patch.invoice_id = invId
-      // Open payments follow the invoice's due date, so "overdue" matches what the client was sent.
-      if (p.status !== 'paid' && p.status !== 'refunded' && data.due_date && p.due_date !== data.due_date) patch.due_date = data.due_date
-      if (Object.keys(patch).length) updateRow('payments', p.id, patch)
-    }
+    if (invId && !existing) void whenSaved(invId).then((ok) => ok && linkPayments())
+    else linkPayments()
     toast.success(existing ? 'Invoice saved' : 'Invoice created')
     if (!existing && invId) navigate(`/invoices/${invId}`, { replace: true })
   }
@@ -224,7 +241,7 @@ export function InvoiceEditor() {
     )
   }
 
-  const linkedStatus = existing ? invoicePaymentStatus(existing.id, payments) : null
+  const linkedStatus = existing ? invoiceStatus({ ...existing, line_items: f.line_items, client_id: f.client_id }, projects, payments) : null
 
   return (
     <>
@@ -306,6 +323,7 @@ export function InvoiceEditor() {
                   <input type="color" className="swatch-input" value={/^#[0-9a-f]{6}$/i.test(f.brand_color) ? f.brand_color : '#4F46E5'} onChange={(e) => set('brand_color', e.target.value)} aria-label="Custom color" />
                 </div>
               </div>
+              <PaidTotalField value={f.paid_total} due={due} fee={feeAmount} currency={f.currency} onChange={(v) => set('paid_total', v)} />
               <Field label="Note"><textarea className="inp" rows={2} value={f.notes} onChange={(e) => set('notes', e.target.value)} /></Field>
               <div className="field">
                 <span className="lbl">Payment</span>
@@ -388,5 +406,36 @@ function ProjectPicker({ open, onClose, clientId, onAdd, exclude }: { open: bool
         ))}
       </div>
     </Modal>
+  )
+}
+
+/** Optional: type what the client actually paid; anything above the amount due becomes the
+ *  "Payment processing fee" line, so the invoice total matches the money received. */
+function PaidTotalField({ value, due, fee, currency, onChange }: { value: string; due: number; fee: number; currency: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(Boolean(value))
+  useEffect(() => { if (value) setOpen(true) }, [value])
+  if (!open) {
+    return (
+      <button type="button" className="link-btn small" style={{ alignSelf: 'flex-start' }} onClick={() => setOpen(true)}>
+        + Add a payment processing fee (optional)
+      </button>
+    )
+  }
+  const low = value !== '' && Number(value) > 0 && Number(value) < due
+  return (
+    <div className="field fee-box">
+      <div className="row between">
+        <span className="lbl">Total the client paid</span>
+        <button type="button" className="link-btn xs" onClick={() => { onChange(''); setOpen(false) }}>Remove</button>
+      </div>
+      <span className="prefix"><span>{currency}</span><input className="inp" inputMode="decimal" autoFocus placeholder={due ? due.toFixed(2) : '0.00'} aria-label="Total the client paid" value={value} onChange={(e) => onChange(e.target.value.replace(/[^\d.]/g, ''))} /></span>
+      <span className={`hint${low ? ' t-warn' : ''}`}>
+        {low
+          ? `That’s less than the amount due (${formatMoney(due, currency, { cents: true })}), so no fee is added.`
+          : fee > 0
+            ? `Adds a payment processing fee of ${formatMoney(fee, currency, { cents: true })} (${formatMoney(Number(value), currency, { cents: true })} paid − ${formatMoney(due, currency, { cents: true })} due). The invoice total becomes ${formatMoney(Number(value), currency, { cents: true })}.`
+            : `Amount due is ${formatMoney(due, currency, { cents: true })}. Enter what the client paid and the difference shows as a processing fee.`}
+      </span>
+    </div>
   )
 }

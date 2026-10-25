@@ -5,7 +5,7 @@ import { ChartColumn, Check, CreditCard, Plus, Search, Send } from 'lucide-react
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
 import { useUI } from '@/data/ui'
-import { markPaymentPaid, paymentTitle } from '@/data/actions'
+import { markPaymentPaid, paymentTitle, undoPaymentPaid, type PaidUndo } from '@/data/actions'
 import { Topbar, Content, Empty, PageHead } from '@/components/ui/layout'
 import { Tabs } from '@/components/ui/tabs'
 import { ClientMark } from '@/components/ui/avatar'
@@ -36,6 +36,7 @@ export function PaymentsPage() {
   const [remind, setRemind] = useState<Payment | null>(null)
   const [datesOpen, setDatesOpen] = useState(false)
   const [paidLimit, setPaidLimit] = useState(25)
+  const [justPaid, setJustPaid] = useState<Record<string, { undo: PaidUndo; wasOverdue: boolean }>>({})
   const thisMonth = format(new Date(), 'yyyy-MM')
   const month = params.get('m') || thisMonth
   const setMonth = (m: string) => {
@@ -79,6 +80,13 @@ export function PaymentsPage() {
   const allOpen = payments.filter(isOpenPayment)
   const open = allOpen.filter(inMonth)
   const overdue = open.filter((p) => effectivePaymentStatus(p) === 'overdue').sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? ''))
+  // Rows just marked paid stay put for a few seconds (with Undo) so the list doesn't jump
+  // under the mouse and you can't hit the wrong row by accident.
+  const kept = (p: Payment) => Boolean(justPaid[p.id])
+  const openRows = payments.filter((p) => (isOpenPayment(p) || kept(p)) && inMonth(p))
+  const overdueRows = openRows
+    .filter((p) => effectivePaymentStatus(p) === 'overdue' || justPaid[p.id]?.wasOverdue)
+    .sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? ''))
   const paid = payments.filter((p) => p.status === 'paid' && inMonth(p)).sort((a, b) => (b.payment_date ?? '').localeCompare(a.payment_date ?? ''))
   const noDate = open.filter((p) => !p.due_date)
   const otherOpen = all ? [] : allOpen.filter((p) => !inMonth(p))
@@ -98,7 +106,7 @@ export function PaymentsPage() {
 
   // Open tab groups by client, clients with overdue money first.
   const groups = useMemo(() => {
-    const list = open.filter(matchQ)
+    const list = openRows.filter(matchQ)
     const ids = [...new Set(list.map((p) => p.client_id))]
     return ids
       .map((id) => {
@@ -107,14 +115,35 @@ export function PaymentsPage() {
       })
       .sort((a, b) => Number(b.late) - Number(a.late) || sumUSD(b.rows, rates) - sumUSD(a.rows, rates))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, q, clients, rates])
+  }, [openRows, q, clients, rates])
 
   const markPaid = (p: Payment, el: HTMLElement) => {
-    markPaymentPaid(p)
+    const wasOverdue = effectivePaymentStatus(p) === 'overdue'
+    const undo = markPaymentPaid(p)
     celebrateFrom(el)
+    setJustPaid((s) => ({ ...s, [p.id]: { undo, wasOverdue } }))
+    setTimeout(() => setJustPaid((s) => {
+      const n = { ...s }
+      delete n[p.id]
+      return n
+    }), 6000)
+  }
+  const undoPaid = (p: Payment) => {
+    const rec = justPaid[p.id]
+    if (rec) undoPaymentPaid(rec.undo)
+    setJustPaid((s) => {
+      const n = { ...s }
+      delete n[p.id]
+      return n
+    })
   }
 
-  const actions = (p: Payment, withRemind: boolean) => (
+  const actions = (p: Payment, withRemind: boolean) => kept(p) ? (
+    <span className="row-sm above" style={{ justifyContent: 'flex-end' }}>
+      <span className="pill ok"><Check className="i i-xs" />Paid</span>
+      <button type="button" className="btn btn-sm btn-ghost" onClick={() => undoPaid(p)}>Undo</button>
+    </span>
+  ) : (
     <span className="row-sm above" style={{ justifyContent: 'flex-end' }}>
       {withRemind && (
         <button type="button" className="btn btn-sm" onClick={() => setRemind(p)} title={p.last_reminded_at ? `Last reminded ${formatDate(p.last_reminded_at.slice(0, 10))}` : undefined}>
@@ -232,7 +261,7 @@ export function PaymentsPage() {
                               {g.rows.map((p) => {
                                 const st = effectivePaymentStatus(p)
                                 return (
-                                  <tr key={p.id} className="hov">
+                                  <tr key={p.id} className={`hov${kept(p) ? ' just-paid' : ''}`}>
                                     <td><button type="button" className="m cover" style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', color: 'inherit' }} onClick={() => setEdit(p)}>{paymentTitle(p)}</button></td>
                                     <td className="wm-cell">{wmLabel(p)}</td>
                                     <td className="r num b">{formatMoney(p.amount, p.currency)}</td>
@@ -258,20 +287,20 @@ export function PaymentsPage() {
               ))}
 
             {tab === 'overdue' &&
-              (overdue.filter(matchQ).length === 0 ? (
+              (overdueRows.filter(matchQ).length === 0 ? (
                 <div className="card">
                   <Empty icon={<Check className="i" />} title="Nothing overdue">When a payment passes its due date it shows up here, and owners and admins get one email about it.</Empty>
                 </div>
               ) : (
                 <div className="client-groups">
-                  {groupByClient(overdue.filter(matchQ), (p) => p.client_id, clients).map((g) => (
+                  {groupByClient(overdueRows.filter(matchQ), (p) => p.client_id, clients).map((g) => (
                     <ClientGroup key={g.id} client={g.client} meta={`${g.rows.length} overdue \u00b7 oldest ${lateLabel(g.rows[0].due_date)}`} right={<span className="group-total t-bad">{sumByCurrency(g.rows)}</span>}>
                       <div className="tbl-wrap">
                         <table className="tbl" style={{ minWidth: 700 }}>
                           <thead><tr><th>Project</th><th>Work month</th><th className="r">Amount</th><th>Due</th><th>Last reminder</th><th className="r" /></tr></thead>
                           <tbody>
                             {g.rows.map((p) => (
-                              <tr key={p.id} className="hov">
+                              <tr key={p.id} className={`hov${kept(p) ? ' just-paid' : ''}`}>
                                 <td><button type="button" className="m cover" style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', color: 'inherit' }} onClick={() => setEdit(p)}>{paymentTitle(p)}</button></td>
                                 <td className="wm-cell">{wmLabel(p)}</td>
                                 <td className="r num b">{formatMoney(p.amount, p.currency)}</td>

@@ -139,6 +139,9 @@ export interface Invoice {
   currency: string
   line_items: InvoiceLineItem[]
   tax_rate: number
+  /** Optional processing fee passed on to the client (see invoiceAmounts). */
+  fee_percent?: number | null
+  fee_flat?: number | null
   notes?: string | null
   brand_color?: string | null
   /** Snapshot of whichever payment profile was picked when this invoice was made — stays

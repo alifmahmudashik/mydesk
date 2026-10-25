@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useRef, useState, type ReactNode } from 'react'
 import { formatDateLong } from '@/lib/format'
+import { invoiceAmounts } from '@/lib/invoice-math'
 import type { Client, InvoiceField, InvoiceLineItem, InvoiceSettings } from '@/types'
 
 export interface InvoicePaperProps {
@@ -9,6 +10,8 @@ export interface InvoicePaperProps {
   currency: string
   lineItems: InvoiceLineItem[]
   taxRate: number
+  feePercent?: number
+  feeFlat?: number
   notes?: string | null
   brandColor?: string | null
   client?: Client
@@ -42,9 +45,7 @@ const caps = { fontSize: 15, fontWeight: 700, letterSpacing: '.06em', textTransf
  * preview and the exported PDF are identical. Brand colour comes from the client/invoice.
  */
 export const InvoicePaper = forwardRef<HTMLDivElement, InvoicePaperProps>(function InvoicePaper(p, ref) {
-  const subtotal = p.lineItems.reduce((s, li) => s + Number(li.price) * Number(li.qty), 0)
-  const tax = subtotal * (Number(p.taxRate) / 100)
-  const total = subtotal + tax
+  const { subtotal, tax, fee, total } = invoiceAmounts({ line_items: p.lineItems, tax_rate: p.taxRate, fee_percent: p.feePercent, fee_flat: p.feeFlat })
   const brand = p.brandColor || '#4F46E5'
 
   // The address's first line is the client's legal invoicing name (often longer than the display name).
@@ -148,6 +149,7 @@ export const InvoicePaper = forwardRef<HTMLDivElement, InvoicePaperProps>(functi
         <div style={{ width: 256, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <Row label="Sub-total" value={money(subtotal, p.currency)} />
           <Row label={`Tax (${Number(p.taxRate)}%)`} value={money(tax, p.currency)} />
+          {fee > 0 && <Row label="Processing fee" value={money(fee, p.currency)} />}
           <div style={{ overflow: 'hidden', borderRadius: 6 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 16px', background: brand, color: '#fff', fontWeight: 700 }}>
               <span>Total</span>

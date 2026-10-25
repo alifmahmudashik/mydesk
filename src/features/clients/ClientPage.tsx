@@ -4,6 +4,7 @@ import { differenceInCalendarDays, format, parseISO } from 'date-fns'
 import { Archive, ArchiveRestore, Check, Clock, CreditCard, Edit3, FileText, Folder, Globe, Mail, MoreHorizontal, Phone, Plus, Settings, User } from 'lucide-react'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
+import { invoiceTotal } from '@/lib/invoice-math'
 import { useUI } from '@/data/ui'
 import { paymentTitle } from '@/data/actions'
 import { useIsAdmin } from '@/hooks/usePermissions'
@@ -16,7 +17,7 @@ import { StatusPill } from '@/components/ui/pill'
 import { RemindModal } from '@/features/payments/RemindModal'
 import { PaymentModal } from '@/features/payments/PaymentModal'
 import { ClientProjects } from '@/features/clients/ClientProjects'
-import { clientColor, clientDisplayName, clientSecondaryName, effectivePaymentStatus, invoicePaymentStatus, isOpenPayment, OPEN_PROJECT, profileDisplayName, sumByCurrency } from '@/lib/derive'
+import { clientColor, clientDisplayName, clientSecondaryName, effectivePaymentStatus, invoiceStatus, isOpenPayment, OPEN_PROJECT, profileDisplayName, sumByCurrency } from '@/lib/derive'
 import { formatDate, formatMoney, lateLabel } from '@/lib/format'
 import { clientStatus, paymentStatus } from '@/lib/status'
 import type { Payment } from '@/types'
@@ -64,7 +65,10 @@ export function ClientPage() {
   const allPaidDays = payments.filter((p) => p.status === 'paid' && p.payment_date).map((p) => differenceInCalendarDays(parseISO(p.payment_date!), parseISO(p.created_at)))
   const globalAvg = allPaidDays.length ? allPaidDays.reduce((a, b) => a + b, 0) / allPaidDays.length : null
 
-  const invoiceStatus = (invId: string) => invoicePaymentStatus(invId, payments)
+  const statusOfInvoice = (invId: string) => {
+    const inv = invoices.find((i) => i.id === invId)
+    return inv ? invoiceStatus(inv, projects, payments) : null
+  }
 
   const setStatus = (status: 'active' | 'archived') => {
     const prev = client.status
@@ -160,8 +164,8 @@ export function ClientPage() {
                         <thead><tr><th>Invoice</th><th>Issued</th><th>Status</th><th className="r">Amount</th></tr></thead>
                         <tbody>
                           {cInvoices.map((inv) => {
-                            const st = invoiceStatus(inv.id)
-                            const total = inv.line_items.reduce((s, li) => s + li.price * li.qty, 0) * (1 + inv.tax_rate / 100)
+                            const st = statusOfInvoice(inv.id)
+                            const total = invoiceTotal(inv)
                             return (
                               <tr key={inv.id} className="hov">
                                 <td><Link className="mono m cover" to={`/invoices/${inv.id}`}>{inv.number}</Link></td>
