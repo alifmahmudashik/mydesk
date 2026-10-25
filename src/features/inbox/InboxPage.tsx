@@ -70,6 +70,12 @@ export function InboxPage() {
 
   const selected = list.find((n) => n.id === selId) ?? list[0]
 
+  // Being on the Inbox counts as having seen everything in it (clears the bell).
+  const markInboxSeen = useData((s) => s.markInboxSeen)
+  useEffect(() => {
+    markInboxSeen()
+  }, [notifications.length, markInboxSeen])
+
   // Opening an item marks it read.
   useEffect(() => {
     if (selected && !selected.read_at) {

@@ -82,6 +82,9 @@ interface DataState extends DemoData {
   saveInvoiceSettings: (patch: Partial<Omit<InvoiceSettings, 'id' | 'created_at'>>) => void
   logActivity: (log: LogInput) => void
   markNotificationsRead: (ids?: string[]) => void
+  /** When this person last opened the Inbox (per device). The bell only lights up for newer items. */
+  inboxSeenAt: string
+  markInboxSeen: () => void
 }
 
 function snapshot(s: DataState): DemoData {
@@ -148,6 +151,14 @@ function loadLocal(): Partial<DemoData> | null {
 }
 
 let channels: RealtimeChannel[] = []
+
+function readSeen(userId?: string | null) {
+  try {
+    return (userId && localStorage.getItem(`mydesk-inbox-seen:${userId}`)) || ''
+  } catch {
+    return ''
+  }
+}
 
 export const useData = create<DataState>((set, get) => {
   const persistLocal = () => {
@@ -271,6 +282,17 @@ export const useData = create<DataState>((set, get) => {
     ready: false,
     learningReady: true,
     topicsReady: true,
+    inboxSeenAt: '',
+    markInboxSeen: () => {
+      const id = get().me?.id
+      const now = new Date().toISOString()
+      set({ inboxSeenAt: now })
+      try {
+        if (id) localStorage.setItem(`mydesk-inbox-seen:${id}`, now)
+      } catch {
+        // storage unavailable: the dot just comes back next visit
+      }
+    },
     demoMode: !supabase,
     me: null,
     onlineIds: [],
@@ -288,7 +310,7 @@ export const useData = create<DataState>((set, get) => {
           data.profiles.find((p) => p.role === 'owner') ||
           null
         const view = me && me.role === 'member' ? scopedToMember(data, me) : data
-        set({ ...view, me, ready: true, onlineIds: data.profiles.slice(1, 2).map((p) => p.id) })
+        set({ ...view, me, ready: true, inboxSeenAt: readSeen(me?.id), onlineIds: data.profiles.slice(1, 2).map((p) => p.id) })
         return
       }
       const sb = supabase
@@ -377,6 +399,7 @@ export const useData = create<DataState>((set, get) => {
         progress: progress.data ?? [],
         topicsReady: !topics.error,
         me: profileRows.find((p) => p.id === meId) ?? null,
+        inboxSeenAt: readSeen(meId),
         ready: true,
       })
 
@@ -480,7 +503,11 @@ export const useData = create<DataState>((set, get) => {
       const set_ = new Set(targets.map((n) => n.id))
       set((s) => ({ notifications: s.notifications.map((n) => (set_.has(n.id) ? { ...n, read_at: now } : n)) }))
       persistLocal()
-      if (supabase) void supabase.from('notifications').update({ read_at: now }).in('id', [...set_])
+      if (supabase) {
+        void supabase.from('notifications').update({ read_at: now }).in('id', [...set_]).then(({ error }) => {
+          if (error) toast.error('Couldn’t mark as read', { description: error.message })
+        })
+      }
     },
   }
 })

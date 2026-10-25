@@ -154,7 +154,7 @@ function MyLearning({ me, items, goals, events, myTopics, focusId, onShare, onEd
       {myTopics.length > 0 && (
         <section className="stack">
           <div className="row between"><h2 className="h2">My topics</h2><Link className="link small" to="/improvement?tab=topics">All topics →</Link></div>
-          <div className="tp-grid">{myTopics.map((t) => <TopicCard key={t.id} topic={t} me={me} lessons={lessons} progress={progress} members={topicMembers} people={profiles} compact />)}</div>
+          <div className="tpc-grid">{myTopics.map((t) => <TopicCard key={t.id} topic={t} me={me} lessons={lessons} progress={progress} members={topicMembers} people={profiles} compact />)}</div>
         </section>
       )}
 

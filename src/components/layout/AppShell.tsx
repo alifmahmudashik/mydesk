@@ -34,7 +34,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
   const location = useLocation()
 
-  const unread = notifications.filter((n) => !n.read_at).length
+  const inboxSeenAt = useData((s) => s.inboxSeenAt)
+  // Only what arrived since you last opened the Inbox lights the bell (unread items stay bold inside).
+  const unread = notifications.filter((n) => !n.read_at && n.created_at > inboxSeenAt).length
   const myOpen = tasks.filter((t) => t.assignee_id === me?.id && OPEN_TASK(t)).length
   const activeProjects = projects.filter(OPEN_PROJECT).length
   const activeClients = clients.filter((c) => c.status !== 'archived').length

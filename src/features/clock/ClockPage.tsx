@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeftRight, ArrowRight, ChevronDown, Radio } from 'lucide-react'
+import { ArrowLeftRight, ArrowRight, ChevronDown, Globe, Plus, Radio, X } from 'lucide-react'
 import { useData } from '@/data/store'
 import { useIsAdmin } from '@/hooks/usePermissions'
-import { Topbar, Content, PageHead, Empty } from '@/components/ui/layout'
-import { Menu, MenuItem } from '@/components/ui/menu'
+import { Topbar, Content, PageHead } from '@/components/ui/layout'
+import { Menu, MenuItem, MenuSearch, MenuTitle } from '@/components/ui/menu'
 import { ClientMark } from '@/components/ui/avatar'
 import { DateInput } from '@/components/ui/date-picker'
 import { TimeInput } from '@/components/ui/time-picker'
@@ -127,17 +127,14 @@ export function ClockPage() {
     [clients], // eslint-disable-line react-hooks/exhaustive-deps
   )
   const missing = active.filter((c) => !validTz(c.timezone))
+  const [zones, setZones] = useSavedZones()
 
   return (
     <>
       <Topbar crumbs={[{ label: 'Clock' }]} />
       <Content>
         <PageHead title="Clock" sub="What time it is for every client, now or at any time you plan." />
-        {withTz.length === 0 ? (
-          <div className="card"><Empty title="No client timezones yet">Set a country or timezone in a client’s settings to see their local time.</Empty></div>
-        ) : (
-          <Converter clients={withTz} myTz={myTz} />
-        )}
+        <Converter clients={withTz} zones={zones} setZones={setZones} myTz={myTz} />
         {missing.length > 0 && (
           <p className="xs muted" style={{ marginTop: -8 }}>
             Not shown (no timezone):{' '}
@@ -151,13 +148,26 @@ export function ClockPage() {
   )
 }
 
-function Converter({ clients, myTz }: { clients: Client[]; myTz: string }) {
+function Converter({ clients, zones, setZones, myTz }: { clients: Client[]; zones: string[]; setZones: (z: string[]) => void; myTz: string }) {
   const now = useNow()
   const [live, setLive] = useState(true)
   const [dir, setDir] = useState<Dir>('mine')
-  const [clientId, setClientId] = useState(clients[0].id)
-  const client = clients.find((c) => c.id === clientId) ?? clients[0]
-  const theirTz = client.timezone!
+  const targets: Target[] = [
+    ...clients.map((c) => ({ id: c.id, name: clientDisplayName(c), tz: c.timezone!, mark: <ClientMark client={c} size="sm" />, client: c })),
+    ...zones.map((z) => ({ id: `tz:${z}`, name: city(z), tz: z, mark: <span className="clk-globe"><Globe className="i i-sm" /></span> })),
+  ]
+  const fallback: Target = { id: 'tz:UTC', name: 'UTC', tz: 'UTC', mark: <span className="clk-globe"><Globe className="i i-sm" /></span> }
+  const [targetId, setTargetId] = useState(targets[0]?.id ?? fallback.id)
+  const client = targets.find((t) => t.id === targetId) ?? targets[0] ?? fallback
+  const theirTz = client.tz
+  const pickZone = (tz: string) => {
+    if (!zones.includes(tz)) setZones([...zones, tz])
+    setTargetId(`tz:${tz}`)
+  }
+  const removeZone = (tz: string) => {
+    setZones(zones.filter((z) => z !== tz))
+    if (targetId === `tz:${tz}`) setTargetId(targets[0]?.id ?? fallback.id)
+  }
   const fromTz = dir === 'mine' ? myTz : theirTz
   const toTz = dir === 'mine' ? theirTz : myTz
 
@@ -184,7 +194,7 @@ function Converter({ clients, myTz }: { clients: Client[]; myTz: string }) {
 
   const tag = dayTag(instant, toTz, fromTz)
   const st = hoursState(instant, theirTz)
-  const first = clientDisplayName(client).split(' ')[0]
+  const first = client.client ? client.name.split(' ')[0] : client.name
 
   return (
     <section className="card conv">
@@ -198,16 +208,16 @@ function Converter({ clients, myTz }: { clients: Client[]; myTz: string }) {
           value={dir}
           onChange={swap}
           tabs={[
-            { id: 'mine', label: 'My time → client' },
-            { id: 'theirs', label: 'Client time → mine' },
+            { id: 'mine', label: 'My time → theirs' },
+            { id: 'theirs', label: 'Their time → mine' },
           ]}
         />
       </div>
 
       <div className="conv-form">
         <div className="field">
-          <span className="lbl">Client</span>
-          <ClientPicker clients={clients} value={client} onChange={setClientId} />
+          <span className="lbl">Client or time zone</span>
+          <TargetPicker targets={targets} value={client} onPick={setTargetId} onPickZone={pickZone} />
         </div>
         <div className="field">
           <span className="lbl">Date</span>
@@ -227,7 +237,7 @@ function Converter({ clients, myTz }: { clients: Client[]; myTz: string }) {
 
       <div className="conv-result">
         <div className="conv-side">
-          <span className="conv-who">{dir === 'mine' ? 'You' : clientDisplayName(client)} · {city(fromTz)}</span>
+          <span className="conv-who">{dir === 'mine' ? 'You' : client.name} · {city(fromTz)}</span>
           <span className="conv-time">{timeStr(instant, fromTz, live)}</span>
           <span className="conv-date">{longDate(instant, fromTz)}</span>
         </div>
@@ -236,7 +246,7 @@ function Converter({ clients, myTz }: { clients: Client[]; myTz: string }) {
           <ArrowLeftRight className="i conv-swap-i" />
         </button>
         <div className="conv-side to">
-          <span className="conv-who">{dir === 'mine' ? clientDisplayName(client) : 'You'} · {city(toTz)}</span>
+          <span className="conv-who">{dir === 'mine' ? client.name : 'You'} · {city(toTz)}</span>
           <span className="conv-time">{timeStr(instant, toTz, live)}</span>
           <span className="conv-date">
             {longDate(instant, toTz)}
@@ -249,7 +259,10 @@ function Converter({ clients, myTz }: { clients: Client[]; myTz: string }) {
       <div className="conv-all">
         <div className="conv-all-h">
           <span className="menu-title" style={{ padding: 0 }}>Everyone {live ? 'right now' : 'at this time'}</span>
-          <span className="xs faint">Click a client to convert for them</span>
+          <span className="row-sm">
+            <span className="xs faint hide-sm">Click a row to convert for it</span>
+            <ZoneAdder onPick={pickZone} exclude={zones} />
+          </span>
         </div>
         <div className="conv-list">
           <Row
@@ -262,18 +275,19 @@ function Converter({ clients, myTz }: { clients: Client[]; myTz: string }) {
             live={live}
             me
           />
-          {clients.map((c) => (
+          {targets.map((t) => (
             <Row
-              key={c.id}
-              mark={<ClientMark client={c} size="sm" />}
-              name={clientDisplayName(c)}
-              sub={`${city(c.timezone!)} · ${diffLabel(c.timezone!, myTz, instant)}`}
+              key={t.id}
+              mark={t.mark}
+              name={t.name}
+              sub={`${t.client ? city(t.tz) : region(t.tz)} · ${diffLabel(t.tz, myTz, instant)}`}
               instant={instant}
-              tz={c.timezone!}
+              tz={t.tz}
               baseTz={myTz}
               live={live}
-              on={c.id === client.id}
-              onClick={() => setClientId(c.id)}
+              on={t.id === client.id}
+              onClick={() => setTargetId(t.id)}
+              onRemove={t.client ? undefined : () => removeZone(t.tz)}
             />
           ))}
         </div>
@@ -295,9 +309,10 @@ interface RowProps {
   me?: boolean
   on?: boolean
   onClick?: () => void
+  onRemove?: () => void
 }
 
-function Row({ mark, name, sub, instant, tz, baseTz, live, me, on, onClick }: RowProps) {
+function Row({ mark, name, sub, instant, tz, baseTz, live, me, on, onClick, onRemove }: RowProps) {
   const st = hoursState(instant, tz)
   const tag = me ? null : dayTag(instant, tz, baseTz)
   const inner = (
@@ -315,6 +330,13 @@ function Row({ mark, name, sub, instant, tz, baseTz, live, me, on, onClick }: Ro
           {dateStr(instant, tz)}
         </small>
       </span>
+      {onRemove && (
+        <span role="button" tabIndex={0} className="conv-li-x" title="Remove this time zone" aria-label="Remove this time zone"
+          onClick={(e) => { e.stopPropagation(); onRemove() }}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); onRemove() } }}>
+          <X className="i i-xs" />
+        </span>
+      )}
     </>
   )
   return onClick ? (
@@ -324,25 +346,113 @@ function Row({ mark, name, sub, instant, tz, baseTz, live, me, on, onClick }: Ro
   )
 }
 
-function ClientPicker({ clients, value, onChange }: { clients: Client[]; value: Client; onChange: (id: string) => void }) {
+interface Target {
+  id: string
+  name: string
+  tz: string
+  mark: ReactNode
+  client?: Client
+}
+
+/** All IANA zones (falls back to a short list on old browsers). */
+const ALL_ZONES: string[] = (() => {
+  try {
+    return (Intl as unknown as { supportedValuesOf: (k: string) => string[] }).supportedValuesOf('timeZone')
+  } catch {
+    return ['UTC', 'Europe/London', 'Europe/Berlin', 'America/New_York', 'America/Chicago', 'America/Los_Angeles', 'Asia/Dubai', 'Asia/Kolkata', 'Asia/Dhaka', 'Asia/Singapore', 'Asia/Tokyo', 'Australia/Sydney']
+  }
+})()
+const POPULAR = ['America/New_York', 'America/Los_Angeles', 'Europe/London', 'Europe/Berlin', 'Asia/Dubai', 'Asia/Singapore', 'Australia/Sydney']
+const region = (tz: string) => tz.split('/').slice(0, -1).join(' / ').replace(/_/g, ' ') || tz
+const gmt = (tz: string) => {
+  const m = offsetMin(tz, new Date())
+  const a = Math.abs(m)
+  return `GMT${m >= 0 ? '+' : '−'}${Math.floor(a / 60)}${a % 60 ? `:${String(a % 60).padStart(2, '0')}` : ''}`
+}
+const zoneMatches = (q: string, exclude: string[] = []) => {
+  const s = q.trim().toLowerCase().replace(/\s+/g, '_')
+  if (!s) return []
+  return ALL_ZONES.filter((z) => !exclude.includes(z) && z.toLowerCase().includes(s)).slice(0, 30)
+}
+
+/** Time zones you added yourself, remembered on this device. */
+function useSavedZones(): [string[], (z: string[]) => void] {
+  const KEY = 'mydesk-clock-zones'
+  const [zones, setState] = useState<string[]>(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem(KEY) ?? '[]')
+      return Array.isArray(v) ? v.filter(validTz) : []
+    } catch {
+      return []
+    }
+  })
+  const set = (z: string[]) => {
+    setState(z)
+    try {
+      localStorage.setItem(KEY, JSON.stringify(z))
+    } catch {
+      // not saved; fine for this visit
+    }
+  }
+  return [zones, set]
+}
+
+function ZoneItems({ q, onPick, exclude = [] }: { q: string; onPick: (tz: string) => void; exclude?: string[] }) {
+  const list = q.trim() ? zoneMatches(q, exclude) : POPULAR.filter((z) => !exclude.includes(z))
+  return (
+    <>
+      <MenuTitle>{q.trim() ? 'Time zones' : 'Popular time zones'}</MenuTitle>
+      {list.length === 0 && <div className="xs faint" style={{ padding: '4px 10px 8px' }}>No time zone matches “{q}”.</div>}
+      {list.map((z) => (
+        <MenuItem key={z} icon={<Globe className="i" />} hint={gmt(z)} onSelect={() => onPick(z)}>
+          {city(z)} <span className="faint">· {region(z)}</span>
+        </MenuItem>
+      ))}
+    </>
+  )
+}
+
+function TargetPicker({ targets, value, onPick, onPickZone }: { targets: Target[]; value: Target; onPick: (id: string) => void; onPickZone: (tz: string) => void }) {
+  const [q, setQ] = useState('')
+  const s = q.trim().toLowerCase()
+  const shown = s ? targets.filter((t) => `${t.name} ${t.tz}`.toLowerCase().includes(s)) : targets
   return (
     <Menu
       align="left"
       className="conv-pick"
       matchWidth
+      wide
       trigger={({ open, toggle }) => (
-        <button type="button" className={cn('inp cur-inp', open && 'focus')} onClick={toggle} aria-haspopup="menu" aria-expanded={open}>
-          <ClientMark client={value} size="xs" />
-          <span className="grow trunc">{clientDisplayName(value)}</span>
+        <button type="button" className={cn('inp cur-inp', open && 'focus')} onClick={() => { setQ(''); toggle() }} aria-haspopup="menu" aria-expanded={open}>
+          <span className="clk-mark-xs">{value.mark}</span>
+          <span className="grow trunc">{value.name}</span>
+          <span className="xs faint">{gmt(value.tz)}</span>
           <ChevronDown className="i i-xs" />
         </button>
       )}
     >
-      {clients.map((c) => (
-        <MenuItem key={c.id} icon={<ClientMark client={c} size="xs" />} on={c.id === value.id} onSelect={() => onChange(c.id)} hint={city(c.timezone!)}>
-          {clientDisplayName(c)}
+      <MenuSearch value={q} onChange={setQ} placeholder="Search clients or any city…" />
+      {shown.length > 0 && <MenuTitle>Yours</MenuTitle>}
+      {shown.map((t) => (
+        <MenuItem key={t.id} icon={<span className="clk-mark-xs">{t.mark}</span>} on={t.id === value.id} hint={city(t.tz)} onSelect={() => onPick(t.id)}>
+          {t.name}
         </MenuItem>
       ))}
+      <ZoneItems q={q} onPick={onPickZone} exclude={targets.filter((t) => !t.client).map((t) => t.tz)} />
+    </Menu>
+  )
+}
+
+function ZoneAdder({ onPick, exclude }: { onPick: (tz: string) => void; exclude: string[] }) {
+  const [q, setQ] = useState('')
+  return (
+    <Menu
+      align="right"
+      wide
+      trigger={({ toggle }) => <button type="button" className="btn btn-sm" onClick={() => { setQ(''); toggle() }}><Plus className="i i-sm" />Add time zone</button>}
+    >
+      <MenuSearch value={q} onChange={setQ} placeholder="Search a city, e.g. London" />
+      <ZoneItems q={q} onPick={onPick} exclude={exclude} />
     </Menu>
   )
 }

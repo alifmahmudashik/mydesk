@@ -253,7 +253,7 @@ export function InvoiceEditor() {
               <Field label="Client">
                 <select className="inp" value={f.client_id} onChange={(e) => pickClient(e.target.value)}>
                   <option value="">Select a client…</option>
-                  {clients.map((c) => <option key={c.id} value={c.id}>{clientDisplayName(c)}{c.status === 'archived' ? ' (archived)' : ''}</option>)}
+                  {clients.filter((c) => c.status !== 'archived' || c.id === f.client_id).map((c) => <option key={c.id} value={c.id}>{clientDisplayName(c)}{c.status === 'archived' ? ' (archived)' : ''}</option>)}
                 </select>
               </Field>
               <div className="f2" style={{ gridTemplateColumns: '1fr 1fr' }}>
@@ -346,7 +346,7 @@ function ProjectPicker({ open, onClose, clientId, onAdd, exclude }: { open: bool
   useEffect(() => {
     if (open) setSel(new Set())
   }, [open])
-  // Completed or Finished projects that aren't on an invoice yet (you may invoice after being paid).
+  // Only Completed projects that aren't on an invoice yet (Finished ones are already settled).
   const list = projects
     .filter((p) => p.client_id === clientId && isInvoiceable(p, invoices, payments) && !exclude.includes(p.title.trim()))
     .sort((a, b) => (b.completed_at ?? b.due_date ?? '').localeCompare(a.completed_at ?? a.due_date ?? ''))
@@ -356,12 +356,12 @@ function ProjectPicker({ open, onClose, clientId, onAdd, exclude }: { open: bool
     onClose()
   }
   return (
-    <Modal open={open} onClose={onClose} title="Add from projects" note="Completed or finished projects not on an invoice yet" footer={<><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="button" className="btn btn-pri" disabled={!sel.size} onClick={add}>Add {sel.size || ''} line{sel.size === 1 ? '' : 's'}</button></>}>
+    <Modal open={open} onClose={onClose} title="Add from projects" note="Completed projects not on an invoice yet" footer={<><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="button" className="btn btn-pri" disabled={!sel.size} onClick={add}>Add {sel.size || ''} line{sel.size === 1 ? '' : 's'}</button></>}>
       <div style={{ maxHeight: '55vh', overflowY: 'auto' }}>
         {list.length === 0 && (
           <div className="empty sm">
             <b>Nothing to invoice</b>
-            <p>Projects show up here once they’re Completed or Finished.</p>
+            <p>Mark a project as Completed when the work is done and it shows up here.</p>
           </div>
         )}
         {list.map((p) => (

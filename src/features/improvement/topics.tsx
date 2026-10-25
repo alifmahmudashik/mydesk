@@ -48,13 +48,13 @@ export function TopicsTab() {
           {joined.length > 0 && (
             <section className="stack">
               <h2 className="h2">You’re learning <span className="faint" style={{ fontWeight: 500 }}>{joined.length}</span></h2>
-              <div className="tp-grid">{joined.map((t) => <TopicCard key={t.id} topic={t} me={me} lessons={lessons} progress={progress} members={topicMembers} people={profiles} />)}</div>
+              <div className="tpc-grid">{joined.map((t) => <TopicCard key={t.id} topic={t} me={me} lessons={lessons} progress={progress} members={topicMembers} people={profiles} />)}</div>
             </section>
           )}
           {others.length > 0 && (
             <section className="stack">
               <h2 className="h2">{joined.length ? 'Other topics' : 'All topics'} <span className="faint" style={{ fontWeight: 500 }}>{others.length}</span></h2>
-              <div className="tp-grid">{others.map((t) => <TopicCard key={t.id} topic={t} me={me} lessons={lessons} progress={progress} members={topicMembers} people={profiles} />)}</div>
+              <div className="tpc-grid">{others.map((t) => <TopicCard key={t.id} topic={t} me={me} lessons={lessons} progress={progress} members={topicMembers} people={profiles} />)}</div>
             </section>
           )}
         </>

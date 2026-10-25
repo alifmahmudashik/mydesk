@@ -141,9 +141,9 @@ export function invoicePaymentStatus(invoiceId: string, payments: Payment[]): Pa
   return 'unpaid'
 }
 
-/** Projects ready to invoice: Completed or Finished (already paid — you may still need the invoice) and not on an invoice yet. */
+/** Projects ready to invoice: marked Completed (Finished means it's already settled) and not on an invoice yet. */
 export function isInvoiceable(project: Project, invoices: { client_id: string; line_items: { description: string }[] }[], payments: Payment[]) {
-  if (project.status !== 'completed' && project.status !== 'finished') return false
+  if (project.status !== 'completed') return false
   const onInvoice = invoices.some((i) => i.client_id === project.client_id && i.line_items.some((li) => li.description.trim() === project.title.trim()))
   const paymentInvoiced = payments.some((p) => p.project_ids?.includes(project.id) && p.invoice_id)
   return !onInvoice && !paymentInvoiced
@@ -172,17 +172,16 @@ export function workDate(p: Payment, projects: Project[]): string {
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const monthName = (d: string) => `${MONTH_NAMES[Number(d.slice(5, 7)) - 1]} ${d.slice(0, 4)}`
 
-/** Invoice note lines saying when the work was done, e.g. "Monthly retainer for October 2026." */
+/** Client-facing invoice note saying when the work was done, e.g.
+ *  "This invoice covers services provided in October 2026." (no internal terms like "retainer"). */
 export function workMonthNote(list: Project[]): string[] {
-  if (list.length === 1) {
-    const p = list[0]
-    const m = monthName(projectWorkDate(p))
-    return [p.billing_type === 'retainer' ? `Monthly retainer for ${m}.` : `Project work completed in ${m}.`]
-  }
-  return list.map((p) => {
-    const m = monthName(projectWorkDate(p))
-    return p.billing_type === 'retainer' ? `${p.title}: monthly retainer for ${m}.` : `${p.title}: work completed in ${m}.`
-  })
+  if (list.length === 0) return []
+  const keys = [...new Set(list.map((p) => projectWorkDate(p).slice(0, 7)))].sort()
+  const years = new Set(keys.map((k) => k.slice(0, 4)))
+  const parts = keys.map((k) => (years.size === 1 ? MONTH_NAMES[Number(k.slice(5, 7)) - 1] : monthName(`${k}-01`)))
+  const joined = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`
+  const period = years.size === 1 ? `${joined} ${[...years][0]}` : joined
+  return [`This invoice covers services provided in ${period}.`]
 }
 
 /** Adds work-month lines to an invoice note, skipping any already there. */
