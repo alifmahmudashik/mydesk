@@ -1,13 +1,14 @@
 /* Design tokens. Light values come straight from mydesk-design.html; dark is derived. */
 :root {
   color-scheme: light;
-  --bg: #F4F4F6; --panel: #fff; --soft: #F7F7F9; --soft2: #FAFAFB;
+  /* Softer light theme: tinted sidebar + work area, off-white cards (less glare than pure white). */
+  --bg: #26262B; --panel: #FBFBFD; --soft: #F1F2F6; --soft2: #F5F6F9;
   /* Borders a step stronger than the original design, so cards and rows separate
      clearly on a white page without needing shadows. */
-  --line: #DFDFE6; --line2: #D6D6DE; --line3: #C4C4CE;
-  --line-s: #E4E4EA; --line-xs: #EAEAEF; --line-main: #DCDCE3;
+  --line: #DADBE3; --line2: #D2D3DC; --line3: #C0C1CC;
+  --line-s: #E0E1E8; --line-xs: #E7E8EE; --line-main: #D6D7E0;
   /* Very light grey work area so white cards and lists stand out from it. */
-  --canvas: #F8F8FA;
+  --canvas: #EEEFF4;
   --ink: #0F0F14; --ink2: #2A2A33; --ink3: #45454F; --mute: #5E5E6B; --faint: #6B6B78;
   --on-ink: #fff;
   --pri: #4F46E5; --pri-h: #4338CA; --pri-soft: #EEF0FF; --pri-mid: #C7C9F5; --pri-deep: #312E81;
@@ -16,11 +17,25 @@
   --bad: #B42318; --bad-bg: #FDECEA; --bad-dot: #E5484D; --bad-soft: #FFFBFA; --bad-line: #F6D3CF;
   --pin-bg: #FFFBEB; --pin-line: #FDECC8;
   --hover: rgba(15, 15, 20, .05);
-  --sel-bg: #F6F6FF;
-  --glass: rgba(255, 255, 255, .86);
+  --sel-bg: #F0F0FC;
+  --glass: rgba(251, 251, 253, .86);
   --ease: cubic-bezier(.16, 1, .3, 1);
   --shadow-pop: 0 16px 40px rgba(16, 16, 24, .14), 0 2px 6px rgba(16, 16, 24, .06);
 }
+
+/* Light theme, Asana-style: dark charcoal sidebar (and frame around the work area),
+   light work area. The sidebar gets its own dark text/icon/surface colours. */
+:root:not(.dark) .side {
+  color-scheme: dark;
+  color: var(--ink);
+  --ink: #F2F2F5; --ink2: #E2E2E8; --ink3: #CDCDD5; --mute: #A6A6B1; --faint: #8F8F9B;
+  --panel: #36363D; --soft: #303036; --soft2: #2C2C32;
+  --line: #3C3C44; --line2: #45454E; --line3: #575762; --line-s: #38383F; --line-xs: #333339;
+  --hover: rgba(255, 255, 255, .07);
+  --pri: #8B8FFA;
+}
+:root:not(.dark) .side .sq.cc { background: oklch(from var(--cc) max(l, .7) c h); }
+:root:not(.dark) .side .badge { background: #6D70F5; }
 
 :root.dark {
   /* Softer dark: charcoal surfaces instead of near-black, so cards and lines stay readable. */

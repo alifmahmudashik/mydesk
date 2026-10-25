@@ -35,8 +35,15 @@ const subscribe = (fn: () => void) => {
 function setThemeShared(t: ThemePref) {
   write(THEME_KEY, t)
   themeNow = t
-  applyTheme(t)
-  listeners.forEach((fn) => fn())
+  const run = () => {
+    applyTheme(t)
+    listeners.forEach((fn) => fn())
+  }
+  // Smooth cross-fade between light and dark where the browser supports it.
+  const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown }
+  const calm = document.documentElement.classList.contains('no-motion') || window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (doc.startViewTransition && !calm) doc.startViewTransition(run)
+  else run()
 }
 
 /** True when the page is currently shown dark (resolves "system"). */

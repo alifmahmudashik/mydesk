@@ -254,8 +254,9 @@ a.client-chip:hover { background: color-mix(in srgb, var(--cc) 20%, transparent)
 
 /* ---- less white: tinted work area, white cards on top ---- */
 .main { background: var(--canvas); }
-.topbar { background: color-mix(in srgb, var(--canvas) 88%, transparent); }
-.savebar { background: color-mix(in srgb, var(--canvas) 92%, transparent); }
+/* Solid (no backdrop blur): blur behind a sticky bar is re-rendered on every scroll frame. */
+.topbar { background: var(--canvas); backdrop-filter: none; -webkit-backdrop-filter: none; }
+.savebar { background: var(--canvas); backdrop-filter: none; -webkit-backdrop-filter: none; }
 .card, .kpi, .ccard, .sec, .kstrip, .inbox, .lane .tcard, .note-card, .file { background-color: var(--panel); }
 .kstrip { background: var(--panel); }
 .lane { background: color-mix(in srgb, var(--line-xs) 70%, var(--canvas)); border: 1px solid var(--line-s); }
@@ -358,3 +359,121 @@ a.client-chip:hover { background: color-mix(in srgb, var(--cc) 20%, transparent)
 .tp-chip { height: 28px; padding: 0 4px; border: 1px solid var(--line2); border-radius: 7px; background: var(--panel); font-size: 12px; font-weight: 500; color: var(--ink2); cursor: pointer; white-space: nowrap; }
 .tp-chip:hover { background: var(--hover); }
 .tp-chip.on { background: var(--pri-soft); border-color: var(--pri-mid); color: var(--pri-h); }
+
+/* =========================================================================
+   Motion polish: one easing family, soft entrances, smooth hovers.
+   All of it is switched off by the "Animations" setting and reduced-motion.
+   ========================================================================= */
+:root { --ease-out: cubic-bezier(.22, 1, .36, 1); --ease-io: cubic-bezier(.65, 0, .35, 1); }
+
+/* Default smooth state changes for anything interactive (zero specificity, so
+   components that set their own transition keep it). */
+:where(a, button, input, select, textarea, summary, [role='button'], [role='tab'], [role='menuitem'], tr, .li, .mi, .card, .chip, .prop, .inp, .tcard, .ccard, .conv-li) {
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform, filter;
+  transition-duration: .2s;
+  transition-timing-function: var(--ease-out);
+}
+
+/* Softer entrance curves */
+@keyframes in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes pop { from { opacity: 0; transform: scale(.97) translateY(-4px); } to { opacity: 1; transform: none; } }
+@keyframes pop-up { from { opacity: 0; transform: scale(.97) translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes dlg-in { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes reveal { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+/* Page: quick, light entrance (short distance, short stagger) */
+.page .topbar { animation: none; }
+.page .content > * { animation: in .32s var(--ease-out) both; }
+.page .content > :nth-child(2) { animation-delay: .03s; }
+.page .content > :nth-child(3) { animation-delay: .06s; }
+.page .content > :nth-child(n+4) { animation-delay: .09s; }
+/* Don't animate every row of long lists/grids on each page load. */
+.list > .li, .ib-list > .ib, .kpis > *, .grid-cards > *, .grid-3 > *, .dash > *, .dash > .dash-col > * { animation: none; }
+
+/* Popovers: menus, date, time, currency */
+.menu-pop, .date-pop, .cur-pop, .tp-pop { animation: pop .22s var(--ease-out) both; will-change: transform, opacity; }
+.menu-pop.up { animation-name: pop-up; }
+
+/* Dialogs */
+.scrim { animation: fade .2s var(--ease-out) both; backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(15, 15, 20, .45); }
+.dlg { animation: dlg-in .26s var(--ease-out) both; }
+
+/* Buttons: gentle lift on primary, soft press everywhere */
+.btn { transition: background-color .2s var(--ease-out), border-color .2s var(--ease-out), box-shadow .2s var(--ease-out), color .2s var(--ease-out), transform .16s var(--ease-out); }
+.btn:active:not(:disabled) { transform: scale(.975); }
+.btn-pri:hover:not(:disabled) { box-shadow: 0 4px 14px color-mix(in srgb, var(--pri) 30%, transparent); }
+.btn-icon:active:not(:disabled), .bell:active { transform: scale(.92); }
+
+/* Sidebar */
+.nav a { transition: background-color .2s var(--ease-out), color .2s var(--ease-out), box-shadow .25s var(--ease-out); }
+.nav a .i { transition: color .2s var(--ease-out), transform .25s var(--ease-out); }
+.nav a:hover .i { transform: translateX(1px); }
+.theme-tg .i { transition: transform .4s var(--ease-out); }
+.theme-tg:hover .i { transform: rotate(-18deg); }
+
+/* Tabs */
+.tablist button.tab { transition: color .2s var(--ease-out), border-color .3s var(--ease-out), background-color .25s var(--ease-out), box-shadow .25s var(--ease-out); }
+
+/* Rows and cards */
+.lift { transition: transform .3s var(--ease-out), box-shadow .3s var(--ease-out), border-color .25s var(--ease-out); }
+.chev { transition: transform .25s var(--ease-out); }
+.chev.open { transform: rotate(90deg); }
+.client-group-b { animation: reveal .3s var(--ease-out) both; }
+
+/* Theme switch cross-fade */
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: .35s; animation-timing-function: var(--ease-io); }
+
+/* ---- month picker ---- */
+.mp-pop { position: fixed; z-index: 90; width: 248px; background: var(--panel); border: 1px solid var(--line2); border-radius: 12px; box-shadow: var(--shadow-pop); animation: pop .22s var(--ease-out) both; overflow: hidden; }
+.mp-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 10px 6px; }
+.mp-year { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.mp-nav { width: 28px; height: 28px; border: 0; border-radius: 7px; background: none; display: grid; place-items: center; color: var(--mute); cursor: pointer; }
+.mp-nav:hover { background: var(--hover); color: var(--ink); }
+.mp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px 10px 12px; }
+.mp-grid button { height: 34px; border: 0; border-radius: 8px; background: none; font-size: 13px; color: var(--ink2); cursor: pointer; }
+.mp-grid button:hover { background: var(--hover); color: var(--ink); }
+.mp-grid button.now { box-shadow: inset 0 0 0 1px var(--pri-mid); font-weight: 600; }
+.mp-grid button.on { background: var(--pri); color: #fff; font-weight: 600; box-shadow: none; }
+.mp-foot { padding: 6px; border-top: 1px solid var(--line-s); }
+
+/* ---- project form ---- */
+.pf { gap: 18px; }
+.pf-title { display: flex; align-items: center; gap: 10px; }
+.pf-name.inp { height: 44px; font-size: 16px; font-weight: 500; flex: 1; min-width: 0; }
+.pf-key { display: flex; align-items: center; gap: 6px; height: 44px; padding: 0 10px; border: 1px solid var(--line2); border-radius: 9px; background: var(--panel); flex: none; cursor: text; transition: border-color .15s, box-shadow .2s; }
+.pf-key:focus-within { border-color: var(--pri); box-shadow: 0 0 0 3px var(--pri-soft); }
+.pf-key span { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); }
+.pf-key input { width: 62px; border: 0; outline: 0; background: transparent; font-size: 13px; color: var(--ink); }
+.pf-sec { display: flex; flex-direction: column; gap: 10px; }
+.pf-h { font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); display: flex; align-items: center; gap: 10px; }
+.pf-h::after { content: ""; flex: 1; height: 1px; background: var(--line-s); }
+.f3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.f3 > .span2 { grid-column: span 2; }
+.pf-more { border: 1px solid var(--line-s); border-radius: 10px; background: var(--soft2); }
+.pf-more summary { display: flex; align-items: center; gap: 6px; padding: 10px 12px; font-size: 13px; font-weight: 500; cursor: pointer; list-style: none; user-select: none; }
+.pf-more summary::-webkit-details-marker { display: none; }
+.pf-more[open] summary .chev { transform: rotate(90deg); }
+.pf-more-b { display: flex; flex-direction: column; gap: 12px; padding: 4px 12px 14px; animation: reveal .25s var(--ease-out) both; }
+@media (max-width: 640px) { .f3 { grid-template-columns: 1fr 1fr; } .f3 > .span2 { grid-column: 1 / -1; } .pf-key input { width: 48px; } }
+
+/* ---- quick-edit popover ---- */
+.pop-card { position: fixed; z-index: 92; background: var(--panel); border: 1px solid var(--line2); border-radius: 12px; box-shadow: var(--shadow-pop); padding: 12px; animation: pop .22s var(--ease-out) both; }
+.pop-title { font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); margin-bottom: 10px; }
+.pop-form { display: flex; flex-direction: column; gap: 12px; }
+.pop-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.pop-anchor { display: inline-flex; }
+.chip.on { background: var(--soft); border-color: var(--line3); }
+.chip-sub { color: var(--faint); font-weight: 500; }
+
+/* ---- work month filter ---- */
+.mf { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid var(--line2); border-radius: 10px; background: var(--panel); }
+.mf-step { width: 28px; height: 28px; border: 0; border-radius: 7px; background: none; display: grid; place-items: center; color: var(--mute); cursor: pointer; }
+.mf-step:hover { background: var(--hover); color: var(--ink); }
+.mf-label { display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 10px; border: 0; border-radius: 7px; background: none; font-size: 13px; font-weight: 600; color: var(--ink); cursor: pointer; min-width: 132px; justify-content: center; }
+.mf-label .i { color: var(--faint); }
+.mf-label:hover, .mf-label.focus { background: var(--hover); }
+.mf-all { height: 28px; padding: 0 10px; margin-left: 2px; border: 0; border-left: 1px solid var(--line-s); border-radius: 0 7px 7px 0; background: none; font-size: 12.5px; font-weight: 500; color: var(--mute); cursor: pointer; }
+.mf-all:hover { color: var(--ink); }
+.mf-all.on { color: var(--pri-h); font-weight: 600; }
+.wm-cell { font-size: 12.5px; color: var(--mute); white-space: nowrap; }
+.kstrip .val .of { font-size: 13px; font-weight: 500; color: var(--faint); margin-left: 6px; }

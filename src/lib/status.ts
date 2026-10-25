@@ -70,7 +70,7 @@ export const priorityMeta: Record<Priority, StatusMeta & { bars: string }> = {
 
 export const billingLabel: Record<string, string> = {
   retainer: 'Monthly retainer',
-  fixed: 'Fixed price',
+  fixed: 'One-time project',
   hourly: 'Hourly',
 }
 

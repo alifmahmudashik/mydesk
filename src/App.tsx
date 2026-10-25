@@ -11,23 +11,50 @@ import { InviteAcceptPage } from '@/features/auth/InviteAcceptPage'
 import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 
-const InboxPage = lazy(() => import('@/features/inbox/InboxPage').then((m) => ({ default: m.InboxPage })))
-const TasksPage = lazy(() => import('@/features/tasks/TasksPage').then((m) => ({ default: m.TasksPage })))
-const TaskPage = lazy(() => import('@/features/tasks/TaskPage').then((m) => ({ default: m.TaskPage })))
-const ProjectsPage = lazy(() => import('@/features/projects/ProjectsPage').then((m) => ({ default: m.ProjectsPage })))
-const ProjectPage = lazy(() => import('@/features/projects/ProjectPage').then((m) => ({ default: m.ProjectPage })))
-const ClientsPage = lazy(() => import('@/features/clients/ClientsPage').then((m) => ({ default: m.ClientsPage })))
-const ClientPage = lazy(() => import('@/features/clients/ClientPage').then((m) => ({ default: m.ClientPage })))
-const ClientSettingsPage = lazy(() => import('@/features/clients/ClientSettingsPage').then((m) => ({ default: m.ClientSettingsPage })))
-const ClockPage = lazy(() => import('@/features/clock/ClockPage').then((m) => ({ default: m.ClockPage })))
-const TeamPage = lazy(() => import('@/features/team/TeamPage').then((m) => ({ default: m.TeamPage })))
-const MemberPage = lazy(() => import('@/features/team/MemberPage').then((m) => ({ default: m.MemberPage })))
-const PaymentsPage = lazy(() => import('@/features/payments/PaymentsPage').then((m) => ({ default: m.PaymentsPage })))
-const InvoicesPage = lazy(() => import('@/features/invoices/InvoicesPage').then((m) => ({ default: m.InvoicesPage })))
-const InvoiceEditor = lazy(() => import('@/features/invoices/InvoiceEditor').then((m) => ({ default: m.InvoiceEditor })))
-const AnalyticsPage = lazy(() => import('@/features/analytics/AnalyticsPage').then((m) => ({ default: m.AnalyticsPage })))
-const AccountPage = lazy(() => import('@/features/settings/AccountPage').then((m) => ({ default: m.AccountPage })))
-const WorkspaceSettingsPage = lazy(() => import('@/features/settings/WorkspaceSettingsPage').then((m) => ({ default: m.WorkspaceSettingsPage })))
+const loadInboxPage = () => import('@/features/inbox/InboxPage')
+const InboxPage = lazy(() => loadInboxPage().then((m) => ({ default: m.InboxPage })))
+const loadTasksPage = () => import('@/features/tasks/TasksPage')
+const TasksPage = lazy(() => loadTasksPage().then((m) => ({ default: m.TasksPage })))
+const loadTaskPage = () => import('@/features/tasks/TaskPage')
+const TaskPage = lazy(() => loadTaskPage().then((m) => ({ default: m.TaskPage })))
+const loadProjectsPage = () => import('@/features/projects/ProjectsPage')
+const ProjectsPage = lazy(() => loadProjectsPage().then((m) => ({ default: m.ProjectsPage })))
+const loadProjectPage = () => import('@/features/projects/ProjectPage')
+const ProjectPage = lazy(() => loadProjectPage().then((m) => ({ default: m.ProjectPage })))
+const loadClientsPage = () => import('@/features/clients/ClientsPage')
+const ClientsPage = lazy(() => loadClientsPage().then((m) => ({ default: m.ClientsPage })))
+const loadClientPage = () => import('@/features/clients/ClientPage')
+const ClientPage = lazy(() => loadClientPage().then((m) => ({ default: m.ClientPage })))
+const loadClientSettingsPage = () => import('@/features/clients/ClientSettingsPage')
+const ClientSettingsPage = lazy(() => loadClientSettingsPage().then((m) => ({ default: m.ClientSettingsPage })))
+const loadClockPage = () => import('@/features/clock/ClockPage')
+const ClockPage = lazy(() => loadClockPage().then((m) => ({ default: m.ClockPage })))
+const loadTeamPage = () => import('@/features/team/TeamPage')
+const TeamPage = lazy(() => loadTeamPage().then((m) => ({ default: m.TeamPage })))
+const loadMemberPage = () => import('@/features/team/MemberPage')
+const MemberPage = lazy(() => loadMemberPage().then((m) => ({ default: m.MemberPage })))
+const loadPaymentsPage = () => import('@/features/payments/PaymentsPage')
+const PaymentsPage = lazy(() => loadPaymentsPage().then((m) => ({ default: m.PaymentsPage })))
+const loadInvoicesPage = () => import('@/features/invoices/InvoicesPage')
+const InvoicesPage = lazy(() => loadInvoicesPage().then((m) => ({ default: m.InvoicesPage })))
+const loadInvoiceEditor = () => import('@/features/invoices/InvoiceEditor')
+const InvoiceEditor = lazy(() => loadInvoiceEditor().then((m) => ({ default: m.InvoiceEditor })))
+const loadAnalyticsPage = () => import('@/features/analytics/AnalyticsPage')
+const AnalyticsPage = lazy(() => loadAnalyticsPage().then((m) => ({ default: m.AnalyticsPage })))
+const loadAccountPage = () => import('@/features/settings/AccountPage')
+const AccountPage = lazy(() => loadAccountPage().then((m) => ({ default: m.AccountPage })))
+const loadWorkspaceSettingsPage = () => import('@/features/settings/WorkspaceSettingsPage')
+const WorkspaceSettingsPage = lazy(() => loadWorkspaceSettingsPage().then((m) => ({ default: m.WorkspaceSettingsPage })))
+
+/** Download every page's code in the background once the app is idle, so
+ *  switching pages never waits on the network. */
+function prefetchPages() {
+  const all = [loadInboxPage, loadTasksPage, loadTaskPage, loadProjectsPage, loadProjectPage, loadClientsPage, loadClientPage, loadClientSettingsPage, loadClockPage, loadTeamPage, loadMemberPage, loadPaymentsPage, loadInvoicesPage, loadInvoiceEditor, loadAnalyticsPage, loadAccountPage, loadWorkspaceSettingsPage]
+  const run = () => all.forEach((load) => void load().catch(() => {}))
+  const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }
+  if (w.requestIdleCallback) w.requestIdleCallback(run, { timeout: 3000 })
+  else setTimeout(run, 1500)
+}
 
 /** Money pages are owner/admin only (the database enforces it too). */
 function AdminOnly({ children }: { children: ReactNode }) {
@@ -41,7 +68,7 @@ function Routed() {
   return (
     // Keyed by path so each page plays its entrance animation.
     <Suspense fallback={<PageSkeleton />}>
-      <div key={location.pathname}>
+      <div key={location.pathname} className="page">
         <Routes location={location}>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/inbox" element={<InboxPage />} />
@@ -77,7 +104,10 @@ export default function App() {
   const authed = !authRequired || Boolean(session)
 
   useEffect(() => {
-    if (authed) void init()
+    if (authed) {
+      void init()
+      prefetchPages()
+    }
   }, [authed, init])
 
   if (loading) return <div style={{ minHeight: '100vh', background: 'var(--bg)' }} />

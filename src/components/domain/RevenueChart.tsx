@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { addMonths, format, startOfMonth } from 'date-fns'
-import type { Payment } from '@/types'
-import { effectivePaymentStatus, isOpenPayment } from '@/lib/derive'
+import type { Payment, Project } from '@/types'
+import { effectivePaymentStatus, isOpenPayment, workDate } from '@/lib/derive'
 import { toUSD } from '@/lib/currency'
 import { formatMoney, formatMoneyShort } from '@/lib/format'
 
@@ -13,8 +13,9 @@ export interface MonthBucket {
   overdue: number
 }
 
-/** Collected (by paid date) vs. still-open (by due date, else created date) per month, in USD. */
-export function monthlyBuckets(payments: Payment[], rates: Record<string, number> | null, months = 6): MonthBucket[] {
+/** Money earned per month, in USD, counted in the month the work was done (see workDate):
+ *  paid vs. still unpaid vs. overdue. */
+export function monthlyBuckets(payments: Payment[], rates: Record<string, number> | null, months = 6, projects: Project[] = []): MonthBucket[] {
   const start = startOfMonth(addMonths(new Date(), -(months - 1)))
   const buckets: MonthBucket[] = Array.from({ length: months }, (_, i) => {
     const d = addMonths(start, i)
@@ -24,14 +25,13 @@ export function monthlyBuckets(payments: Payment[], rates: Record<string, number
   const currentKey = buckets[buckets.length - 1].key
   for (const p of payments) {
     const usd = toUSD(Number(p.amount), p.currency, rates)
-    if (p.status === 'paid' && p.payment_date) {
-      const b = byKey.get(p.payment_date.slice(0, 7))
-      if (b) b.collected += usd
+    const k = workDate(p, projects).slice(0, 7)
+    // Work dated in the future (start date ahead) shows in the current month.
+    const b = byKey.get(k > currentKey ? currentKey : k)
+    if (!b) continue
+    if (p.status === 'paid') {
+      b.collected += usd
     } else if (isOpenPayment(p)) {
-      // Open money with no date lands in the current month.
-      const k = (p.due_date ?? '').slice(0, 7) || currentKey
-      const b = byKey.get(k < buckets[0].key ? buckets[0].key : k > currentKey ? currentKey : k)
-      if (!b) continue
       if (effectivePaymentStatus(p) === 'overdue') b.overdue += usd
       else b.open += usd
     }
@@ -62,8 +62,8 @@ export function RevenueChart({ buckets, showOverdue }: { buckets: MonthBucket[];
       <div className="bars" style={{ gridTemplateColumns: `repeat(${buckets.length}, minmax(0,1fr))` }}>
         {buckets.map((b, i) => {
           const parts = [
-            b.collected ? formatMoney(Math.round(b.collected)) + ' collected' : null,
-            b.open ? formatMoney(Math.round(b.open)) + ' open' : null,
+            b.collected ? formatMoney(Math.round(b.collected)) + ' paid' : null,
+            b.open ? formatMoney(Math.round(b.open)) + ' unpaid' : null,
             b.overdue ? formatMoney(Math.round(b.overdue)) + ' overdue' : null,
           ].filter(Boolean)
           const showTip = hover === i || (hover === null && i === last)

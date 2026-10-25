@@ -17,10 +17,16 @@ import { Composer, MentionText } from '@/components/ui/mentions'
 import { ConfirmDialog } from '@/components/ui/modal'
 import { DoneRow, TaskGroup, TaskListRow } from '@/components/domain/TaskViews'
 import { ProjectFormModal } from '@/features/create/ProjectFormModal'
-import { clientDisplayName, effectivePaymentStatus, eligibleAssignees, profileDisplayName, profileFullName, shortProjectTitle } from '@/lib/derive'
+import { Popover } from '@/components/ui/popover'
+import { DateInput } from '@/components/ui/date-picker'
+import { MonthInput } from '@/components/ui/month-picker'
+import { MoneyInput } from '@/components/ui/field'
+import { SUPPORTED_CURRENCIES } from '@/lib/currency'
+import { monthLabel } from '@/components/ui/month-picker'
+import { clientDisplayName, effectivePaymentStatus, hasWorkMonthColumn, projectWorkDate, eligibleAssignees, profileDisplayName, profileFullName, shortProjectTitle } from '@/lib/derive'
 import { formatDate, formatFeedAgo, formatMoney } from '@/lib/format'
 import { accessStatus, billingLabel, paymentStatus, priorityMeta, projectStatus } from '@/lib/status'
-import type { AccessItem, AccessStatus, Priority, ProjectNote, ProjectStatus, Task, TaskStatus } from '@/types'
+import type { AccessItem, AccessStatus, Priority, ProjectNote, ProjectStatus, Task, TaskStatus, BillingType, Project } from '@/types'
 
 type Tab = 'tasks' | 'overview' | 'notes' | 'access' | 'activity'
 const RING: Record<ProjectStatus, string> = { not_started: '', in_progress: 'prog', waiting_for_client: 'rev', blocked: 'rev', completed: 'done', finished: 'done', cancelled: 'cancel' }
@@ -120,18 +126,60 @@ export function ProjectPage() {
               <MenuItem key={p} on={p === project.priority} icon={<PrioBars priority={p} />} onSelect={() => updateProject(project, { priority: p })}>{priorityMeta[p].label}</MenuItem>
             ))}
           </Menu>
-          {(project.start_date || project.due_date) && (
-            <button type="button" className="chip" onClick={() => setEditOpen(true)}>
-              <Calendar className="i i-sm" />
-              {project.start_date ? formatDate(project.start_date) : '…'} → {project.due_date ? formatDate(project.due_date) : '…'}
-            </button>
-          )}
-          {(project.project_type || project.billing_type) && <span className="chip">{[project.project_type, project.billing_type ? billingLabel[project.billing_type] : null].filter(Boolean).join(' · ')}</span>}
+          <Popover
+            title="Schedule"
+            width={300}
+            trigger={({ open, toggle }) => (
+              <button type="button" className={`chip${open ? ' on' : ''}${project.start_date || project.due_date ? '' : ' dashed'}`} onClick={toggle}>
+                <Calendar className="i i-sm" />
+                {project.start_date || project.due_date ? <>{project.start_date ? formatDate(project.start_date) : '…'} → {project.due_date ? formatDate(project.due_date) : '…'}</> : 'Set dates'}
+                {isAdmin && <span className="chip-sub">· {monthLabel(projectWorkDate(project)).replace(/ \d{4}$/, '')} work</span>}
+              </button>
+            )}
+          >
+            {() => (
+              <div className="pop-form">
+                <div className="field"><span className="lbl">Start date</span><DateInput value={project.start_date ?? ''} onChange={(v) => updateProject(project, { start_date: v })} placeholder="Start date" /></div>
+                <div className="field"><span className="lbl">Due date</span><DateInput value={project.due_date ?? ''} onChange={(v) => updateProject(project, { due_date: v })} placeholder="Due date" /></div>
+                {isAdmin && (
+                  <div className="field">
+                    <span className="lbl">Work month</span>
+                    {hasWorkMonthColumn(projects) ? (
+                      <MonthInput value={project.work_month ?? projectWorkDate(project)} onChange={(v) => updateProject(project, { work_month: v })} label="Work month" />
+                    ) : (
+                      <span className="xs muted">Run the work_month SQL in Supabase to enable this.</span>
+                    )}
+                    <span className="hint">Earnings and invoices count this project in this month.</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </Popover>
+          <Menu
+            align="left"
+            trigger={({ toggle }) => (
+              <button type="button" className="chip" onClick={toggle}>
+                {[project.project_type, billingLabel[project.billing_type ?? 'retainer']].filter(Boolean).join(' · ')}
+              </button>
+            )}
+          >
+            {(['retainer', 'fixed', 'hourly'] as BillingType[]).map((b) => (
+              <MenuItem key={b} on={(project.billing_type ?? 'retainer') === b} onSelect={() => updateProject(project, { billing_type: b })}>{billingLabel[b]}</MenuItem>
+            ))}
+          </Menu>
           {isAdmin && (
-            <button type="button" className={`chip${project.amount ? '' : ' dashed'}`} title="Only owners and admins see this" onClick={() => setEditOpen(true)}>
-              <Lock className="i i-sm" />
-              {project.amount ? `Budget · ${formatMoney(project.amount, project.currency)}` : 'Budget · set amount'}
-            </button>
+            <Popover
+              title="Budget"
+              width={280}
+              trigger={({ open, toggle }) => (
+                <button type="button" className={`chip${project.amount ? '' : ' dashed'}${open ? ' on' : ''}`} title="Only owners and admins see this" onClick={toggle}>
+                  <Lock className="i i-sm" />
+                  {project.amount ? `Budget · ${formatMoney(project.amount, project.currency)}` : 'Budget · set amount'}
+                </button>
+              )}
+            >
+              {(close) => <BudgetEditor project={project} onDone={close} />}
+            </Popover>
           )}
           <span className="spacer" />
           <div className="row-sm">
@@ -254,6 +302,7 @@ export function ProjectPage() {
                       <span>Status</span><span style={{ justifySelf: 'start' }}><StatusPill meta={projectStatus[project.status]} dot={false} /></span>
                       <span>Priority</span><span className="m">{priorityMeta[project.priority].label}</span>
                       <span>Start</span><span>{formatDate(project.start_date)}</span>
+                      <span>Work month</span><span>{monthLabel(projectWorkDate(project))}{!project.work_month && <span className="faint"> (from start)</span>}</span>
                       <span>Due</span><span>{formatDate(project.due_date)}</span>
                       <span>Type</span><span>{project.billing_type ? billingLabel[project.billing_type] : '—'}</span>
                       <span>Task key</span><span className="mono">{project.key ?? '—'}</span>
@@ -427,5 +476,29 @@ function AccessPanel({ projectId, items }: { projectId: string; items: AccessIte
         </div>
       </div>
     </div>
+  )
+}
+
+/** Quick budget edit from the project header. */
+function BudgetEditor({ project, onDone }: { project: Project; onDone: () => void }) {
+  const [amount, setAmount] = useState(project.amount ? String(project.amount) : '')
+  const [currency, setCurrency] = useState(project.currency)
+  const save = () => {
+    const n = Number(amount) || 0
+    if (n !== project.amount || currency !== project.currency) {
+      updateProject(project, { amount: n, currency })
+      toast.success('Budget updated')
+    }
+    onDone()
+  }
+  return (
+    <form className="pop-form" onSubmit={(e) => { e.preventDefault(); save() }}>
+      <MoneyInput amount={amount} currency={currency} onAmount={setAmount} onCurrency={setCurrency} currencies={[...SUPPORTED_CURRENCIES]} />
+      <span className="hint">The linked payment updates too, unless it’s already paid.</span>
+      <div className="pop-actions">
+        <button type="button" className="btn btn-sm" onClick={onDone}>Cancel</button>
+        <button type="submit" className="btn btn-sm btn-pri">Save</button>
+      </div>
+    </form>
   )
 }

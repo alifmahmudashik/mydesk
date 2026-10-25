@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { addDays, format, startOfMonth } from 'date-fns'
+import { addDays, format, parseISO } from 'date-fns'
 import { ChartColumn, Check, CreditCard, Plus, Search, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
@@ -16,11 +16,12 @@ import { PaymentModal } from '@/features/payments/PaymentModal'
 import { RemindModal } from '@/features/payments/RemindModal'
 import { celebrateFrom } from '@/lib/confetti'
 import { sumUSD, useUsdRates } from '@/lib/currency'
-import { clientDisplayName, effectivePaymentStatus, isOpenPayment, sumByCurrency } from '@/lib/derive'
+import { clientDisplayName, effectivePaymentStatus, isOpenPayment, projectWorkDate, sumByCurrency, workDate } from '@/lib/derive'
 import { daysUntil, formatDate, formatMoney, lateLabel } from '@/lib/format'
 import { paymentStatus, paymentTerms } from '@/lib/status'
 import type { Payment } from '@/types'
 import { DateInput } from '@/components/ui/date-picker'
+import { MonthFilter } from '@/components/ui/month-picker'
 
 type Tab = 'open' | 'overdue' | 'paid'
 
@@ -35,6 +36,13 @@ export function PaymentsPage() {
   const [remind, setRemind] = useState<Payment | null>(null)
   const [datesOpen, setDatesOpen] = useState(false)
   const [paidLimit, setPaidLimit] = useState(25)
+  const thisMonth = format(new Date(), 'yyyy-MM')
+  const month = params.get('m') || thisMonth
+  const setMonth = (m: string) => {
+    if (m === thisMonth) params.delete('m')
+    else params.set('m', m)
+    setParams(params, { replace: true })
+  }
 
   // Deep link ?p=<id> opens that payment (from inbox, dashboard, emails).
   useEffect(() => {
@@ -60,13 +68,33 @@ export function PaymentsPage() {
     return `${clientDisplayName(c)} ${paymentTitle(p)} ${inv?.number ?? ''}`.toLowerCase().includes(q.trim().toLowerCase())
   }
 
-  const open = payments.filter(isOpenPayment)
+  // Every payment belongs to the month its work was done (project work month), not the
+  // month the money arrived. The month filter works on that.
+  const wm = (p: Payment) => workDate(p, projects).slice(0, 7)
+  const all = month === 'all'
+  const inMonth = (p: Payment) => all || wm(p) === month
+  const monthName = all ? 'all months' : format(parseISO(`${month}-01`), 'MMMM')
+  const wmLabel = (p: Payment) => format(parseISO(`${wm(p)}-01`), 'MMM yyyy')
+
+  const allOpen = payments.filter(isOpenPayment)
+  const open = allOpen.filter(inMonth)
   const overdue = open.filter((p) => effectivePaymentStatus(p) === 'overdue').sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? ''))
-  const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd')
-  const paid = payments.filter((p) => p.status === 'paid').sort((a, b) => (b.payment_date ?? '').localeCompare(a.payment_date ?? ''))
-  const paidThisMonth = paid.filter((p) => (p.payment_date ?? '') >= monthStart)
+  const paid = payments.filter((p) => p.status === 'paid' && inMonth(p)).sort((a, b) => (b.payment_date ?? '').localeCompare(a.payment_date ?? ''))
   const noDate = open.filter((p) => !p.due_date)
-  const openClients = new Set(open.map((p) => p.client_id)).size
+  const otherOpen = all ? [] : allOpen.filter((p) => !inMonth(p))
+
+  // Numbers for the selected work month.
+  const earnedRows = payments.filter((p) => p.status !== 'refunded' && inMonth(p))
+  const earned = sumUSD(earnedRows, rates)
+  const received = sumUSD(paid, rates)
+  const owed = sumUSD(open, rates)
+  const late = sumUSD(overdue, rates)
+  const projectCount = all ? projects.length : projects.filter((pr) => projectWorkDate(pr).slice(0, 7) === month).length
+  // Cash that actually arrived in the selected month, whatever month the work was.
+  const cashIn = payments.filter((p) => p.status === 'paid' && p.payment_date && (all || p.payment_date.slice(0, 7) === month))
+  const cashForThis = cashIn.filter((p) => all || wm(p) === month)
+  const cashForEarlier = cashIn.filter((p) => !all && wm(p) < month)
+  const cashForLater = cashIn.filter((p) => !all && wm(p) > month)
 
   // Open tab groups by client, clients with overdue money first.
   const groups = useMemo(() => {
@@ -115,22 +143,39 @@ export function PaymentsPage() {
         <button type="button" className="btn btn-pri" onClick={() => openCreate('payment')}><Plus className="i" />Record payment</button>
       </Topbar>
       <Content>
-        <PageHead title="Payments" sub="What you're owed, what's late, and what came in." />
+        <PageHead title="Payments" sub="Grouped by the month the work was done, so each month shows what that work earned.">
+          <MonthFilter value={month} onChange={setMonth} />
+        </PageHead>
         <div className="kstrip">
           <div>
-            <div className="row-sm small muted m"><span className="sq" style={{ background: 'var(--warn-dot)', borderRadius: 99 }} />Outstanding</div>
-            <div className="val">{formatMoney(Math.round(sumUSD(open, rates)))}</div>
-            <div className="xs muted">{open.length} open · {openClients} client{openClients === 1 ? '' : 's'}</div>
-          </div>
-          <div style={overdue.length ? { background: 'var(--bad-soft)' } : undefined}>
-            <div className={`row-sm small m ${overdue.length ? 't-bad' : 'muted'}`}><span className="sq" style={{ background: 'var(--bad-dot)', borderRadius: 99 }} />Overdue</div>
-            <div className="val">{formatMoney(Math.round(sumUSD(overdue, rates)))}</div>
-            <div className={`xs ${overdue.length ? 't-bad' : 'muted'}`}>{overdue.length ? `Oldest is ${lateLabel(overdue[0].due_date)}` : 'Nothing late'}</div>
+            <div className="row-sm small muted m"><span className="sq" style={{ background: 'var(--pri)', borderRadius: 99 }} />Earned · {all ? 'all time' : monthName} work</div>
+            <div className="val">{formatMoney(Math.round(earned))}</div>
+            <div className="xs muted">{projectCount} project{projectCount === 1 ? '' : 's'} · {earned ? Math.round((received / earned) * 100) : 0}% received</div>
           </div>
           <div>
-            <div className="row-sm small muted m"><span className="sq" style={{ background: 'var(--ok-dot)', borderRadius: 99 }} />Paid this month</div>
-            <div className="val">{formatMoney(sumUSD(paidThisMonth, rates), 'USD', { cents: true })}</div>
-            <div className="xs muted">{paidThisMonth.length} payment{paidThisMonth.length === 1 ? '' : 's'}</div>
+            <div className="row-sm small muted m"><span className="sq" style={{ background: 'var(--ok-dot)', borderRadius: 99 }} />Received</div>
+            <div className="val">{formatMoney(Math.round(received))}</div>
+            <div className="xs muted">{paid.length} paid</div>
+          </div>
+          <div style={overdue.length ? { background: 'var(--bad-soft)' } : undefined}>
+            <div className={`row-sm small m ${overdue.length ? 't-bad' : 'muted'}`}><span className="sq" style={{ background: overdue.length ? 'var(--bad-dot)' : 'var(--warn-dot)', borderRadius: 99 }} />Still owed</div>
+            <div className="val">{formatMoney(Math.round(owed))}</div>
+            <div className={`xs ${overdue.length ? 't-bad' : 'muted'}`}>{open.length} unpaid{overdue.length ? ` · ${formatMoney(Math.round(late))} overdue` : ''}</div>
+          </div>
+          <div>
+            <div className="row-sm small muted m"><span className="sq" style={{ background: 'var(--line3)', borderRadius: 99 }} />Cash in {all ? '· all time' : `during ${monthName}`}</div>
+            <div className="val">{formatMoney(Math.round(sumUSD(cashIn, rates)))}</div>
+            <div className="xs muted">
+              {all
+                ? `${cashIn.length} payment${cashIn.length === 1 ? '' : 's'} received`
+                : cashIn.length === 0
+                  ? 'Nothing received this month'
+                  : [
+                      `${formatMoney(Math.round(sumUSD(cashForThis, rates)))} for ${monthName} work`,
+                      cashForEarlier.length ? `${formatMoney(Math.round(sumUSD(cashForEarlier, rates)))} for earlier work` : null,
+                      cashForLater.length ? `${formatMoney(Math.round(sumUSD(cashForLater, rates)))} in advance` : null,
+                    ].filter(Boolean).join(' · ')}
+            </div>
           </div>
         </div>
         {(rates === null && payments.some((p) => p.currency !== 'USD')) && <span className="xs faint" style={{ marginTop: -16 }}>Totals in USD. Exchange rates are loading.</span>}
@@ -138,7 +183,11 @@ export function PaymentsPage() {
         <div className="tabs">
           <Tabs
             value={tab}
-            onChange={(t) => setParams(t === 'open' ? {} : { tab: t }, { replace: true })}
+            onChange={(t) => {
+              if (t === 'open') params.delete('tab')
+              else params.set('tab', t)
+              setParams(params, { replace: true })
+            }}
             tabs={[
               { id: 'open', label: 'Open', count: open.length },
               { id: 'overdue', label: <>Overdue {overdue.length > 0 && <span className="n" style={{ background: 'var(--bad-bg)', color: 'var(--bad)' }}>{overdue.length}</span>}</> },
@@ -152,11 +201,17 @@ export function PaymentsPage() {
             }
           />
           <div className="panel-in" key={tab}>
+            {tab !== 'paid' && otherOpen.length > 0 && (
+              <div className="card card-f" style={{ marginBottom: 12 }}>
+                <span className="muted">{formatMoney(Math.round(sumUSD(otherOpen, rates)))} is still open for work in other months ({otherOpen.length} payment{otherOpen.length === 1 ? '' : 's'}).</span>
+                <button type="button" className="btn btn-sm" onClick={() => setMonth('all')}>Show all months</button>
+              </div>
+            )}
             {tab === 'open' &&
               (groups.length === 0 ? (
                 <div className="card">
-                  <Empty icon={<CreditCard className="i" />} title={payments.length ? 'Nothing open' : 'No payments yet'} action={<button type="button" className="btn btn-sm" onClick={() => openCreate('payment')}><Plus className="i i-sm" />Record payment</button>}>
-                    {payments.length ? 'Every payment is settled. Nice.' : 'Payments are created automatically when a project has a budget, or record one here.'}
+                  <Empty icon={<CreditCard className="i" />} title={payments.length ? (all ? 'Nothing open' : `Nothing open for ${monthName} work`) : 'No payments yet'} action={<button type="button" className="btn btn-sm" onClick={() => openCreate('payment')}><Plus className="i i-sm" />Record payment</button>}>
+                    {payments.length ? (all ? 'Every payment is settled. Nice.' : 'Everything for this month’s work is paid.') : 'Payments are created automatically when a project has a budget, or record one here.'}
                   </Empty>
                 </div>
               ) : (
@@ -172,13 +227,14 @@ export function PaymentsPage() {
                       >
                         <div className="tbl-wrap">
                           <table className="tbl" style={{ minWidth: 760 }}>
-                            <thead><tr><th>Project</th><th className="r">Amount</th><th>Status</th><th>Due</th><th className="r" /></tr></thead>
+                            <thead><tr><th>Project</th><th>Work month</th><th className="r">Amount</th><th>Status</th><th>Due</th><th className="r" /></tr></thead>
                             <tbody>
                               {g.rows.map((p) => {
                                 const st = effectivePaymentStatus(p)
                                 return (
                                   <tr key={p.id} className="hov">
                                     <td><button type="button" className="m cover" style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', color: 'inherit' }} onClick={() => setEdit(p)}>{paymentTitle(p)}</button></td>
+                                    <td className="wm-cell">{wmLabel(p)}</td>
                                     <td className="r num b">{formatMoney(p.amount, p.currency)}</td>
                                     <td><StatusPill meta={st === 'unpaid' ? { ...paymentStatus.unpaid, tone: 'warn' } : paymentStatus[st]} /></td>
                                     {dueCell(p)}
@@ -212,11 +268,12 @@ export function PaymentsPage() {
                     <ClientGroup key={g.id} client={g.client} meta={`${g.rows.length} overdue \u00b7 oldest ${lateLabel(g.rows[0].due_date)}`} right={<span className="group-total t-bad">{sumByCurrency(g.rows)}</span>}>
                       <div className="tbl-wrap">
                         <table className="tbl" style={{ minWidth: 700 }}>
-                          <thead><tr><th>Project</th><th className="r">Amount</th><th>Due</th><th>Last reminder</th><th className="r" /></tr></thead>
+                          <thead><tr><th>Project</th><th>Work month</th><th className="r">Amount</th><th>Due</th><th>Last reminder</th><th className="r" /></tr></thead>
                           <tbody>
                             {g.rows.map((p) => (
                               <tr key={p.id} className="hov">
                                 <td><button type="button" className="m cover" style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', color: 'inherit' }} onClick={() => setEdit(p)}>{paymentTitle(p)}</button></td>
+                                <td className="wm-cell">{wmLabel(p)}</td>
                                 <td className="r num b">{formatMoney(p.amount, p.currency)}</td>
                                 <td><div>{formatDate(p.due_date)}</div><div className="xs t-bad">{lateLabel(p.due_date)}</div></td>
                                 <td className="small muted">{p.last_reminded_at ? formatDate(p.last_reminded_at.slice(0, 10)) : 'Never'}</td>
@@ -233,7 +290,7 @@ export function PaymentsPage() {
 
             {tab === 'paid' &&
               (paid.filter(matchQ).length === 0 ? (
-                <div className="card"><Empty title="No paid payments yet" /></div>
+                <div className="card"><Empty title={all ? 'No paid payments yet' : `Nothing paid yet for ${monthName} work`} /></div>
               ) : (
                 <div className="client-groups">
                   {groupByClient(paid.filter(matchQ), (p) => p.client_id, clients).slice(0, paidLimit).map((g, gi) => (
@@ -246,17 +303,19 @@ export function PaymentsPage() {
                     >
                       <div className="tbl-wrap">
                         <table className="tbl" style={{ minWidth: 640 }}>
-                          <thead><tr><th>Invoice / project</th><th className="r">Amount</th><th>Paid on</th><th>Method</th></tr></thead>
+                          <thead><tr><th>Project</th><th>Work month</th><th className="r">Amount</th><th>Paid on</th><th>Method</th></tr></thead>
                           <tbody>
                             {g.rows.map((p) => {
                               const inv = invoices.find((i) => i.id === p.invoice_id)
                               return (
                                 <tr key={p.id} className="hov">
                                   <td>
-                                    {inv ? <Link className="mono m cover" to={`/invoices/${inv.id}`}>{inv.number}</Link> : <button type="button" className="m cover trunc" style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', color: 'inherit', maxWidth: 360 }} onClick={() => setEdit(p)}>{paymentTitle(p)}</button>}
+                                    <button type="button" className="m cover trunc" style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', color: 'inherit', maxWidth: 360 }} onClick={() => setEdit(p)}>{paymentTitle(p)}</button>
+                                    {inv && <div className="xs"><Link className="mono faint above" to={`/invoices/${inv.id}`}>Invoice {inv.number}</Link></div>}
                                   </td>
+                                  <td className="wm-cell">{wmLabel(p)}</td>
                                   <td className="r num b">{formatMoney(p.amount, p.currency, { cents: true })}</td>
-                                  <td>{formatDate(p.payment_date)}</td>
+                                  <td>{formatDate(p.payment_date)}{p.payment_date && p.payment_date.slice(0, 7) !== wm(p) && <div className="xs faint">{p.payment_date.slice(0, 7) > wm(p) ? 'paid later' : 'paid in advance'}</div>}</td>
                                   <td className="muted">{p.payment_method ?? '\u2014'}</td>
                                 </tr>
                               )

@@ -141,10 +141,58 @@ export function invoicePaymentStatus(invoiceId: string, payments: Payment[]): Pa
   return 'unpaid'
 }
 
-/** Projects ready to invoice: marked Completed (not Finished, which is already paid) and not on an invoice yet. */
+/** Projects ready to invoice: Completed or Finished (already paid — you may still need the invoice) and not on an invoice yet. */
 export function isInvoiceable(project: Project, invoices: { client_id: string; line_items: { description: string }[] }[], payments: Payment[]) {
-  if (project.status !== 'completed') return false
+  if (project.status !== 'completed' && project.status !== 'finished') return false
   const onInvoice = invoices.some((i) => i.client_id === project.client_id && i.line_items.some((li) => li.description.trim() === project.title.trim()))
   const paymentInvoiced = payments.some((p) => p.project_ids?.includes(project.id) && p.invoice_id)
   return !onInvoice && !paymentInvoiced
+}
+
+/** The month a project's work was done, as yyyy-MM-dd: the chosen work month, else the
+ *  start date, else the day it was created. */
+export function projectWorkDate(pr: Project): string {
+  return pr.work_month || pr.start_date || pr.created_at.slice(0, 10)
+}
+
+/** When the work behind a payment happened (yyyy-MM-dd): the earliest work month of the
+ *  projects it covers (see projectWorkDate). A payment with no linked project falls back to
+ *  the day it was created. Money is counted in this month, not the month it was received. */
+export function workDate(p: Payment, projects: Project[]): string {
+  let best = ''
+  for (const id of p.project_ids ?? []) {
+    const pr = projects.find((x) => x.id === id)
+    if (!pr) continue
+    const d = projectWorkDate(pr)
+    if (!best || d < best) best = d
+  }
+  return best || p.created_at.slice(0, 10)
+}
+
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+const monthName = (d: string) => `${MONTH_NAMES[Number(d.slice(5, 7)) - 1]} ${d.slice(0, 4)}`
+
+/** Invoice note lines saying when the work was done, e.g. "Monthly retainer for October 2026." */
+export function workMonthNote(list: Project[]): string[] {
+  if (list.length === 1) {
+    const p = list[0]
+    const m = monthName(projectWorkDate(p))
+    return [p.billing_type === 'retainer' ? `Monthly retainer for ${m}.` : `Project work completed in ${m}.`]
+  }
+  return list.map((p) => {
+    const m = monthName(projectWorkDate(p))
+    return p.billing_type === 'retainer' ? `${p.title}: monthly retainer for ${m}.` : `${p.title}: work completed in ${m}.`
+  })
+}
+
+/** Adds work-month lines to an invoice note, skipping any already there. */
+export function withWorkMonthNote(note: string, list: Project[]): string {
+  const add = workMonthNote(list).filter((l) => !note.includes(l))
+  if (!add.length) return note
+  return [add.join('\n'), note.trim()].filter(Boolean).join('\n\n')
+}
+
+/** True once the projects.work_month column exists (select * returns it on every row). */
+export function hasWorkMonthColumn(projects: Project[]) {
+  return projects.length === 0 || projects.some((p) => 'work_month' in p)
 }

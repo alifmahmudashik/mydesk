@@ -57,6 +57,8 @@ export interface Project {
   currency: string
   start_date?: string | null
   due_date?: string | null
+  /** Month the work was done, stored as the 1st of that month ("2026-10-01"). */
+  work_month?: string | null
   status: ProjectStatus
   priority: Priority
   payment_status: PaymentStatus

@@ -439,6 +439,9 @@ alter table clients add column if not exists pinned boolean not null default fal
 alter table clients add column if not exists default_currency text;
 alter table clients add column if not exists payment_terms text;
 alter table clients add column if not exists logo_url text;
+-- The month the work was done (first day of that month). Earnings, analytics and
+-- invoice notes count a project in this month, not when the money arrived.
+alter table projects add column if not exists work_month date;
 
 alter table projects add column if not exists key text;
 alter table projects add column if not exists billing_type text;

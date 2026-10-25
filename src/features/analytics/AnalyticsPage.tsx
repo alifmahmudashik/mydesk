@@ -10,7 +10,7 @@ import { Menu, MenuItem } from '@/components/ui/menu'
 import { ClientMark } from '@/components/ui/avatar'
 import { RevenueChart, monthlyBuckets } from '@/components/domain/RevenueChart'
 import { sumUSD, toUSD, useUsdRates } from '@/lib/currency'
-import { clientDisplayName, effectivePaymentStatus, isOpenPayment, OPEN_PROJECT } from '@/lib/derive'
+import { clientDisplayName, effectivePaymentStatus, isOpenPayment, OPEN_PROJECT, projectWorkDate, workDate } from '@/lib/derive'
 import { daysUntil, formatMoney } from '@/lib/format'
 
 type Range = 'month' | '3m' | '6m' | 'year' | 'all'
@@ -30,17 +30,36 @@ export function AnalyticsPage() {
   const label = range === 'all' || range === 'month' ? rangeLabel[range] : `${format(start, 'MMM')} – ${format(new Date(), 'MMM yyyy')}`
 
   const usd = (p: { amount: number; currency: string }) => toUSD(Number(p.amount), p.currency, rates)
-  const paidIn = payments.filter((p) => p.status === 'paid' && (p.payment_date ?? '') >= since)
+  // Everything is counted in the month the work was done (project start), not when the money arrived.
+  const wd = (p: (typeof payments)[number]) => workDate(p, projects)
+  const monthKey = format(new Date(), 'yyyy-MM')
+  const paidIn = payments.filter((p) => p.status === 'paid' && wd(p) >= since)
   const collected = sumUSD(paidIn, rates)
-  const thisMonth = sumUSD(payments.filter((p) => p.status === 'paid' && (p.payment_date ?? '') >= format(startOfMonth(new Date()), 'yyyy-MM-dd')), rates)
-  const billedIn = payments.filter((p) => p.status !== 'refunded' && (p.created_at.slice(0, 10) >= since || (p.payment_date ?? '') >= since))
+  const thisMonth = sumUSD(payments.filter((p) => p.status === 'paid' && wd(p).slice(0, 7) === monthKey), rates)
+  const billedIn = payments.filter((p) => p.status !== 'refunded' && wd(p) >= since)
   const invoiced = sumUSD(billedIn, rates)
   const open = payments.filter(isOpenPayment)
   const overdue = open.filter((p) => effectivePaymentStatus(p) === 'overdue')
   const paidWithDue = paidIn.filter((p) => p.due_date && p.payment_date)
   const avgDays = paidWithDue.length ? Math.round(paidWithDue.reduce((s, p) => s + differenceInCalendarDays(parseISO(p.payment_date!), parseISO(p.due_date!)), 0) / paidWithDue.length) : null
 
-  const buckets = useMemo(() => monthlyBuckets(payments, rates, Math.max(3, months)), [payments, rates, months])
+  // Month-by-month: projects worked, value earned, how much of it is in, newest first.
+  const monthRows = Array.from({ length: Math.max(1, months) }, (_, i) => {
+    const d = addMonths(startOfMonth(new Date()), -i)
+    const key = format(d, 'yyyy-MM')
+    const rows = payments.filter((p) => p.status !== 'refunded' && wd(p).slice(0, 7) === key)
+    const paid = rows.filter((p) => p.status === 'paid')
+    return {
+      key,
+      label: format(d, 'MMMM yyyy'),
+      projects: projects.filter((pr) => projectWorkDate(pr).slice(0, 7) === key).length,
+      earned: sumUSD(rows, rates),
+      received: sumUSD(paid, rates),
+      owed: sumUSD(rows.filter(isOpenPayment), rates),
+    }
+  })
+
+  const buckets = useMemo(() => monthlyBuckets(payments, rates, Math.max(3, months), projects), [payments, rates, months, projects])
 
   // Revenue by client (in range).
   const byClient = useMemo(() => {
@@ -120,7 +139,7 @@ export function AnalyticsPage() {
         <button type="button" className="btn" onClick={exportCsv}><Download className="i" />Export CSV</button>
       </Topbar>
       <Content>
-        <PageHead title="Analytics" sub={<>Where the money comes from, and who it comes from. Amounts shown in USD{rates ? '' : ' (rates loading)'}.</>} />
+        <PageHead title="Analytics" sub={<>What you earned, counted in the month the work was done (project start date). Amounts in USD{rates ? '' : ' (rates loading)'}.</>} />
         <div className="tabs" style={{ gap: 22 }}>
           <Tabs
             variant="seg"
@@ -134,22 +153,50 @@ export function AnalyticsPage() {
           {tab === 'payments' ? (
             <div className="stack-lg panel-in">
               <div className="kpis">
-                <div className="kpi"><span className="lbl">Collected</span><span className="val">{formatMoney(Math.round(collected))}</span><span className="sub t-ok">{formatMoney(Math.round(thisMonth))} this month</span></div>
-                <div className="kpi"><span className="lbl">Invoiced</span><span className="val">{formatMoney(Math.round(invoiced))}</span><span className="sub">{invoiced ? Math.round((collected / invoiced) * 100) : 0}% collected</span></div>
+                <div className="kpi"><span className="lbl">Earned &amp; paid</span><span className="val">{formatMoney(Math.round(collected))}</span><span className="sub t-ok">{formatMoney(Math.round(thisMonth))} for work in {format(new Date(), 'MMMM')}</span></div>
+                <div className="kpi"><span className="lbl">Total earned</span><span className="val">{formatMoney(Math.round(invoiced))}</span><span className="sub">paid + unpaid · {invoiced ? Math.round((collected / invoiced) * 100) : 0}% paid</span></div>
                 <div className="kpi"><span className="lbl">Avg. days to get paid</span><span className="val">{avgDays ?? '—'}</span><span className="sub">due date → paid{avgDays !== null && avgDays < 0 ? ' (early)' : ''}</span></div>
                 <div className={`kpi${overdue.length ? ' alert' : ''}`}><span className="lbl">Overdue</span><span className="val">{formatMoney(Math.round(sumUSD(overdue, rates)))}</span><span className="sub">{overdue.length} payment{overdue.length === 1 ? '' : 's'} · {new Set(overdue.map((p) => p.client_id)).size} client{new Set(overdue.map((p) => p.client_id)).size === 1 ? '' : 's'}</span></div>
               </div>
               <section className="card card-b">
                 <div className="row between wrap">
-                  <h2 className="h2">Collected vs. outstanding</h2>
-                  <div className="legend"><span><i className="c-col" />Collected</span><span><i className="c-open" />Outstanding</span><span><i className="c-late" />Overdue</span></div>
+                  <div>
+                    <h2 className="h2">Earned per month</h2>
+                    <span className="xs muted">By the month the work was done</span>
+                  </div>
+                  <div className="legend"><span><i className="c-col" />Paid</span><span><i className="c-open" />Unpaid</span><span><i className="c-late" />Overdue</span></div>
                 </div>
                 <RevenueChart buckets={buckets} showOverdue />
               </section>
+              <section className="card">
+                <div className="card-h">
+                  <div>
+                    <h2 className="h2">Month by month</h2>
+                    <span className="xs muted">What each month’s work earned, and how much of it you’ve received</span>
+                  </div>
+                  <Link className="link" to="/payments">Open payments →</Link>
+                </div>
+                <div className="tbl-wrap">
+                  <table className="tbl" style={{ minWidth: 560 }}>
+                    <thead><tr><th>Work month</th><th className="r">Projects</th><th className="r">Earned</th><th className="r">Received</th><th className="r">Still owed</th></tr></thead>
+                    <tbody>
+                      {monthRows.map((m) => (
+                        <tr key={m.key} className="hov">
+                          <td><Link className="m cover" to={`/payments?m=${m.key}`}>{m.label}</Link></td>
+                          <td className="r num">{m.projects}</td>
+                          <td className="r num b">{formatMoney(Math.round(m.earned))}</td>
+                          <td className="r num t-ok">{formatMoney(Math.round(m.received))}</td>
+                          <td className={`r num ${m.owed ? 't-warn' : 'faint'}`}>{m.owed ? formatMoney(Math.round(m.owed)) : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
               <div className="grid-3">
                 <section className="card card-b stack">
-                  <h2 className="h2">Top paying clients</h2>
-                  {byClient.filter((r) => r.revenue > 0).length === 0 && <span className="small muted">No payments in this range.</span>}
+                  <h2 className="h2">Top clients by earnings</h2>
+                  {byClient.filter((r) => r.revenue > 0).length === 0 && <span className="small muted">No paid work in this range.</span>}
                   {byClient.filter((r) => r.revenue > 0).slice(0, 5).map((r) => (
                     <div className="stack-sm" key={r.client.id}>
                       <div className="row between small"><Link className="m" to={`/clients/${r.client.id}`}>{clientDisplayName(r.client)}</Link><span className="num">{formatMoney(Math.round(r.revenue))}</span></div>

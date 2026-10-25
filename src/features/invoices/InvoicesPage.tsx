@@ -1,12 +1,10 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { format, startOfMonth } from 'date-fns'
-import { Check, Download, Edit3, FileText, Plus, Search, Settings, Trash2 } from 'lucide-react'
+import { Download, Edit3, FileText, Plus, Search, Settings, Trash2 } from 'lucide-react'
 import { useData } from '@/data/store'
 import { Topbar, Content, Empty, PageHead } from '@/components/ui/layout'
 import { ClientGroup, groupByClient } from '@/components/domain/ClientGroup'
-import { markInvoicePaid } from '@/data/actions'
-import { celebrateFrom } from '@/lib/confetti'
 import { StatusPill } from '@/components/ui/pill'
 import { ConfirmDialog } from '@/components/ui/modal'
 import { sumUSD, useUsdRates } from '@/lib/currency'
@@ -67,7 +65,7 @@ export function InvoicesPage() {
           <div className="kpi">
             <span className="lbl">Paid</span>
             <span className="val">{paidCount} of {tracked.length}</span>
-            <span className="sub">{tracked.length === 0 ? 'Link invoices to payments to track them' : paidCount === tracked.length ? 'Every invoice is settled' : `${tracked.length - paidCount} waiting on payment`}</span>
+            <span className="sub">{tracked.length === 0 ? 'Add projects to invoices to see paid status' : paidCount === tracked.length ? 'Every invoice is settled' : `${tracked.length - paidCount} waiting on payment`}</span>
           </div>
           <div className="kpi">
             <span className="lbl">Projects not invoiced</span>
@@ -114,13 +112,10 @@ export function InvoicesPage() {
                             <tr key={inv.id} className="hov">
                               <td><Link className="mono m cover" to={`/invoices/${inv.id}`}>{inv.number}</Link></td>
                               <td>{formatDate(inv.issue_date)}</td>
-                              <td>{st ? <StatusPill meta={paymentStatus[st]} /> : <span className="pill gray">Not tracked</span>}</td>
+                              <td>{st ? <StatusPill meta={paymentStatus[st]} /> : <span className="pill gray" title="Not linked to a project">No project</span>}</td>
                               <td className="r num b">{formatMoney(invoiceTotal(inv), inv.currency, { cents: true })}</td>
                               <td className="r">
                                 <span className="row-sm above" style={{ justifyContent: 'flex-end' }}>
-                                  {st !== 'paid' && (
-                                    <button className="btn btn-sm" type="button" title="Mark as paid" onClick={(e) => { markInvoicePaid(inv); celebrateFrom(e.currentTarget) }}><Check className="i i-sm" />Paid</button>
-                                  )}
                                   <button className="btn btn-sm btn-icon" type="button" aria-label="Download PDF" title="Download PDF" onClick={() => navigate(`/invoices/${inv.id}?export=1`)}><Download className="i i-sm" /></button>
                                   <Link className="btn btn-sm btn-icon" to={`/invoices/${inv.id}`} aria-label="Edit" title="Edit"><Edit3 className="i i-sm" /></Link>
                                   <button className="btn btn-sm btn-icon" type="button" aria-label="Delete" title="Delete" onClick={() => setDeleting(inv)}><Trash2 className="i i-sm" /></button>

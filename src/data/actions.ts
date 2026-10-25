@@ -4,7 +4,7 @@ import { useData } from '@/data/store'
 import { clientDisplayName, profileDisplayName, taskRef } from '@/lib/derive'
 import { formatMoney, todayISO } from '@/lib/format'
 import { projectStatus, taskStatus } from '@/lib/status'
-import type { Invoice, Payment, Project, ProjectStatus, Subtask, Task, TaskComment, TaskStatus } from '@/types'
+import type { Payment, Project, ProjectStatus, Subtask, Task, TaskComment, TaskStatus } from '@/types'
 
 const S = () => useData.getState()
 const isAdmin = () => S().me?.role !== 'member'
@@ -214,6 +214,7 @@ export function duplicateForNextMonth(project: Project) {
     payment_status: 'unpaid',
     start_date: shift(project.start_date),
     due_date: shift(project.due_date),
+    ...(project.work_month ? { work_month: shift(project.work_month) } : {}),
   })
   for (const t of S().tasks.filter((t) => t.project_id === project.id && t.status !== 'cancelled')) {
     S().createRow<Task>('tasks', {
@@ -262,30 +263,3 @@ export function taskLabel(task: Task) {
 
 // ---------------------------------------------------------------- invoices
 
-/**
- * Marks an invoice as paid. Uses the payments linked to it; if there are none, links the
- * payments of the projects on the invoice; if still none (e.g. an older invoice that was
- * never tracked), records one paid payment for the invoice total.
- */
-export function markInvoicePaid(invoice: Invoice) {
-  const s = S()
-  let linked = s.payments.filter((p) => p.invoice_id === invoice.id)
-  if (linked.length === 0) {
-    const projectIds = s.projects
-      .filter((p) => p.client_id === invoice.client_id && invoice.line_items.some((li) => li.description.trim() === p.title.trim()))
-      .map((p) => p.id)
-    linked = s.payments.filter((p) => p.client_id === invoice.client_id && !p.invoice_id && p.project_ids?.some((id) => projectIds.includes(id)))
-    for (const p of linked) s.updateRow('payments', p.id, { invoice_id: invoice.id })
-  }
-  if (linked.length === 0) {
-    const total = invoice.line_items.reduce((t, li) => t + Number(li.price) * Number(li.qty), 0) * (1 + Number(invoice.tax_rate) / 100)
-    s.createRow<Payment>('payments', {
-      client_id: invoice.client_id, project_ids: [], amount: Math.round(total * 100) / 100, currency: invoice.currency,
-      status: 'paid', payment_date: todayISO(), due_date: invoice.due_date ?? null, invoice_id: invoice.id, notes: `Invoice ${invoice.number}`,
-    }, { entity: 'payment', action: 'paid', message: `marked invoice ${invoice.number} as paid` })
-    toast.success(`Invoice ${invoice.number} marked as paid`)
-    return
-  }
-  for (const p of linked) if (p.status !== 'paid') markPaymentPaid({ ...p, invoice_id: invoice.id }, { silent: true })
-  toast.success(`Invoice ${invoice.number} marked as paid`)
-}

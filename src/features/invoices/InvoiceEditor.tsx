@@ -3,23 +3,20 @@ import { CurrencySelect } from '@/components/ui/currency-picker'
 import { createPortal } from 'react-dom'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { addDays, format, parseISO } from 'date-fns'
-import { Check, Download, Folder, Loader2, Plus, Settings, X } from 'lucide-react'
+import { Download, Folder, Loader2, Plus, Settings, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
-import { markInvoicePaid } from '@/data/actions'
-import { celebrateFrom } from '@/lib/confetti'
 import { Topbar, Empty, Section } from '@/components/ui/layout'
 import { Field } from '@/components/ui/field'
 import { StatusPill } from '@/components/ui/pill'
 import { Modal } from '@/components/ui/modal'
 import { A4_WIDTH, InvoicePaper, ScaledInvoice } from '@/features/invoices/InvoicePaper'
-import { invoiceTotal } from '@/features/invoices/InvoicesPage'
 import { SUPPORTED_CURRENCIES } from '@/lib/currency'
 import { exportElementToPdf, invoiceFilename } from '@/lib/pdf'
-import { clientColor, clientDisplayName, effectivePaymentStatus, invoicePaymentStatus, isInvoiceable } from '@/lib/derive'
+import { clientColor, clientDisplayName, effectivePaymentStatus, invoicePaymentStatus, isInvoiceable, withWorkMonthNote } from '@/lib/derive'
 import { formatDate, formatMoney, todayISO } from '@/lib/format'
 import { paymentStatus, paymentTerms } from '@/lib/status'
-import type { Client, Invoice, InvoiceLineItem, Payment } from '@/types'
+import type { Client, Invoice, InvoiceLineItem, Project } from '@/types'
 import { DateInput } from '@/components/ui/date-picker'
 
 const COLORS = ['#4F46E5', '#DB2777', '#0284C7', '#0D9488', '#0F0F14']
@@ -74,7 +71,7 @@ export function InvoiceEditor() {
       due_date: format(addDays(new Date(), terms), 'yyyy-MM-dd'),
       line_items: items.length ? items : [{ description: '', price: 0, qty: 1 }],
       tax_rate: String(invoiceSettings?.default_tax ?? 0),
-      notes: invoiceSettings?.default_note ?? '',
+      notes: withWorkMonthNote(invoiceSettings?.default_note ?? '', projects.filter((p) => fromProjects.includes(p.id))),
       brand_color: client ? clientColor(client) : invoiceSettings?.brand_color ?? '#4F46E5',
       payment_profile_id: defaultProfile?.id ?? 'none',
       payment_fields: defaultProfile?.fields ?? [],
@@ -98,17 +95,11 @@ export function InvoiceEditor() {
       // Never take over a payment that already belongs to a different invoice.
       (!p.invoice_id || p.invoice_id === existing?.id),
   )
-  const [track, setTrack] = useState(true)
-  useEffect(() => {
-    setTrack(existing ? linkedPayments.length > 0 : true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [existing?.id])
 
   const client = clients.find((c) => c.id === f.client_id)
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((s) => ({ ...s, [k]: v }))
   const setLine = (i: number, patch: Partial<InvoiceLineItem>) => set('line_items', f.line_items.map((li, idx) => (idx === i ? { ...li, ...patch } : li)))
   const profiles = invoiceSettings?.payment_profiles ?? []
-  const total = invoiceTotal({ line_items: f.line_items, tax_rate: Number(f.tax_rate) || 0 })
   const paperProps = {
     number: f.number,
     issueDate: f.issue_date,
@@ -170,28 +161,18 @@ export function InvoiceEditor() {
       invId = createRow<Invoice>('invoices', data, { entity: 'invoice', action: 'created', message: `created invoice ${data.number} for ${clientDisplayName(client)}` }).id
     }
 
-    // Payment tracking.
-    const amount = Math.round(invoiceTotal(data) * 100) / 100
-    if (!track) {
-      for (const p of linkedPayments) updateRow('payments', p.id, { invoice_id: null })
-    } else if (projectPayments.length > 0) {
-      // Link the projects' own payments; unlink anything else that was linked before.
-      for (const p of linkedPayments) if (!projectPayments.includes(p)) updateRow('payments', p.id, { invoice_id: null })
-      for (const p of projectPayments) {
-        const patch: Record<string, unknown> = {}
-        if (p.invoice_id !== invId) patch.invoice_id = invId
-        // Open payments follow the invoice's due date, so "overdue" matches what the client was sent.
-        if (p.status !== 'paid' && p.status !== 'refunded' && data.due_date && p.due_date !== data.due_date) patch.due_date = data.due_date
-        if (Object.keys(patch).length) updateRow('payments', p.id, patch)
-      }
-    } else if (linkedPayments.length === 1 && linkedPayments[0].status !== 'paid') {
-      // A payment this invoice created earlier: keep it in step with the invoice.
-      updateRow('payments', linkedPayments[0].id, { amount, currency: f.currency, due_date: data.due_date })
-    } else if (linkedPayments.length === 0 && amount > 0) {
-      // Not based on projects (e.g. hourly work): create a payment for the invoice total.
-      createRow<Payment>('payments', { client_id: f.client_id, project_ids: [], amount, currency: f.currency, status: 'unpaid', due_date: data.due_date, invoice_id: invId, notes: `Invoice ${data.number}` }, {
-        entity: 'payment', action: 'created', message: `created a payment for invoice ${data.number}`,
-      })
+    // Invoices are documents. Paid/unpaid lives on each project's payment (Finished = paid),
+    // so saving only links those payments to this invoice — it never creates or settles one.
+    for (const p of linkedPayments) {
+      const stillOnInvoice = projectPayments.includes(p) || (p.project_ids ?? []).length === 0
+      if (!stillOnInvoice) updateRow('payments', p.id, { invoice_id: null })
+    }
+    for (const p of projectPayments) {
+      const patch: Record<string, unknown> = {}
+      if (p.invoice_id !== invId) patch.invoice_id = invId
+      // Open payments follow the invoice's due date, so "overdue" matches what the client was sent.
+      if (p.status !== 'paid' && p.status !== 'refunded' && data.due_date && p.due_date !== data.due_date) patch.due_date = data.due_date
+      if (Object.keys(patch).length) updateRow('payments', p.id, patch)
     }
     toast.success(existing ? 'Invoice saved' : 'Invoice created')
     if (!existing && invId) navigate(`/invoices/${invId}`, { replace: true })
@@ -223,19 +204,17 @@ export function InvoiceEditor() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existing?.id])
 
-  function trackHint() {
-    if (!track) return 'Not linked to a payment, so its status won’t show as paid or unpaid.'
+  function paymentHint() {
     if (projectPayments.length > 0) {
-      const sum = projectPayments.reduce((t, p) => t + Number(p.amount), 0)
       const paid = projectPayments.filter((p) => p.status === 'paid').length
-      const mismatch = Math.abs(sum - total) > 0.009 && projectPayments.every((p) => p.currency === f.currency)
-      const which = projectPayments.length === 1 ? 'the project’s payment' : `the ${projectPayments.length} projects’ payments`
-      return `Linked to ${which} (${formatMoney(sum, projectPayments[0].currency)}${paid ? `, ${paid} paid` : ''}). No new payment is created.${mismatch ? ` Note: the invoice total is ${formatMoney(total, f.currency)}.` : ''}`
+      const which = projectPayments.length === 1 ? 'the project' : `${projectPayments.length} projects`
+      return paid === projectPayments.length
+        ? `Paid — ${which} ${projectPayments.length === 1 ? 'is' : 'are'} already settled.`
+        : `Paid status follows ${which}: ${paid} of ${projectPayments.length} paid. Mark the project Finished when the money arrives.`
     }
-    if (linkedPayments.length > 0) return `Linked payment: ${formatMoney(linkedPayments[0].amount, linkedPayments[0].currency)} · ${paymentStatus[effectivePaymentStatus(linkedPayments[0])].label}`
-    return total > 0 ? `A payment of ${formatMoney(total, f.currency)} is created when you save, so you can track when it’s paid.` : 'Add amounts to the line items. A payment is created when you save.'
+    if (linkedPayments.length > 0) return `Linked to an earlier payment (${paymentStatus[effectivePaymentStatus(linkedPayments[0])].label.toLowerCase()}).`
+    return 'Not linked to a project, so it has no paid status. Use “Add from projects” to link one.'
   }
-
   if (!isNew && !existing) {
     return (
       <>
@@ -259,11 +238,6 @@ export function InvoiceEditor() {
         <button type="button" className="btn" onClick={() => void exportPdf()} disabled={exporting}>
           {exporting ? <Loader2 className="i" style={{ animation: 'spin 1s linear infinite' }} /> : <Download className="i" />}Export PDF
         </button>
-        {existing && linkedStatus !== 'paid' && (
-          <button type="button" className="btn" onClick={(e) => { markInvoicePaid(existing); celebrateFrom(e.currentTarget) }}>
-            <Check className="i" />Mark as paid
-          </button>
-        )}
         <button type="button" className="btn btn-pri" onClick={save}>Save invoice</button>
       </Topbar>
       <div className="content full" style={{ maxWidth: 1320 }}>
@@ -334,11 +308,8 @@ export function InvoiceEditor() {
               </div>
               <Field label="Note"><textarea className="inp" rows={2} value={f.notes} onChange={(e) => set('notes', e.target.value)} /></Field>
               <div className="field">
-                <label className="row-sm" style={{ cursor: 'pointer' }}>
-                  <input type="checkbox" className="cb" checked={track} onChange={(e) => setTrack(e.target.checked)} />
-                  <span className="lbl">Track payment for this invoice</span>
-                </label>
-                <span className="hint">{trackHint()}</span>
+                <span className="lbl">Payment</span>
+                <span className="hint">{paymentHint()}</span>
               </div>
             </Section>
           </form>
@@ -361,36 +332,36 @@ export function InvoiceEditor() {
         onClose={() => setPickOpen(false)}
         clientId={f.client_id}
         exclude={f.line_items.map((li) => li.description.trim()).filter(Boolean)}
-        onAdd={(items, currency) => {
-          setF((s) => ({ ...s, currency: s.line_items.some((li) => li.description.trim()) ? s.currency : currency ?? s.currency, line_items: [...s.line_items.filter((li) => li.description.trim() || Number(li.price)), ...items] }))
+        onAdd={(items, currency, chosen) => {
+          setF((s) => ({ ...s, currency: s.line_items.some((li) => li.description.trim()) ? s.currency : currency ?? s.currency, line_items: [...s.line_items.filter((li) => li.description.trim() || Number(li.price)), ...items], notes: withWorkMonthNote(s.notes, chosen) }))
         }}
       />
     </>
   )
 }
 
-function ProjectPicker({ open, onClose, clientId, onAdd, exclude }: { open: boolean; onClose: () => void; clientId: string; onAdd: (items: InvoiceLineItem[], currency?: string) => void; exclude: string[] }) {
+function ProjectPicker({ open, onClose, clientId, onAdd, exclude }: { open: boolean; onClose: () => void; clientId: string; onAdd: (items: InvoiceLineItem[], currency: string | undefined, chosen: Project[]) => void; exclude: string[] }) {
   const { projects, invoices, payments } = useData()
   const [sel, setSel] = useState<Set<string>>(new Set())
   useEffect(() => {
     if (open) setSel(new Set())
   }, [open])
-  // Only projects marked Completed that aren't invoiced yet. In progress isn't done; Finished is already paid.
+  // Completed or Finished projects that aren't on an invoice yet (you may invoice after being paid).
   const list = projects
     .filter((p) => p.client_id === clientId && isInvoiceable(p, invoices, payments) && !exclude.includes(p.title.trim()))
     .sort((a, b) => (b.completed_at ?? b.due_date ?? '').localeCompare(a.completed_at ?? a.due_date ?? ''))
   const add = () => {
     const chosen = list.filter((p) => sel.has(p.id))
-    onAdd(chosen.map((p) => ({ description: p.title, price: Number(p.amount) || 0, qty: 1 })), chosen[0]?.currency)
+    onAdd(chosen.map((p) => ({ description: p.title, price: Number(p.amount) || 0, qty: 1 })), chosen[0]?.currency, chosen)
     onClose()
   }
   return (
-    <Modal open={open} onClose={onClose} title="Add from projects" note="Completed projects that aren’t invoiced yet" footer={<><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="button" className="btn btn-pri" disabled={!sel.size} onClick={add}>Add {sel.size || ''} line{sel.size === 1 ? '' : 's'}</button></>}>
+    <Modal open={open} onClose={onClose} title="Add from projects" note="Completed or finished projects not on an invoice yet" footer={<><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="button" className="btn btn-pri" disabled={!sel.size} onClick={add}>Add {sel.size || ''} line{sel.size === 1 ? '' : 's'}</button></>}>
       <div style={{ maxHeight: '55vh', overflowY: 'auto' }}>
         {list.length === 0 && (
           <div className="empty sm">
             <b>Nothing to invoice</b>
-            <p>Mark a project as Completed when the work is done and it shows up here.</p>
+            <p>Projects show up here once they’re Completed or Finished.</p>
           </div>
         )}
         {list.map((p) => (

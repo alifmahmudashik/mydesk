@@ -15,7 +15,7 @@ import { RevenueChart, Spark, monthlyBuckets } from '@/components/domain/Revenue
 import { ActivityItem } from '@/components/domain/ActivityItem'
 import { RemindModal } from '@/features/payments/RemindModal'
 import { sumUSD, useUsdRates } from '@/lib/currency'
-import { clientDisplayName, effectivePaymentStatus, isOpenPayment, OPEN_PROJECT, OPEN_TASK, profileDisplayName, shortProjectTitle } from '@/lib/derive'
+import { clientDisplayName, effectivePaymentStatus, isOpenPayment, OPEN_PROJECT, OPEN_TASK, profileDisplayName, shortProjectTitle, workDate } from '@/lib/derive'
 import { daysUntil, formatFeedAgo, formatMoney, lateLabel } from '@/lib/format'
 import type { Payment } from '@/types'
 
@@ -48,7 +48,8 @@ export function DashboardPage() {
   const open = payments.filter(isOpenPayment)
   const overdue = payments.filter((p) => effectivePaymentStatus(p) === 'overdue').sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? ''))
   const since = format(periodStart(period), 'yyyy-MM-dd')
-  const paidInPeriod = payments.filter((p) => p.status === 'paid' && (p.payment_date ?? '') >= since)
+  // Counted by when the work was done (project start), not when the money arrived.
+  const paidInPeriod = payments.filter((p) => p.status === 'paid' && workDate(p, projects) >= since)
   const activeProjects = projects.filter(OPEN_PROJECT)
   const completedProjects = projects.filter((p) => p.status === 'completed' || p.status === 'finished')
   const inProgress = activeProjects.filter((p) => p.status === 'in_progress').length
@@ -62,7 +63,7 @@ export function DashboardPage() {
   const nextWeekEnd = format(addDays(endOfWeek(new Date(), { weekStartsOn: 1 }), 7), 'yyyy-MM-dd')
   const closingSoon = activeProjects.filter((p) => p.due_date && p.due_date <= nextWeekEnd).length
 
-  const buckets = useMemo(() => monthlyBuckets(payments, rates, 6), [payments, rates])
+  const buckets = useMemo(() => monthlyBuckets(payments, rates, 6, projects), [payments, rates, projects])
   const collected6 = buckets.reduce((s, b) => s + b.collected, 0)
 
   // Next 7 days agenda: my tasks (or all open tasks for admins) + project due dates.
@@ -171,7 +172,7 @@ export function DashboardPage() {
               )}
             </Link>
             <Link className="kpi lift" to="/analytics">
-              <span className="lbl">Paid {periodLabel[period].toLowerCase()} <span className="pill ok">{paidInPeriod.length} payment{paidInPeriod.length === 1 ? '' : 's'}</span></span>
+              <span className="lbl">Earned {periodLabel[period].toLowerCase()} <span className="pill ok">{paidInPeriod.length} payment{paidInPeriod.length === 1 ? '' : 's'}</span></span>
               <span className="val">{formatMoney(sumUSD(paidInPeriod, rates))}</span>
               <Spark values={buckets.map((b) => b.collected)} color="#16A34A" />
             </Link>
@@ -204,12 +205,12 @@ export function DashboardPage() {
                   <h2 className="h2">Revenue</h2>
                   <div className="row" style={{ alignItems: 'baseline', marginTop: 6 }}>
                     <span style={{ fontSize: 24, fontWeight: 600, letterSpacing: '-.02em' }}>{formatMoney(Math.round(collected6))}</span>
-                    <span className="small muted">collected, last 6 months</span>
+                    <span className="small muted">earned &amp; paid, last 6 months</span>
                   </div>
                 </div>
                 <div className="legend">
-                  <span><i className="c-col" />Collected</span>
-                  <span><i className="c-open" />Outstanding</span>
+                  <span><i className="c-col" />Paid</span>
+                  <span><i className="c-open" />Unpaid</span>
                   <Link className="link" to="/analytics">Open analytics →</Link>
                 </div>
               </div>

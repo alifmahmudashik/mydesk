@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { ClientMark } from '@/components/ui/avatar'
 import { clientColor, clientDisplayName } from '@/lib/derive'
 import type { Client } from '@/types'
@@ -31,7 +31,7 @@ export function ClientGroup({
       <div className="client-group-h">
         {collapsible && (
           <button type="button" className="btn btn-ghost btn-sm btn-icon" aria-label={open ? 'Collapse' : 'Expand'} onClick={() => setOpen((o) => !o)}>
-            {open ? <ChevronDown className="i i-sm" /> : <ChevronRight className="i i-sm" />}
+            <ChevronRight className={`i i-sm chev${open ? ' open' : ''}`} />
           </button>
         )}
         <ClientMark client={client} size="sm" />
