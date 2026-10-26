@@ -5,6 +5,8 @@ import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { ToggleRow } from '@/components/ui/field'
 import { useData } from '@/data/store'
+import { profileDisplayName, shortProjectTitle, splitMentions } from '@/lib/derive'
+import type { AppNotification, Profile } from '@/types'
 
 /**
  * Desktop notifications.
@@ -129,10 +131,43 @@ export async function goOffline() {
   }
 }
 
+/** "@[Alif](uuid) can you check" → "@Alif can you check", on one line, trimmed. */
+const plain = (text?: string | null, max = 140) => {
+  const t = splitMentions(text ?? '')
+    .map((p) => (p.kind === 'text' ? p.text : `@${p.name}`))
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return t.length > max ? `${t.slice(0, max - 1).trimEnd()}…` : t
+}
+
+const headline: Record<string, string> = {
+  assigned: 'assigned you a task',
+  mentioned: 'mentioned you',
+  mentioned_note: 'mentioned you in a note',
+  comment: 'commented on your task',
+  completed: 'completed a task',
+  learning_shared: 'shared something for you to learn',
+  learning_done: 'finished learning',
+  topic_added: 'added you to a learning topic',
+}
+
+/** Who did what as the heading, then the task, then the message itself. */
+export function notificationText(n: AppNotification, profiles: Profile[]) {
+  const actor = profiles.find((p) => p.id === n.actor_id)
+  const what = n.type === 'mentioned_note' ? shortProjectTitle(n.title) : plain(n.title, 80)
+  const quote = plain(n.excerpt)
+  if (headline[n.type]) {
+    return { title: `${actor ? profileDisplayName(actor) : 'Someone'} ${headline[n.type]}`, body: quote ? `${what}\n“${quote}”` : what }
+  }
+  if (n.type === 'due_soon') return { title: 'Due tomorrow', body: what }
+  return { title: plain(n.title, 80), body: quote }
+}
+
 /** Mount once inside the app shell. */
 export function useDesktopNotifications() {
   const navigate = useNavigate()
-  const { me, ready, notifications, demoMode } = useData()
+  const { me, ready, notifications, profiles, demoMode } = useData()
   const seen = useRef<Set<string> | null>(null)
 
   // Online heartbeat.
@@ -170,20 +205,21 @@ export function useDesktopNotifications() {
         window.focus()
         if (n.link) navigate(n.link)
       }
+      const text = notificationText(n, profiles)
       const looking = document.visibilityState === 'visible' && document.hasFocus()
       if (!looking && desktopPermission() === 'granted') {
         try {
           // tag = id: several open tabs show one pop-up, not one each.
-          popUp(n.title, { body: n.excerpt ?? undefined, tag: n.id, onClick: open })
+          popUp(text.title, { body: text.body || undefined, tag: n.id, onClick: open })
           continue
         } catch {
           /* fall through to toast */
         }
       }
       playChime()
-      toast(n.title, { description: n.excerpt ?? undefined, action: n.link ? { label: 'Open', onClick: open } : undefined })
+      toast(text.title, { description: text.body.replace('\n', ' · ') || undefined, action: n.link ? { label: 'Open', onClick: open } : undefined })
     }
-  }, [ready, notifications, navigate])
+  }, [ready, notifications, profiles, navigate])
 }
 
 const DISMISS_KEY = 'mydesk-desktop-ask-dismissed'
