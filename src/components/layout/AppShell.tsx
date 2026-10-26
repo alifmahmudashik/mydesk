@@ -13,6 +13,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { Menu, MenuItem, MenuSep, MenuTitle } from '@/components/ui/menu'
 import { CommandPalette } from '@/components/layout/CommandPalette'
 import { CreateHost } from '@/features/create/CreateHost'
+import { DesktopNotifPrompt, useDesktopNotifications } from '@/features/notifications/desktop'
 import { clientColor, clientDisplayName, effectivePaymentStatus, OPEN_PROJECT, OPEN_TASK, profileFullName, isAssignedTo } from '@/lib/derive'
 
 const roleLabel = { owner: 'Owner', admin: 'Admin', member: 'Member' } as const
@@ -33,6 +34,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { openCreate, setSearch } = useUI()
   const navigate = useNavigate()
   const location = useLocation()
+  useDesktopNotifications()
 
   const inboxSeenAt = useData((s) => s.inboxSeenAt)
   // Only what arrived since you last opened the Inbox lights the bell (unread items stay bold inside).
@@ -168,7 +170,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Menu>
         </div>
       </aside>
-      <main className="main">{children}</main>
+      <main className="main"><DesktopNotifPrompt />{children}</main>
       <CommandPalette />
       <CreateHost />
     </div>

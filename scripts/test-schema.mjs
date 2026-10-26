@@ -203,6 +203,21 @@ const multi = await as(U1, `insert into tasks (project_id, title, assignee_ids) 
 ok(multi.rows[0].assignee_id === U2 && multi.rows[0].assignee_ids.length === 2, 'assignee_id follows the first of assignee_ids')
 const pairN = (await q(`select count(distinct user_id)::int c from notifications where type = 'assigned' and entity_id = $1`, [multi.rows[0].id])).rows[0].c
 ok(pairN === 2, 'every assignee gets the assignment notification')
+
+// Online with desktop notifications on: inbox + pop-up, no email. Offline: email as usual.
+await as(U2, `select heartbeat(true)`)
+const onl = await as(U1, `insert into tasks (project_id, title, assignee_id) values ('bbbbbbbb-0000-0000-0000-000000000001', 'While online', $1) returning id`, [U2])
+const onlN = (await q(`select emailed from notifications where type = 'assigned' and entity_id = $1`, [onl.rows[0].id])).rows
+const onlE = (await q(`select count(*)::int c from email_outbox where user_id = $1 and payload->>'title' like '%While online%'`, [U2])).rows[0].c
+ok(onlN.length === 1 && onlN[0].emailed === false && onlE === 0, 'online with desktop notifications: inbox only, no email')
+await as(U2, `select heartbeat(false, false)`)
+const off = await as(U1, `insert into tasks (project_id, title, assignee_id) values ('bbbbbbbb-0000-0000-0000-000000000001', 'While away', $1) returning id`, [U2])
+const offN = (await q(`select emailed from notifications where type = 'assigned' and entity_id = $1`, [off.rows[0].id])).rows
+ok(offN.length === 1 && offN[0].emailed === true, 'offline: the email goes out')
+await as(U2, `select heartbeat(false)`)
+const noDesk = await as(U1, `insert into tasks (project_id, title, assignee_id) values ('bbbbbbbb-0000-0000-0000-000000000001', 'Online, no pop-ups', $1) returning id`, [U2])
+const noDeskN = (await q(`select emailed from notifications where type = 'assigned' and entity_id = $1`, [noDesk.rows[0].id])).rows
+ok(noDeskN[0]?.emailed === true, 'online but desktop notifications not allowed: still emailed')
 await as(U1, `update tasks set assignee_ids = $1 where id = $2`, [[U3, U2], multi.rows[0].id])
 const again2 = (await q(`select count(*)::int c from notifications where type = 'assigned' and entity_id = $1`, [multi.rows[0].id])).rows[0].c
 ok(again2 === 2, 're-ordering assignees sends nothing new')

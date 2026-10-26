@@ -1,3 +1,4 @@
+import { goOffline } from '@/features/notifications/desktop'
 import { useEffect, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { isSupabaseConfigured, supabase } from '@/lib/supabase'
@@ -33,6 +34,7 @@ export function useAuth() {
 }
 
 export async function signOut() {
+  await goOffline()
   if (supabase) await supabase.auth.signOut()
   window.location.href = '/'
 }

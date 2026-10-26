@@ -1,3 +1,4 @@
+import { DesktopNotifSetting } from '@/features/notifications/desktop'
 import { useEffect, useState } from 'react'
 import { Bell, Lock, Monitor, Moon, Palette, Settings, Sun, User } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -93,8 +94,9 @@ export function AccountPage() {
             <ProfileFields profile={me} draft={draft} onChange={setDraft} />
           </Section>
           <section id="notifications" className="sec">
-            <div className="sec-h"><h2>Email notifications</h2><p>We never send the same email twice for one event.</p></div>
+            <div className="sec-h"><h2>Notifications</h2><p>While MyDesk is open you get desktop pop-ups. When it’s closed, we email you. Never the same email twice.</p></div>
             <div className="sec-b" style={{ gap: 0 }}>
+              <DesktopNotifSetting />
               <ToggleRow title="A task is assigned to me" desc="Once per assignment. Editing the task never re-sends." checked={prefs.assigned} onChange={togglePref('assigned')} />
               <ToggleRow title="Someone @mentions me" desc="Once per comment or note." checked={prefs.mentioned} onChange={togglePref('mentioned')} />
               <ToggleRow title="New comment on my tasks" desc={prefs.comment ? 'One email per comment on tasks you’re assigned, created or watch.' : 'Off. These show in Inbox only.'} checked={prefs.comment} onChange={togglePref('comment')} />
