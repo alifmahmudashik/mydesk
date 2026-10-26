@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { differenceInCalendarDays, format, parseISO } from 'date-fns'
-import { Archive, ArchiveRestore, Check, Clock, CreditCard, Edit3, FileText, Folder, Globe, Mail, MoreHorizontal, Phone, Plus, Settings, User } from 'lucide-react'
+import { Archive, ArchiveRestore, Check, Clock, CreditCard, Edit3, FileText, Folder, Globe, Mail, Phone, Plus, User } from 'lucide-react'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
 import { invoiceTotal } from '@/lib/invoice-math'
@@ -12,6 +12,7 @@ import { pushRecent } from '@/components/layout/CommandPalette'
 import { Topbar, Content, Empty } from '@/components/ui/layout'
 import { Tabs } from '@/components/ui/tabs'
 import { Menu, MenuItem } from '@/components/ui/menu'
+import { ConfirmDialog } from '@/components/ui/modal'
 import { Avatar, ClientMark } from '@/components/ui/avatar'
 import { StatusPill } from '@/components/ui/pill'
 import { RemindModal } from '@/features/payments/RemindModal'
@@ -35,6 +36,7 @@ export function ClientPage() {
   const [note, setNote] = useState('')
   const [remind, setRemind] = useState<Payment | null>(null)
   const [editPay, setEditPay] = useState<Payment | undefined>()
+  const [confirmArchive, setConfirmArchive] = useState(false)
 
   const client = clients.find((c) => c.id === id)
   useEffect(() => {
@@ -96,16 +98,11 @@ export function ClientPage() {
     <>
       <Topbar crumbs={[{ label: 'Clients', to: '/clients' }, { label: name }]}>
         {isAdmin && <Link className="btn" to={`/clients/${id}/settings`}><Edit3 className="i" />Edit client</Link>}
-        {isAdmin && (
-          <Menu trigger={({ toggle }) => <button type="button" className="btn btn-icon" aria-label="More actions" title="More" onClick={toggle}><MoreHorizontal className="i" /></button>}>
-            {client.status === 'archived' ? (
-              <MenuItem icon={<ArchiveRestore className="i" />} onSelect={() => setStatus('active')}>Restore client</MenuItem>
-            ) : (
-              <MenuItem icon={<Archive className="i" />} onSelect={() => setStatus('archived')}>Archive client</MenuItem>
-            )}
-            <MenuItem icon={<Settings className="i" />} onSelect={() => navigate(`/clients/${id}/settings`)}>Client settings</MenuItem>
-          </Menu>
-        )}
+        {isAdmin && (client.status === 'archived' ? (
+          <button type="button" className="btn" onClick={() => setStatus('active')}><ArchiveRestore className="i" />Restore</button>
+        ) : (
+          <button type="button" className="btn btn-icon" aria-label="Archive client" title="Archive client" onClick={() => setConfirmArchive(true)}><Archive className="i" /></button>
+        ))}
         <Menu trigger={({ toggle }) => <button type="button" className="btn btn-pri" onClick={toggle}><Plus className="i" />New</button>}>
           <MenuItem icon={<Folder className="i" />} onSelect={() => openCreate('project', { client_id: id })}>Project for {first}</MenuItem>
           {isAdmin && <MenuItem icon={<FileText className="i" />} onSelect={() => navigate(`/invoices/new?client=${id}`)}>Invoice</MenuItem>}
@@ -280,6 +277,14 @@ export function ClientPage() {
           </aside>
         </div>
       </Content>
+      <ConfirmDialog
+        open={confirmArchive}
+        onClose={() => setConfirmArchive(false)}
+        title={`Archive ${name}?`}
+        description="They’re hidden from lists and the sidebar. Projects, invoices and payments are kept, and you can restore them anytime."
+        confirmLabel="Archive"
+        onConfirm={() => setStatus('archived')}
+      />
       <RemindModal payment={remind} onClose={() => setRemind(null)} />
       <PaymentModal open={Boolean(editPay)} payment={editPay} onClose={() => setEditPay(undefined)} onRemind={(p) => { setEditPay(undefined); setRemind(p) }} />
     </>

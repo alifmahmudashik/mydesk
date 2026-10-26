@@ -620,3 +620,6 @@ a.ls-r-t .i { color: var(--faint); }
 
 /* a payment just marked paid: stays in place briefly with Undo */
 .tbl tr.just-paid td { background: color-mix(in srgb, var(--ok-bg) 70%, transparent); transition: background .3s var(--ease-out); }
+
+/* Small confirmation dialogs sit in the middle of the screen. */
+.modal:has(> .dlg.narrow) { align-items: center; padding-top: 16px; }
