@@ -493,11 +493,11 @@ function ShareModal({ state, onClose }: { state: { open: boolean; to?: string[];
       footer={<><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="button" className="btn btn-pri" onClick={save}>{edit ? 'Save' : to.size === 1 && single === me?.id ? 'Add to my list' : 'Share'}</button></>}
     >
       <form className="dlg-b" onSubmit={(e) => { e.preventDefault(); save() }}>
-        <Field label="Link">
-          <input data-autofocus className="inp" placeholder="Paste a YouTube video, article, course…" value={url} onChange={(e) => onUrl(e.target.value)} />
-        </Field>
         <Field label="Title">
-          <input className="inp" placeholder={hostOf(url) ? `e.g. what is this ${kindMeta(kind).label.toLowerCase()} about?` : 'What is it?'} value={title} onChange={(e) => setTitle(e.target.value)} />
+          <input data-autofocus className="inp" placeholder={hostOf(url) ? `e.g. what is this ${kindMeta(kind).label.toLowerCase()} about?` : 'What is it?'} value={title} onChange={(e) => setTitle(e.target.value)} />
+        </Field>
+        <Field label="Link">
+          <input className="inp" placeholder="Paste a YouTube video, article, course…" value={url} onChange={(e) => onUrl(e.target.value)} />
         </Field>
         <div className="field">
           <span className="lbl">Type</span>
