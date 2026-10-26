@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { useData } from '@/data/store'
 import { useUI } from '@/data/ui'
 import { useIsAdmin } from '@/hooks/usePermissions'
+import { TeamLinks } from '@/features/team/TeamLinks'
 import { Topbar, Content, PageHead } from '@/components/ui/layout'
 import { Tabs } from '@/components/ui/tabs'
 import { Menu, MenuItem } from '@/components/ui/menu'
@@ -88,6 +89,7 @@ export function TeamPage() {
       </Topbar>
       <Content>
         <PageHead title="Team & access" sub="Who is in your workspace, what they can do, and which clients they can see." />
+        <TeamLinks />
         <div className="tabs">
           <Tabs
             value={tab}

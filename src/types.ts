@@ -418,3 +418,14 @@ export interface LearningProgress {
   completed_at?: string | null
   created_at: string
 }
+
+/** A meeting room or shared link for the whole team (Team page). */
+export interface TeamLink {
+  id: string
+  created_by?: string | null
+  title: string
+  url: string
+  note?: string | null
+  position: number
+  created_at: string
+}

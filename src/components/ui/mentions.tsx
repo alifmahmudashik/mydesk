@@ -45,6 +45,8 @@ export function Composer({ people, meId, roleOf, placeholder = 'Write a commentâ
   const ref = useRef<HTMLTextAreaElement>(null)
   // Display text uses "@Name"; this maps each inserted display name to its user id.
   const picked = useRef(new Map<string, string>())
+  // Closing the picker on blur is delayed (so a click on a name still lands); cancel it if focus comes back.
+  const blurTimer = useRef<number | undefined>(undefined)
 
   // Best match first: display-name prefix, then any name word starting with the query,
   // then substring. You can't mention yourself.
@@ -178,7 +180,8 @@ export function Composer({ people, meId, roleOf, placeholder = 'Write a commentâ
             placeholder={placeholder}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={onKeyDown}
-            onBlur={() => setTimeout(() => setQuery(null), 120)}
+            onFocus={() => window.clearTimeout(blurTimer.current)}
+            onBlur={() => { blurTimer.current = window.setTimeout(() => setQuery(null), 150) }}
             rows={2}
           />
           <div className="row between">
@@ -186,7 +189,10 @@ export function Composer({ people, meId, roleOf, placeholder = 'Write a commentâ
               type="button"
               className="btn btn-ghost btn-sm btn-icon"
               aria-label="Mention someone"
+              // Keep focus in the text box, so it doesn't blur and close the picker we're opening.
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => {
+                window.clearTimeout(blurTimer.current)
                 const next = `${text}${text && !text.endsWith(' ') ? ' ' : ''}@`
                 pendingCaret.current = next.length
                 setText(next)

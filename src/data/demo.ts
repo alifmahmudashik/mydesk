@@ -1,5 +1,5 @@
 import { addDays, formatISO, subDays, subHours, subMinutes } from 'date-fns'
-import type { AccessItem, ActivityEvent, AppNotification, Client, ClientMember, Invite, Invoice, InvoiceSettings, Payment, PaymentReminder, Profile, Project, ProjectNote, Subtask, Task, TaskAttachment, TaskComment, TaskWatcher, TimeEntry, LearningGoal, LearningItem, LearningTopic, LearningLesson, LearningResource, LearningTopicMember, LearningProgress } from '@/types'
+import type { AccessItem, ActivityEvent, AppNotification, Client, ClientMember, Invite, Invoice, InvoiceSettings, Payment, PaymentReminder, Profile, Project, ProjectNote, Subtask, Task, TaskAttachment, TaskComment, TaskWatcher, TimeEntry, LearningGoal, LearningItem, LearningTopic, LearningLesson, LearningResource, LearningTopicMember, LearningProgress, TeamLink } from '@/types'
 
 // Dates are relative to "today" so demo mode always shows live overdue/upcoming states.
 const day = (offset: number) => formatISO(addDays(new Date(), offset), { representation: 'date' })
@@ -34,6 +34,7 @@ export interface DemoData {
   resources: LearningResource[]
   topicMembers: LearningTopicMember[]
   progress: LearningProgress[]
+  teamLinks: TeamLink[]
 }
 
 export function emptyData(): DemoData {
@@ -41,7 +42,7 @@ export function emptyData(): DemoData {
     clients: [], projects: [], tasks: [], accessItems: [], payments: [], notes: [], activity: [],
     profiles: [], clientMembers: [], invoices: [], invoiceSettings: null, subtasks: [], comments: [],
     attachments: [], timeEntries: [], watchers: [], notifications: [], invites: [], reminders: [],
-    learning: [], goals: [], topics: [], lessons: [], resources: [], topicMembers: [], progress: [],
+    learning: [], goals: [], topics: [], lessons: [], resources: [], topicMembers: [], progress: [], teamLinks: [],
   }
 }
 
@@ -233,6 +234,7 @@ export function demoData(empty = false): DemoData {
     clients, projects, tasks, accessItems, payments, notes, activity, profiles, clientMembers,
     invoices, invoiceSettings, subtasks, comments, attachments, timeEntries, watchers, notifications,
     invites, reminders, learning: demoLearning(), goals: demoGoals(), ...demoTopics(),
+    teamLinks: [],
   }
 }
 
