@@ -1,0 +1,47 @@
+{
+  "name": "mydesk-desktop",
+  "productName": "MyDesk",
+  "version": "1.0.0",
+  "description": "MyDesk for Windows",
+  "author": "Alif Mahmud",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.alifmahmud.mydesk",
+    "productName": "MyDesk",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "offline.html",
+      "build/icon.png"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "artifactName": "MyDesk-Setup-${version}.${ext}",
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MyDesk"
+    }
+  },
+  "allowScripts": {
+    "electron@38.8.6": true
+  }
+}

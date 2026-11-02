@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+    <title>MyDesk</title>
+    <style>
+      :root { color-scheme: light dark; --bg: #ffffff; --fg: #1a1a1a; --muted: #6b6b6b; --btn: #1a1a1a; --btn-fg: #ffffff; }
+      @media (prefers-color-scheme: dark) { :root { --bg: #141414; --fg: #f2f2f2; --muted: #9a9a9a; --btn: #f2f2f2; --btn-fg: #141414; } }
+      html, body { height: 100%; margin: 0; }
+      body { display: grid; place-items: center; background: var(--bg); color: var(--fg); font: 15px/1.5 "Segoe UI", system-ui, sans-serif; }
+      main { text-align: center; padding: 24px; max-width: 360px; }
+      h1 { font-size: 20px; font-weight: 600; margin: 0 0 6px; }
+      p { color: var(--muted); margin: 0 0 20px; }
+      button { font: inherit; font-weight: 600; padding: 9px 20px; border: 0; border-radius: 8px; background: var(--btn); color: var(--btn-fg); cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Can't reach MyDesk</h1>
+      <p>Check your internet connection. MyDesk will try again on its own.</p>
+      <button id="retry" type="button">Try again</button>
+    </main>
+    <script>
+      const target = new URLSearchParams(location.search).get('url') || 'https://mydesk.alifmahmud.com/'
+      const go = () => { location.href = target }
+      document.getElementById('retry').addEventListener('click', go)
+      window.addEventListener('online', go)
+      setInterval(() => { if (navigator.onLine) go() }, 15000)
+    </script>
+  </body>
+</html>

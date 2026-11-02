@@ -5,6 +5,7 @@ Client & project management for freelancers and small agencies: clients, project
 | Part | Service | What it does |
 |---|---|---|
 | Frontend | **Vercel** (React + Vite) | The app you use in the browser |
+| Desktop | **Electron** (`desktop/`) | Windows app that opens the live site, so it updates with every deploy |
 | Backend | **Vercel Functions** (`/api`) | Sends emails, runs the daily job, payment reminders, removing members |
 | Database, login, files | **Supabase** | Postgres data, email/Google sign-in, attachments, live updates |
 | Email | **Resend** | Notification, invite and reminder emails |
@@ -152,6 +153,24 @@ npm run build          # production build
 
 ---
 
+## Windows desktop app
+
+MyDesk also runs as a Windows app. It opens the live site (https://mydesk.alifmahmud.com) in its own window, so it **updates automatically**: push to GitHub, Vercel redeploys, and the app shows the new version next time it opens (or press `Ctrl+R`).
+
+**Install:** download `MyDesk-Setup-x.y.z.exe` from [Releases](https://github.com/alifmahmudashik/mydesk-v2/releases/latest) and double-click it. If Windows shows "Windows protected your PC", click **More info → Run anyway** (the installer isn't code-signed).
+
+**Rebuild the installer** only when something in [`desktop/`](desktop/) changes (e.g. the site address or icon):
+
+```powershell
+cd desktop
+npm install
+npm run build          # creates desktop/release/MyDesk-Setup-x.y.z.exe
+```
+
+Details in [`desktop/README.md`](desktop/README.md).
+
+---
+
 ## What's in the app
 
 - **Dashboard**: outstanding / overdue / paid, 6-month revenue chart, payments to chase with one-click reminders, up next, next 7 days, live activity.
@@ -207,6 +226,7 @@ src/
   lib/                    formatting, status colours, currency (USD totals), PDF export
 supabase/schema.sql       the whole database: tables, security rules, triggers, email outbox, storage
 scripts/test-schema.mjs   database safety checks (in-memory Postgres)
+desktop/                  Windows desktop app (Electron window that loads the live site)
 mydesk-design.html        the design reference
 vercel.json               build settings, page routing, daily cron
 ```
