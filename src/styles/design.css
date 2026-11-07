@@ -73,7 +73,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .crumbs a{transition:color .15s;display:flex;align-items:center;gap:6px}.crumbs a:hover{color:var(--ink)}
 .crumbs b{color:var(--ink);font-weight:500}
 .crumbs .sep{color:#B4B4BE}
-.content{padding:28px 32px 56px;max-width:1200px;display:flex;flex-direction:column;gap:24px}
+.content{padding:28px 32px 56px;max-width:1680px;display:flex;flex-direction:column;gap:24px}
 .content.narrow{max-width:980px}
 .content.full{max-width:none}
 .ph{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}

@@ -106,7 +106,7 @@ export function ProjectPage() {
         </Menu>
       </Topbar>
 
-      <div className="content" style={{ paddingBottom: 0, gap: 14, maxWidth: 1320 }}>
+      <div className="content" style={{ paddingBottom: 0, gap: 14, maxWidth: 1680 }}>
         <div className="row" style={{ gap: 12 }}>
           <span className="cl lg pri"><Folder className="i" /></span>
           <h1 style={{ fontSize: 24, fontWeight: 600, letterSpacing: '-.02em' }}>{project.title}</h1>
@@ -189,7 +189,7 @@ export function ProjectPage() {
         </div>
       </div>
 
-      <div className="tabs" style={{ gap: 0, maxWidth: 1320 }}>
+      <div className="tabs" style={{ gap: 0, maxWidth: 1680 }}>
         <Tabs
           value={tab}
           onChange={setTab}

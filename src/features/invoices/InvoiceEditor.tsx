@@ -257,7 +257,7 @@ export function InvoiceEditor() {
         </button>
         <button type="button" className="btn btn-pri" onClick={save}>Save invoice</button>
       </Topbar>
-      <div className="content full" style={{ maxWidth: 1320 }}>
+      <div className="content full" style={{ maxWidth: 1680 }}>
         {!invoiceSettings?.business_name && (
           <div className="card card-b row" style={{ background: 'var(--warn-bg)', borderColor: 'transparent' }}>
             <span className="small grow" style={{ color: 'var(--warn)' }}>Add your business name, address and payment details once, and every invoice uses them.</span>

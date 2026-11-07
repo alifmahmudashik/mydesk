@@ -80,7 +80,7 @@ export function AuthLayout({ children }: { children: ReactNode }) {
             <span className="auth-typed">{typed}</span>
             <span className="auth-caret" aria-hidden />
           </p>
-          <p className="auth-sub">Clients, projects, tasks, invoices and payments for freelancers and small agencies, all in one workspace.</p>
+          <p className="auth-sub">Clients, projects, tasks, invoices and payments for freelancers and small agencies.</p>
           <div className="stack" style={{ marginTop: 28, maxWidth: 400 }}>
             {FEED.slice(0, shown).map((f, idx) => (
               <div key={idx} className="auth-feed">
