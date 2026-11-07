@@ -5,10 +5,12 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
     <title>MyDesk</title>
     <style>
-      :root { color-scheme: light dark; --bg: #ffffff; --fg: #1a1a1a; --muted: #6b6b6b; --btn: #1a1a1a; --btn-fg: #ffffff; }
-      @media (prefers-color-scheme: dark) { :root { --bg: #141414; --fg: #f2f2f2; --muted: #9a9a9a; --btn: #f2f2f2; --btn-fg: #141414; } }
+      /* Same dark frame as the app, so the window buttons blend in. */
+      :root { color-scheme: dark; --bg: #26262B; --fg: #F2F2F5; --muted: #A1A1AA; --btn: #4F46E5; --btn-fg: #ffffff; }
       html, body { height: 100%; margin: 0; }
       body { display: grid; place-items: center; background: var(--bg); color: var(--fg); font: 15px/1.5 "Segoe UI", system-ui, sans-serif; }
+      /* Drag the window by the top strip (the title bar is hidden). */
+      body::before { content: ""; position: fixed; inset: 0 140px auto 0; height: 40px; -webkit-app-region: drag; }
       main { text-align: center; padding: 24px; max-width: 360px; }
       h1 { font-size: 20px; font-weight: 600; margin: 0 0 6px; }
       p { color: var(--muted); margin: 0 0 20px; }

@@ -92,7 +92,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   // Scroll to top on page change (not on tab/search-param changes).
   useEffect(() => {
-    if (!location.hash) window.scrollTo({ top: 0 })
+    if (!location.hash) {
+      window.scrollTo({ top: 0 })
+      document.querySelector('.main')?.scrollTo({ top: 0 }) // the desktop app scrolls the panel, not the window
+    }
   }, [location.pathname, location.hash])
 
   const toLearn = learning.filter((i) => i.assignee_id === me?.id && i.status !== 'done').length

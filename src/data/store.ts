@@ -69,9 +69,9 @@ interface DataState extends DemoData {
   ready: boolean
   /** False when the learning tables don't exist yet (SQL not run). */
   learningReady: boolean
-  /** False when the topic tables don't exist yet (improvement-topics.sql not run). */
+  /** False when the topic tables don't exist yet (schema.sql not run). */
   topicsReady: boolean
-  /** False until team-links.sql has been run. */
+  /** False until schema.sql has been run. */
   teamLinksReady: boolean
   demoMode: boolean
   me: Profile | null
@@ -413,7 +413,7 @@ export const useData = create<DataState>((set, get) => {
         notifications: notifications.data ?? [],
         invites: invites.data ?? [],
         reminders: reminders.data ?? [],
-        // Improvement tables: empty until improvement.sql has been run.
+        // Improvement tables: empty until schema.sql has been run.
         learning: learning.data ?? [],
         goals: goals.data ?? [],
         learningReady: !learning.error,

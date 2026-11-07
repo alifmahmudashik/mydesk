@@ -36,3 +36,13 @@ double-clicking it installs MyDesk and adds Start menu and desktop shortcuts.
 - If there's no internet, it shows a "Can't reach MyDesk" page and retries on its own.
 - Desktop notifications use the regular MyDesk setting (Account page).
 - Remembers the window size and position.
+- No Windows title bar: the window buttons sit on the dark frame above the page,
+  and you drag the window by that strip. `preload.js` tags the page with
+  `html.desktop`; the site's own CSS (`src/styles/app.css`) does the layout, so
+  most look-and-feel changes ship with a normal deploy.
+
+## Try it against your local dev server
+
+```powershell
+$env:MYDESK_URL = "http://localhost:5173/"; npm run start
+```

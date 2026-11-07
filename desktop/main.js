@@ -3,11 +3,12 @@
 // appears here automatically. The desktop app itself only needs rebuilding
 // if this folder changes.
 
-const { app, BrowserWindow, shell } = require('electron')
+const { app, BrowserWindow, ipcMain, shell } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
 
-const APP_URL = 'https://mydesk.alifmahmud.com/'
+// MYDESK_URL lets you try the app against a local dev server, e.g. http://localhost:5173/
+const APP_URL = process.env.MYDESK_URL || 'https://mydesk.alifmahmud.com/'
 const APP_ORIGIN = new URL(APP_URL).origin
 
 // Sign-in pages (Supabase + Google) must load inside the window so the login
@@ -52,6 +53,30 @@ const saveState = (win) => {
   }
 }
 
+// ---- frameless window --------------------------------------------------------
+// Matches the site's dark frame (--bg). The site adds a strip this tall above its
+// main panel when it runs here (html.desktop), so the buttons never cover content.
+const FRAME_COLOR = '#26262B'
+const TITLEBAR_HEIGHT = 40
+
+// The page reports its frame colour (light/dark theme); repaint the button strip to match.
+ipcMain.on('titlebar-color', (e, color) => {
+  if (!win || e.sender !== win.webContents || typeof color !== 'string' || color.length > 40) return
+  try {
+    win.setTitleBarOverlay({ color: cssToHex(color), symbolColor: '#E4E4EA', height: TITLEBAR_HEIGHT })
+    win.setBackgroundColor(cssToHex(color))
+  } catch {
+    /* older Windows builds without overlay support */
+  }
+})
+
+// "rgb(38, 38, 43)" -> "#26262B"
+function cssToHex(color) {
+  const m = color.match(/\d+(\.\d+)?/g)
+  if (!m || m.length < 3) return FRAME_COLOR
+  return '#' + m.slice(0, 3).map((n) => Math.round(Number(n)).toString(16).padStart(2, '0')).join('').toUpperCase()
+}
+
 // ---- one window only ---------------------------------------------------------
 if (!app.requestSingleInstanceLock()) app.quit()
 
@@ -69,10 +94,14 @@ function createWindow() {
     minHeight: 500,
     title: 'MyDesk',
     icon: path.join(__dirname, 'build', 'icon.png'),
-    backgroundColor: '#ffffff',
+    // No white Windows title bar: the page fills the window and the minimise /
+    // maximise / close buttons sit on top of the site's dark frame.
+    backgroundColor: FRAME_COLOR,
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { color: FRAME_COLOR, symbolColor: '#E4E4EA', height: TITLEBAR_HEIGHT },
     autoHideMenuBar: true, // Alt shows it; Ctrl+R / F5 still reload
     show: false,
-    webPreferences: { contextIsolation: true, sandbox: true, spellcheck: true },
+    webPreferences: { contextIsolation: true, sandbox: true, spellcheck: true, preload: path.join(__dirname, 'preload.js') },
   })
   if (state.maximized) win.maximize()
   win.once('ready-to-show', () => win.show())

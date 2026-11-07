@@ -4,6 +4,8 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
+  // The desktop app's build output locks files while installing; don't watch it.
+  server: { watch: { ignored: ['**/desktop/**'] } },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

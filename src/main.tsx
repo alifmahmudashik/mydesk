@@ -12,6 +12,9 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <App />
+      {/* Window drag handle, shown only in the desktop app (html.desktop). */}
+      <div className="drag-strip" aria-hidden />
+
       <Toaster
         position="bottom-right"
         toastOptions={{

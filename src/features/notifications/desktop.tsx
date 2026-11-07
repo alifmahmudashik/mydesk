@@ -100,7 +100,7 @@ async function beat(online = true) {
   lastToken = data.session?.access_token ?? ''
   if (!lastToken) return true
   const { error } = await supabase.rpc('heartbeat', { p_desktop: desktopPermission() === 'granted', p_online: online })
-  // Function not installed yet (desktop-notifications.sql not run): stop pinging.
+  // Function not installed yet (schema.sql not run): stop pinging.
   return !(error && /heartbeat|function|schema cache/i.test(error.message))
 }
 

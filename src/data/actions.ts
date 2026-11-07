@@ -53,7 +53,7 @@ export function toggleTaskDone(task: Task) {
   setTaskStatus(task, task.status === 'done' ? 'todo' : 'done')
 }
 
-/** The database has the multi-assignee column once task-assignees.sql has run (demo always does). */
+/** The database has the multi-assignee column once schema.sql has run (demo always does). */
 function multiAssignee() {
   return S().demoMode || S().tasks.some((t) => 'assignee_ids' in t)
 }

@@ -672,3 +672,24 @@ a.ls-r-t .i { color: var(--faint); }
 :root.privacy .tbl td.num,
 :root.privacy .group-total { filter: blur(7px); user-select: none; }
 .btn.on { background: var(--pri-soft); color: var(--pri-h); border-color: transparent; }
+
+/* ---- Windows desktop app (desktop/preload.js adds html.desktop) ----
+   The window has no title bar. A 40px strip of the dark frame sits above the main
+   panel: the window buttons live on its right and the rest of it drags the window.
+   The panel scrolls on its own, so the scroll bar sits inside it like a native app. */
+.drag-strip { display: none; }
+html.desktop .drag-strip { display: block; position: fixed; z-index: 60; top: 0; left: 0; right: 140px; height: 40px; -webkit-app-region: drag; }
+html.desktop .brand { -webkit-app-region: drag; }
+html.desktop .brand button, html.desktop .brand a { -webkit-app-region: no-drag; }
+@media (min-width: 861px) {
+  html.desktop, html.desktop body { height: 100%; overflow: hidden; }
+  html.desktop .app { height: 100vh; min-height: 0; }
+  html.desktop .main { margin-top: 40px; height: calc(100vh - 48px); min-height: 0; overflow-x: hidden; overflow-y: auto; }
+  html.desktop:has(.app) .drag-strip { left: 248px; }
+}
+@media (max-width: 860px) { html.desktop .app { padding-top: 40px; } }
+html.desktop ::-webkit-scrollbar { width: 10px; height: 10px; }
+html.desktop ::-webkit-scrollbar-track, html.desktop ::-webkit-scrollbar-corner { background: transparent; }
+html.desktop ::-webkit-scrollbar-thumb { background-color: color-mix(in srgb, var(--ink) 16%, transparent); border: 3px solid transparent; border-radius: 99px; background-clip: padding-box; }
+html.desktop ::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--ink) 30%, transparent); }
+html.desktop .side::-webkit-scrollbar { width: 0; } /* still scrolls with the wheel; no gutter squeezing the sidebar */

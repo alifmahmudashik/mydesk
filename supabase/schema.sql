@@ -679,7 +679,7 @@ language sql stable security definer set search_path = public as $$
                   p_kind in ('assigned','mentioned','overdue','weekly','due_soon','access'))
 $$;
 
--- Who's online with desktop notifications on (see desktop-notifications.sql).
+-- Who's online with desktop notifications on.
 -- No RLS policies: only the functions below read or write it.
 create table if not exists user_presence (
   user_id uuid primary key references auth.users (id) on delete cascade,
@@ -1243,7 +1243,7 @@ create policy "mydesk_avatars_delete" on storage.objects for delete
 
 -- ---------------------------------------------------------------------------
 -- Improvement: team learning (shared resources, takeaways, personal goals)
--- Safe to run on its own and safe to re-run. Also included in schema.sql.
+-- Safe to re-run.
 -- ---------------------------------------------------------------------------
 
 -- Personal learning goals ("Get better at server-side tracking").
@@ -1328,7 +1328,7 @@ create trigger learning_items_after_write after insert or update on learning_ite
 -- Improvement: topics (learning paths). A topic ("Google Tag Manager") has
 -- lessons ("How to set it up"), each lesson has resources (videos, docs, links),
 -- and everyone tracks their own progress per lesson.
--- Run after improvement.sql. Safe to re-run. Also included in schema.sql.
+-- Builds on the learning tables above. Safe to re-run.
 -- ---------------------------------------------------------------------------
 
 create table if not exists learning_topics (
@@ -1471,7 +1471,6 @@ create trigger learning_members_after_insert after insert on learning_topic_memb
 -- ---------------------------------------------------------------------------
 -- Team links: meeting rooms and other shared links shown on the Team page.
 -- Everyone on the team can see them; owners/admins add and edit. Safe to re-run.
--- (Also included in schema.sql.)
 -- ---------------------------------------------------------------------------
 
 create table if not exists team_links (

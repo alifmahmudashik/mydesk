@@ -62,7 +62,7 @@ export function TeamLinks() {
           <button type="button" className="tl-add" onClick={() => setEditing({ open: true })}><Plus className="i i-sm" />Add another meeting or link</button>
         )
       )}
-      {isAdmin && !teamLinksReady && <span className="xs faint">Run <b>supabase/team-links.sql</b> in Supabase once to turn on team links.</span>}
+      {isAdmin && !teamLinksReady && <span className="xs faint">Run <b>supabase/schema.sql</b> in Supabase once to turn on team links.</span>}
       <LinkModal state={editing} count={teamLinks.length} onClose={() => setEditing({ open: false })} />
     </section>
   )

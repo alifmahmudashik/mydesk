@@ -30,7 +30,7 @@ export function TopicsTab() {
     <div className="stack-lg">
       {!demoMode && !topicsReady && (
         <div className="card card-b" style={{ background: 'var(--warn-bg)', borderColor: 'transparent' }}>
-          <span className="small" style={{ color: 'var(--warn)' }}>Run <b>supabase/improvement-topics.sql</b> in the Supabase SQL editor to turn on topics.</span>
+          <span className="small" style={{ color: 'var(--warn)' }}>Run <b>supabase/schema.sql</b> in the Supabase SQL editor to turn on topics.</span>
         </div>
       )}
       <div className="row between wrap">

@@ -74,7 +74,7 @@ export function ImprovementPage() {
         <PageHead title="Improvement" sub="Learn something new every week. Share links, videos and courses with the team, and note what you learned." />
         {!demoMode && !learningReady && (
           <div className="card card-b row" style={{ background: 'var(--warn-bg)', borderColor: 'transparent' }}>
-            <span className="small grow" style={{ color: 'var(--warn)' }}>Run <b>supabase/improvement.sql</b> in the Supabase SQL editor to turn this on.</span>
+            <span className="small grow" style={{ color: 'var(--warn)' }}>Run <b>supabase/schema.sql</b> in the Supabase SQL editor to turn this on.</span>
           </div>
         )}
         <div className="tabs">
