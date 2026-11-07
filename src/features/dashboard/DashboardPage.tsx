@@ -14,6 +14,7 @@ import { TaskRow } from '@/components/domain/TaskRow'
 import { RevenueChart, Spark, monthlyBuckets } from '@/components/domain/RevenueChart'
 import { ActivityItem } from '@/components/domain/ActivityItem'
 import { RemindModal } from '@/features/payments/RemindModal'
+import { PrivacyToggle } from '@/components/ui/privacy-toggle'
 import { sumUSD, useUsdRates } from '@/lib/currency'
 import { clientDisplayName, effectivePaymentStatus, isOpenPayment, OPEN_PROJECT, OPEN_TASK, profileDisplayName, shortProjectTitle, workDate, isAssignedTo } from '@/lib/derive'
 import { daysUntil, formatFeedAgo, formatMoney, lateLabel } from '@/lib/format'
@@ -92,6 +93,7 @@ export function DashboardPage() {
   return (
     <>
       <Topbar crumbs={[{ label: 'Home' }, { label: 'Dashboard' }]}>
+        {isAdmin && <PrivacyToggle />}
         {isAdmin && (
           <Menu
             trigger={({ toggle }) => (
@@ -136,7 +138,7 @@ export function DashboardPage() {
               You have{' '}
               {isAdmin && overdue.length > 0 && (
                 <>
-                  <Link className="t-bad" to="/payments">{formatMoney(Math.round(overdueTotal))} overdue</Link> across {overdue.length} payment{overdue.length === 1 ? '' : 's'},{' '}
+                  <Link className="t-bad" to="/payments"><span className="priv">{formatMoney(Math.round(overdueTotal))}</span> overdue</Link> across {overdue.length} payment{overdue.length === 1 ? '' : 's'},{' '}
                 </>
               )}
               <Link className="t-pri" to="/tasks">{myTasks.length} open task{myTasks.length === 1 ? '' : 's'}</Link>, and {closingSoon} project{closingSoon === 1 ? '' : 's'} closing out by next week.
@@ -152,7 +154,7 @@ export function DashboardPage() {
         </div>
 
         {isAdmin ? (
-          <div className="kpis">
+          <div className="kpis priv-kpis">
             <Link className="kpi lift" to="/payments">
               <span className="lbl">Outstanding <span className="xs">{open.length} open</span></span>
               <span className="val">{formatMoney(Math.round(sumUSD(open, rates)))}</span>
@@ -204,7 +206,7 @@ export function DashboardPage() {
                 <div>
                   <h2 className="h2">Revenue</h2>
                   <div className="row" style={{ alignItems: 'baseline', marginTop: 6 }}>
-                    <span style={{ fontSize: 24, fontWeight: 600, letterSpacing: '-.02em' }}>{formatMoney(Math.round(collected6))}</span>
+                    <span className="priv" style={{ fontSize: 24, fontWeight: 600, letterSpacing: '-.02em' }}>{formatMoney(Math.round(collected6))}</span>
                     <span className="small muted">earned &amp; paid, last 6 months</span>
                   </div>
                 </div>
@@ -214,7 +216,7 @@ export function DashboardPage() {
                   <Link className="link" to="/analytics">Open analytics →</Link>
                 </div>
               </div>
-              <RevenueChart buckets={buckets} />
+              <div className="priv"><RevenueChart buckets={buckets} /></div>
             </section>
           )}
           <section className="card dash-c">
@@ -246,7 +248,7 @@ export function DashboardPage() {
             <section className="card dash-b">
               <div className="card-h">
                 <h2 className="h2">Needs chasing</h2>
-                <span className="b t-bad num">{formatMoney(Math.round(overdueTotal))}</span>
+                <span className="b t-bad num priv">{formatMoney(Math.round(overdueTotal))}</span>
               </div>
               <div className="list">
                 {overdue.length === 0 && <Empty small title="All caught up">No overdue payments.</Empty>}
@@ -256,7 +258,7 @@ export function DashboardPage() {
                     <div className="li" key={p.id}>
                       <ClientMark client={c} />
                       <Link className="grow cover" to={`/payments?p=${p.id}`} style={{ minWidth: 0 }}>
-                        <div className="t trunc" style={{ fontSize: 13.5 }}>{clientDisplayName(c)} · {formatMoney(p.amount, p.currency)}</div>
+                        <div className="t trunc" style={{ fontSize: 13.5 }}>{clientDisplayName(c)} · <span className="priv">{formatMoney(p.amount, p.currency)}</span></div>
                         <div className="s t-bad"><span className="trunc">{paymentTitle(p)} · {lateLabel(p.due_date)}</span></div>
                       </Link>
                       <button type="button" className="btn btn-sm above" onClick={() => setRemind(p)}>Remind</button>

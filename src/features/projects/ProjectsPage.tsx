@@ -152,11 +152,11 @@ export function ProjectsPage() {
                             <thead>
                               <tr>
                                 <th>Project</th>
-                                <th>Status</th>
-                                <th style={{ width: 160 }}>Progress</th>
-                                <th>Team</th>
-                                <th>Due</th>
-                                {isAdmin && <th className="r">Amount</th>}
+                                <th style={{ width: 170 }}>Status</th>
+                                <th style={{ width: 190 }}>Progress</th>
+                                <th style={{ width: 120 }}>Team</th>
+                                <th style={{ width: 110 }}>Due</th>
+                                {isAdmin && <th className="r" style={{ width: 120 }}>Amount</th>}
                               </tr>
                             </thead>
                             <tbody>
@@ -186,10 +186,10 @@ export function ProjectsPage() {
                             <thead>
                               <tr>
                                 <th>Project</th>
-                                <th>Completed</th>
-                                <th>Status</th>
-                                {isAdmin && <th>Payment</th>}
-                                {isAdmin && <th className="r">Amount</th>}
+                                <th style={{ width: 130 }}>Completed</th>
+                                <th style={{ width: 170 }}>Status</th>
+                                {isAdmin && <th style={{ width: 150 }}>Payment</th>}
+                                {isAdmin && <th className="r" style={{ width: 120 }}>Amount</th>}
                               </tr>
                             </thead>
                             <tbody>

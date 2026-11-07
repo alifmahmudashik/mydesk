@@ -235,7 +235,7 @@ export function TaskPage() {
         </Menu>
       </Topbar>
 
-      <div className="cols" style={{ gap: 0, maxWidth: 1680, alignItems: 'stretch' }}>
+      <div className="cols" style={{ gap: 0, maxWidth: 'var(--page-max)', width: '100%', marginInline: 'auto', alignItems: 'stretch' }}>
         <div className="col-main task-main" style={{ gap: 28 }} onPaste={onPaste}>
           <div className="row" style={{ alignItems: 'flex-start', gap: 12, animation: 'in .5s var(--ease) both' }}>
             <span style={{ marginTop: 9 }}><StatusRing status={task.status} size={18} onToggle={() => setTaskStatus(task, task.status === 'done' ? 'todo' : 'done')} /></span>

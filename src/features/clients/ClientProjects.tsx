@@ -10,7 +10,7 @@ import { AvatarStack } from '@/components/ui/avatar'
 import { StatusPill } from '@/components/ui/pill'
 import { Modal } from '@/components/ui/modal'
 import { sumByCurrency, isAssignedTo } from '@/lib/derive'
-import { formatDate, formatMoney } from '@/lib/format'
+import { formatDate, formatMoney, isOverdue } from '@/lib/format'
 import { projectStatus } from '@/lib/status'
 import { copyText } from '@/lib/utils'
 import type { Client, Project, ProjectStatus } from '@/types'
@@ -50,6 +50,9 @@ export function ClientProjects({ client }: { client: Client }) {
   const current = all
     .filter((p) => p.status !== 'finished')
     .sort((a, b) => rank(a) - rank(b) || (b.completed_at ?? b.due_date ?? b.created_at).localeCompare(a.completed_at ?? a.due_date ?? a.created_at))
+  const isRunning = (p: Project) => p.status !== 'completed' && p.status !== 'finished' && p.status !== 'cancelled'
+  const running = current.filter(isRunning)
+  const wrapped = current.filter((p) => !isRunning(p))
   const finished = all.filter((p) => p.status === 'finished').sort((a, b) => (b.completed_at ?? b.due_date ?? b.created_at).localeCompare(a.completed_at ?? a.due_date ?? a.created_at))
   const selected = all.filter((p) => sel.has(p.id))
   const firstName = client.name.split(' ')[0]
@@ -65,12 +68,18 @@ export function ClientProjects({ client }: { client: Client }) {
   const row = (p: Project) => {
     const pt = tasks.filter((t) => t.project_id === p.id && t.status !== 'cancelled')
     const d = pt.filter((t) => t.status === 'done').length
-    const open = p.status !== 'completed' && p.status !== 'finished' && p.status !== 'cancelled'
+    const open = isRunning(p)
     const paid = payments.filter((x) => x.project_ids?.includes(p.id) && x.status === 'paid')
     const team = profiles.filter((u) => pt.some((t) => isAssignedTo(t, u.id)))
-    const sub = open
-      ? `${p.due_date ? `Due ${formatDate(p.due_date)}` : 'No due date'} · ${d}/${pt.length} tasks`
-      : `${p.status === 'cancelled' ? 'Cancelled' : 'Completed'} ${formatDate((p.completed_at ?? p.due_date ?? p.created_at).slice(0, 10))}${isAdmin && paid.length ? ` · ${sumByCurrency(paid)} paid` : ''}`
+    const late = open && isOverdue(p.due_date)
+    const sub = open ? (
+      <span className={late ? 't-bad' : undefined}>{p.due_date ? `${late ? 'Was due' : 'Due'} ${formatDate(p.due_date)}` : 'No due date'}</span>
+    ) : (
+      <span>
+        {p.status === 'cancelled' ? 'Cancelled' : 'Completed'} {formatDate((p.completed_at ?? p.due_date ?? p.created_at).slice(0, 10))}
+        {isAdmin && paid.length > 0 && <> · <span className="priv">{sumByCurrency(paid)}</span> paid</>}
+      </span>
+    )
     const body = (
       <>
         {selecting ? (
@@ -82,7 +91,13 @@ export function ClientProjects({ client }: { client: Client }) {
           <div className={`t trunc ${p.status === 'finished' ? 'muted' : ''}`}>{p.title}</div>
           <div className="s">{sub}</div>
         </div>
-        {isAdmin && p.amount > 0 && <span className="num small m">{formatMoney(p.amount, p.currency)}</span>}
+        {open && (
+          <div className="cp-prog" title={`${d} of ${pt.length} tasks done`}>
+            <div className="bar"><i className={pt.length && d === pt.length ? 'ok' : undefined} style={{ width: `${pt.length ? (d / pt.length) * 100 : 0}%` }} /></div>
+            <span className="xs muted num">{d}/{pt.length}</span>
+          </div>
+        )}
+        {isAdmin && p.amount > 0 && <span className="num small m priv">{formatMoney(p.amount, p.currency)}</span>}
         <StatusPill meta={projectStatus[p.status]} />
         {open && team.length > 0 && <AvatarStack profiles={team} />}
         {!selecting && <ChevronRight className="i faint" />}
@@ -125,10 +140,19 @@ export function ClientProjects({ client }: { client: Client }) {
         </div>
       )}
 
-      <div className="card list select-list">
-        {current.length === 0 && <div className="empty sm"><p>No running projects. Everything is finished.</p></div>}
-        {current.map(row)}
-      </div>
+      {current.length === 0 && <div className="card"><div className="empty sm"><p>No running projects. Everything is finished.</p></div></div>}
+      {running.length > 0 && (
+        <div>
+          <div className="grp-h"><span className="st prog" />Active <span className="n">{running.length}</span></div>
+          <div className="card list select-list">{running.map(row)}</div>
+        </div>
+      )}
+      {wrapped.length > 0 && (
+        <div>
+          <div className="grp-h"><span className="st done" />Completed <span className="n">{wrapped.length}</span></div>
+          <div className="card list select-list">{wrapped.map(row)}</div>
+        </div>
+      )}
 
       {finished.length > 0 && (
         <div>

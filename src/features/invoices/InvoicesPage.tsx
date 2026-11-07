@@ -102,7 +102,7 @@ export function InvoicesPage() {
                 >
                   <div className="tbl-wrap">
                     <table className="tbl" style={{ minWidth: 680 }}>
-                      <thead><tr><th>Invoice</th><th>Issued</th><th>Status</th><th className="r">Amount</th><th className="r" /></tr></thead>
+                      <thead><tr><th>Invoice</th><th style={{ width: 130 }}>Issued</th><th style={{ width: 150 }}>Status</th><th className="r" style={{ width: 130 }}>Amount</th><th className="r" style={{ width: 140 }} /></tr></thead>
                       <tbody>
                         {g.rows.map((inv) => {
                           const st = statusOf(inv)

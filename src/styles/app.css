@@ -167,6 +167,9 @@ button.prop { border: 0; background: transparent; font: inherit; color: inherit;
 .client-group-h .group-total { font-size: 13px; }
 .client-group:not(:has(.client-group-b)) .client-group-h { border-bottom: 0; }
 .client-group-b .tbl th { background: transparent; }
+/* fixed columns so every client group lines up; the first column takes the spare space */
+.client-group-b .tbl { table-layout: fixed; }
+.client-group-b .tbl td:first-child { overflow-wrap: anywhere; }
 .client-group-b > .list > .li:first-child { border-top: 0; }
 .client-groups { display: flex; flex-direction: column; gap: 12px; }
 .client-chip { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 6px; font-size: 12px; font-weight: 600; white-space: nowrap; color: color-mix(in srgb, var(--cc) 75%, var(--ink)); background: color-mix(in srgb, var(--cc) 12%, transparent); max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
@@ -367,7 +370,7 @@ a.client-chip:hover { background: color-mix(in srgb, var(--cc) 20%, transparent)
    Motion polish: one easing family, soft entrances, smooth hovers.
    All of it is switched off by the "Animations" setting and reduced-motion.
    ========================================================================= */
-:root { --ease-out: cubic-bezier(.22, 1, .36, 1); --ease-io: cubic-bezier(.65, 0, .35, 1); }
+:root { --page-max: 1480px; --ease-out: cubic-bezier(.22, 1, .36, 1); --ease-io: cubic-bezier(.65, 0, .35, 1); }
 
 /* Default smooth state changes for anything interactive (zero specificity, so
    components that set their own transition keep it). */
@@ -643,3 +646,29 @@ a.ls-r-t .i { color: var(--faint); }
 .dn-ask small { display: block; color: var(--mute); font-size: 12.5px; }
 .dn-ic { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; background: var(--pri-soft); color: var(--pri-h); }
 @media (max-width: 560px) { .dn-ask { flex-wrap: wrap; } }
+
+/* ---- client page header: name on the left, a compact stat row on the right ---- */
+.client-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.client-head h1 { font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
+.client-stats { display: flex; align-items: stretch; margin-left: auto; padding: 8px 4px; border: 1px solid var(--line-s); border-radius: 12px; background: var(--panel); }
+.client-stats > div, .client-stats > button { display: flex; flex-direction: column; gap: 2px; padding: 0 16px; border: 0; border-left: 1px solid var(--line-s); background: none; font: inherit; color: inherit; text-align: left; }
+.client-stats > :first-child { border-left: 0; }
+.client-stats > button { cursor: pointer; border-radius: 0; }
+.client-stats > button:hover b { text-decoration: underline; text-underline-offset: 3px; }
+.client-stats span { font-size: 11.5px; color: var(--mute); white-space: nowrap; }
+.client-stats b { font-size: 15px; font-weight: 600; letter-spacing: -.01em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+@media (max-width: 760px) { .client-stats { margin-left: 0; width: 100%; overflow-x: auto; } }
+
+/* client page project rows: progress next to the amount */
+.cp-prog { display: flex; align-items: center; gap: 8px; width: 120px; flex: none; }
+.cp-prog .bar { flex: 1; }
+@media (max-width: 640px) { .cp-prog { display: none; } }
+
+/* ---- privacy mode (eye button): blur money and counts for screen sharing ---- */
+.priv, .priv-kpis .kpi > :not(.lbl), .priv-kpis .lbl > *, .tbl td.num, .group-total { transition: filter .2s var(--ease-out); }
+:root.privacy .priv,
+:root.privacy .priv-kpis .kpi > :not(.lbl),
+:root.privacy .priv-kpis .lbl > *,
+:root.privacy .tbl td.num,
+:root.privacy .group-total { filter: blur(7px); user-select: none; }
+.btn.on { background: var(--pri-soft); color: var(--pri-h); border-color: transparent; }

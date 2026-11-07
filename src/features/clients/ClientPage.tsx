@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { differenceInCalendarDays, format, parseISO } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { Archive, ArchiveRestore, Check, Clock, CreditCard, Edit3, FileText, Folder, Globe, Mail, Phone, Plus, User } from 'lucide-react'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
@@ -18,6 +18,7 @@ import { StatusPill } from '@/components/ui/pill'
 import { RemindModal } from '@/features/payments/RemindModal'
 import { PaymentModal } from '@/features/payments/PaymentModal'
 import { ClientProjects } from '@/features/clients/ClientProjects'
+import { PrivacyToggle } from '@/components/ui/privacy-toggle'
 import { clientColor, clientDisplayName, clientSecondaryName, effectivePaymentStatus, invoiceStatus, isOpenPayment, OPEN_PROJECT, profileDisplayName, sumByCurrency } from '@/lib/derive'
 import { formatDate, formatMoney, lateLabel } from '@/lib/format'
 import { clientStatus, paymentStatus } from '@/lib/status'
@@ -62,10 +63,6 @@ export function ClientPage() {
   const open = cPayments.filter(isOpenPayment)
   const cInvoices = invoices.filter((i) => i.client_id === id).sort((a, b) => (b.issue_date ?? '').localeCompare(a.issue_date ?? ''))
   const team = profiles.filter((u) => clientMembers.some((m) => m.client_id === id && m.user_id === u.id))
-  const daysToPay = paid.filter((p) => p.payment_date).map((p) => differenceInCalendarDays(parseISO(p.payment_date!), parseISO(p.created_at)))
-  const avgDays = daysToPay.length ? Math.max(0, Math.round(daysToPay.reduce((a, b) => a + b, 0) / daysToPay.length)) : null
-  const allPaidDays = payments.filter((p) => p.status === 'paid' && p.payment_date).map((p) => differenceInCalendarDays(parseISO(p.payment_date!), parseISO(p.created_at)))
-  const globalAvg = allPaidDays.length ? allPaidDays.reduce((a, b) => a + b, 0) / allPaidDays.length : null
 
   const statusOfInvoice = (invId: string) => {
     const inv = invoices.find((i) => i.id === invId)
@@ -97,6 +94,7 @@ export function ClientPage() {
   return (
     <>
       <Topbar crumbs={[{ label: 'Clients', to: '/clients' }, { label: name }]}>
+        {isAdmin && <PrivacyToggle />}
         {isAdmin && <Link className="btn" to={`/clients/${id}/settings`}><Edit3 className="i" />Edit client</Link>}
         {isAdmin && (client.status === 'archived' ? (
           <button type="button" className="btn" onClick={() => setStatus('active')}><ArchiveRestore className="i" />Restore</button>
@@ -110,39 +108,33 @@ export function ClientPage() {
         </Menu>
       </Topbar>
       <Content>
-        <div className="profile-head">
-          <ClientMark client={client} size="xl" />
-          <div className="grow">
+        <div className="client-head">
+          <ClientMark client={client} size="lg" />
+          <div className="grow" style={{ minWidth: 0 }}>
             <div className="row-sm wrap">
               <h1>{name}</h1>
               <StatusPill meta={clientStatus[client.status]} />
             </div>
-            <div className="small muted" style={{ marginTop: 4 }}>
+            <div className="small muted" style={{ marginTop: 2 }}>
               Client since {format(parseISO(client.created_at), 'MMM yyyy')}
               {clientSecondaryName(client) ? ` · ${clientSecondaryName(client)}` : ''}
             </div>
           </div>
-        </div>
-
-        <div className="kstrip">
-          <div><div className="small muted m">Projects</div><div className="val">{cProjects.length}</div><div className="xs muted">{activeN} active · {cProjects.length - activeN} done</div></div>
-          {isAdmin ? (
-            <>
-              <div><div className="small muted m">Billed</div><div className="val trunc">{paid.length ? sumByCurrency(paid) : '—'}</div><div className="xs muted">{cInvoices.length} invoice{cInvoices.length === 1 ? '' : 's'}</div></div>
-              <div>
-                <div className="small muted m">Outstanding</div>
-                <div className={`val trunc ${open.some((p) => effectivePaymentStatus(p) === 'overdue') ? 't-bad' : ''}`}>{open.length ? sumByCurrency(open) : formatMoney(0, client.default_currency ?? 'USD')}</div>
-                <div className={`xs ${open.length ? 'muted' : 't-ok'}`}>{open.length ? `${open.length} open payment${open.length === 1 ? '' : 's'}` : 'All paid'}</div>
-              </div>
-              <div>
-                <div className="small muted m">Avg. days to pay</div>
-                <div className="val">{avgDays ?? '—'}</div>
-                <div className="xs muted">{avgDays === null || globalAvg === null ? 'No paid payments yet' : avgDays <= globalAvg ? 'Faster than average' : 'Slower than average'}</div>
-              </div>
-            </>
-          ) : (
-            <div><div className="small muted m">Open tasks</div><div className="val">{tasks.filter((t) => cProjects.some((p) => p.id === t.project_id) && t.status !== 'done' && t.status !== 'cancelled').length}</div><div className="xs muted">across {activeN} active projects</div></div>
-          )}
+          <div className="client-stats">
+            <div><span>Active</span><b className="priv">{activeN}</b></div>
+            <div><span>Done</span><b className="priv">{cProjects.length - activeN}</b></div>
+            {isAdmin ? (
+              <>
+                <div><span>Billed</span><b className="priv">{paid.length ? sumByCurrency(paid) : '—'}</b></div>
+                <button type="button" onClick={() => setParams({ tab: 'payments' }, { replace: true })} title="Open payments">
+                  <span>Outstanding</span>
+                  <b className={`priv ${open.some((p) => effectivePaymentStatus(p) === 'overdue') ? 't-bad' : open.length ? '' : 't-ok'}`}>{open.length ? sumByCurrency(open) : 'All paid'}</b>
+                </button>
+              </>
+            ) : (
+              <div><span>Open tasks</span><b>{tasks.filter((t) => cProjects.some((p) => p.id === t.project_id) && t.status !== 'done' && t.status !== 'cancelled').length}</b></div>
+            )}
+          </div>
         </div>
 
         <div className="cols">
@@ -168,7 +160,7 @@ export function ClientPage() {
                                 <td><Link className="mono m cover" to={`/invoices/${inv.id}`}>{inv.number}</Link></td>
                                 <td>{formatDate(inv.issue_date)}</td>
                                 <td>{st ? <StatusPill meta={paymentStatus[st]} /> : <span className="pill gray">Draft</span>}</td>
-                                <td className="r num b">{formatMoney(total, inv.currency)}</td>
+                                <td className="r num b priv">{formatMoney(total, inv.currency)}</td>
                               </tr>
                             )
                           })}
@@ -198,7 +190,7 @@ export function ClientPage() {
                                 <div className="t trunc">{paymentTitle(p)}</div>
                                 <div className={`s ${st === 'overdue' ? 't-bad' : ''}`}>{st === 'overdue' ? lateLabel(p.due_date) : p.due_date ? `Due ${formatDate(p.due_date)}` : 'No due date'}</div>
                               </div>
-                              <b className="num">{formatMoney(p.amount, p.currency)}</b>
+                              <b className="num priv">{formatMoney(p.amount, p.currency)}</b>
                               <StatusPill meta={paymentStatus[st]} />
                               <button type="button" className="btn btn-sm above" onClick={() => setRemind(p)}>Remind</button>
                             </div>
@@ -207,7 +199,7 @@ export function ClientPage() {
                       </div>
                     )}
                     {paid.length > 0 && (
-                      <div className="card-f"><span className="muted">{paid.length} paid · {sumByCurrency(paid)}</span><Link className="link" to="/payments?tab=paid">All payments</Link></div>
+                      <div className="card-f"><span className="muted">{paid.length} paid · <span className="priv">{sumByCurrency(paid)}</span></span><Link className="link" to="/payments?tab=paid">All payments</Link></div>
                     )}
                   </div>
                 )}

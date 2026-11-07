@@ -256,7 +256,7 @@ export function PaymentsPage() {
                       >
                         <div className="tbl-wrap">
                           <table className="tbl" style={{ minWidth: 760 }}>
-                            <thead><tr><th>Project</th><th>Work month</th><th className="r">Amount</th><th>Status</th><th>Due</th><th className="r" /></tr></thead>
+                            <thead><tr><th>Project</th><th style={{ width: 130 }}>Work month</th><th className="r" style={{ width: 120 }}>Amount</th><th style={{ width: 150 }}>Status</th><th style={{ width: 110 }}>Due</th><th className="r" style={{ width: 220 }} /></tr></thead>
                             <tbody>
                               {g.rows.map((p) => {
                                 const st = effectivePaymentStatus(p)
@@ -297,7 +297,7 @@ export function PaymentsPage() {
                     <ClientGroup key={g.id} client={g.client} meta={`${g.rows.length} overdue \u00b7 oldest ${lateLabel(g.rows[0].due_date)}`} right={<span className="group-total t-bad">{sumByCurrency(g.rows)}</span>}>
                       <div className="tbl-wrap">
                         <table className="tbl" style={{ minWidth: 700 }}>
-                          <thead><tr><th>Project</th><th>Work month</th><th className="r">Amount</th><th>Due</th><th>Last reminder</th><th className="r" /></tr></thead>
+                          <thead><tr><th>Project</th><th style={{ width: 130 }}>Work month</th><th className="r" style={{ width: 120 }}>Amount</th><th style={{ width: 110 }}>Due</th><th style={{ width: 140 }}>Last reminder</th><th className="r" style={{ width: 220 }} /></tr></thead>
                           <tbody>
                             {g.rows.map((p) => (
                               <tr key={p.id} className={`hov${kept(p) ? ' just-paid' : ''}`}>
@@ -332,7 +332,7 @@ export function PaymentsPage() {
                     >
                       <div className="tbl-wrap">
                         <table className="tbl" style={{ minWidth: 640 }}>
-                          <thead><tr><th>Project</th><th>Work month</th><th className="r">Amount</th><th>Paid on</th><th>Method</th></tr></thead>
+                          <thead><tr><th>Project</th><th style={{ width: 130 }}>Work month</th><th className="r" style={{ width: 120 }}>Amount</th><th style={{ width: 120 }}>Paid on</th><th style={{ width: 150 }}>Method</th></tr></thead>
                           <tbody>
                             {g.rows.map((p) => {
                               const inv = invoices.find((i) => i.id === p.invoice_id)

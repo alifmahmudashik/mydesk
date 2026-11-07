@@ -6,6 +6,7 @@ import App from '@/App'
 import '@/styles/tokens.css'
 import '@/styles/design.css'
 import '@/styles/app.css'
+import '@/lib/privacy'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
