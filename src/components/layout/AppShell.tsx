@@ -144,9 +144,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         )}
         {isAdmin && (
-          <nav className="nav" aria-label="Money">
-              <div className="nav-label">MONEY</div>
-              <NavItem to="/payments" alsoActive="/invoices" icon={<CreditCard className="i" />} extra={overdue ? <span className="badge red">{overdue}</span> : null}>Payments & invoices</NavItem>
+          <nav className="nav" aria-label="Business">
+              <div className="nav-label">BUSINESS</div>
+              <NavItem to="/payments" alsoActive="/invoices" icon={<CreditCard className="i" />} extra={overdue ? <span className="badge red">{overdue}</span> : null}>Billing</NavItem>
               <NavItem to="/analytics" icon={<ChartColumn className="i" />}>Analytics</NavItem>
           </nav>
         )}

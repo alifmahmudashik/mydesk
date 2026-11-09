@@ -240,7 +240,7 @@ export function InvoiceEditor() {
   if (!isNew && !existing) {
     return (
       <>
-        <Topbar crumbs={[{ label: 'Payments & invoices', to: '/payments?tab=invoices' }, { label: 'Not found' }]} />
+        <Topbar crumbs={[{ label: 'Billing', to: '/payments?tab=invoices' }, { label: 'Not found' }]} />
         <div className="content"><div className="card"><Empty title="Invoice not found" /></div></div>
       </>
     )
@@ -252,7 +252,7 @@ export function InvoiceEditor() {
     <>
       <Topbar
         crumbs={[
-          { label: 'Payments & invoices', to: '/payments?tab=invoices' },
+          { label: 'Billing', to: '/payments?tab=invoices' },
           { label: <span className="row-sm"><span className="mono" style={{ fontSize: 12.5 }}>{f.number || 'New invoice'}</span>{linkedStatus && <StatusPill meta={paymentStatus[linkedStatus]} />}</span> },
         ]}
       >

@@ -14,7 +14,7 @@ import type { Invoice } from '@/types'
 
 export { invoiceTotal } from '@/lib/invoice-math'
 
-/** The Invoices tab of the Payments & invoices page: every invoice, grouped by client. */
+/** The Invoices tab of the Billing page: every invoice, grouped by client. */
 export function InvoicesList({ q }: { q: string }) {
   const { invoices, clients, payments, projects, deleteRow } = useData()
   const navigate = useNavigate()

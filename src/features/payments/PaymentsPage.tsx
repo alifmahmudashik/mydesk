@@ -187,13 +187,13 @@ export function PaymentsPage() {
 
   return (
     <>
-      <Topbar crumbs={[{ label: 'Payments & invoices' }]}>
+      <Topbar crumbs={[{ label: 'Billing' }]}>
         <Link className="btn hide-sm" to="/analytics"><ChartColumn className="i" />Analytics</Link>
         <Link className="btn" to="/invoices/new"><FileText className="i" />New invoice</Link>
         <button type="button" className="btn btn-pri" onClick={() => openCreate('payment')}><Plus className="i" />Record payment</button>
       </Topbar>
       <Content>
-        <PageHead title="Payments & invoices" sub="What each month’s work earned, what’s still owed, and the invoice behind every payment.">
+        <PageHead title="Billing" sub="What each month’s work earned, what’s still owed, and the invoice behind every payment.">
           <MonthFilter value={month} onChange={setMonth} />
         </PageHead>
         <div className="kstrip">

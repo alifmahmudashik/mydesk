@@ -69,7 +69,7 @@ export function CommandPalette() {
       { id: 'j-c', group: 'Jump to', label: 'Clients', text: 'clients', icon: <Users className="i" />, hint: 'G C', run: () => go('/clients') },
       ...(isAdmin
         ? [
-            { id: 'j-$', group: 'Jump to', label: 'Payments & invoices', text: 'payments invoices money billing', icon: <CreditCard className="i" />, hint: 'G $', run: () => go('/payments') },
+            { id: 'j-$', group: 'Jump to', label: 'Billing', text: 'payments invoices money billing', icon: <CreditCard className="i" />, hint: 'G $', run: () => go('/payments') },
             { id: 'j-a', group: 'Jump to', label: 'Analytics', text: 'analytics revenue', icon: <ChartColumn className="i" />, hint: 'G A', run: () => go('/analytics') },
           ]
         : []),

@@ -87,7 +87,7 @@ function Routed() {
           <Route path="/team" element={<TeamPage />} />
           <Route path="/team/:id" element={<MemberPage />} />
           <Route path="/payments" element={<AdminOnly><PaymentsPage /></AdminOnly>} />
-          {/* Invoices live on the Payments & invoices page now. */}
+          {/* Invoices live on the Billing page now. */}
           <Route path="/invoices" element={<Navigate to="/payments?tab=invoices" replace />} />
           <Route path="/invoices/:id" element={<AdminOnly><InvoiceEditor /></AdminOnly>} />
           <Route path="/analytics" element={<AdminOnly><AnalyticsPage /></AdminOnly>} />
