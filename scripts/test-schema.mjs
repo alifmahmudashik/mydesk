@@ -65,7 +65,7 @@ await db.exec(prep(readFileSync(oldPath ?? schemaPath, 'utf8')))
 await q(`insert into auth.users (id, email) values ($1, 'owner@x.com'), ($2, 'member@x.com')`, [U1, U2])
 if (!oldPath) {
   // This version: the owner creates their workspace, the member is already on the team.
-  const ws = (await as(U1, `select create_workspace('Acme Agency', 'Acme Ltd', 'usd', '#0EA5E9', '#16A34A') id`)).rows[0].id
+  const ws = (await as(U1, `select create_workspace('Acme Agency') id`)).rows[0].id
   await db.exec(`select set_config('mydesk.system', 'on', false)`)
   await q(`update profiles set workspace_id = $1 where id = $2`, [ws, U2])
   await db.exec(`select set_config('mydesk.system', 'off', false)`)
@@ -293,13 +293,16 @@ ok(p4.role === 'member' && p4.workspace_id === null, 'a new sign-up starts with 
 await db.exec(`set role authenticated`)
 const seesNothing = (await as(U4, `select (select count(*) from clients) + (select count(*) from tasks) + (select count(*) from payments) as n`)).rows[0].n
 ok(Number(seesNothing) === 0, 'before setting up, a new person sees no data')
-const ws4 = (await as(U4, `select create_workspace('Solo Studio', 'Solo LLC', 'eur', '#DB2777', '#7C3AED') id`)).rows[0].id
+const ws4 = (await as(U4, `select create_workspace('  Solo Studio  ') id`)).rows[0].id
 const me4 = (await as(U4, `select role, workspace_id from profiles where id = $1`, [U4])).rows[0]
 ok(me4.role === 'owner' && me4.workspace_id === ws4, 'creating a workspace makes you its owner')
-const brand = (await as(U4, `select name, accent_color, logo_color from workspaces`)).rows
-ok(brand.length === 1 && brand[0].name === 'Solo Studio' && brand[0].accent_color === '#7C3AED', 'you see only your own workspace and its colours')
-const inv4 = (await as(U4, `select business_name, default_currency from invoice_settings`)).rows
-ok(inv4.length === 1 && inv4[0].business_name === 'Solo LLC' && inv4[0].default_currency === 'EUR', 'business name and currency are saved')
+const wsRows = (await as(U4, `select name from workspaces`)).rows
+ok(wsRows.length === 1 && wsRows[0].name === 'Solo Studio', 'you see only your own workspace (name trimmed)')
+const inv4 = (await as(U4, `select workspace_name, email, default_currency from invoice_settings`)).rows
+ok(inv4.length === 1 && inv4[0].workspace_name === 'Solo Studio' && inv4[0].email === 'solo@y.com' && inv4[0].default_currency === 'USD', 'workspace settings start from the name and your email')
+let blank = false
+try { await as(U4, `select create_workspace('   ')`) } catch { blank = true }
+ok(blank, 'a workspace needs a name')
 let twice = false
 try { await as(U4, `select create_workspace('Second')`) } catch { twice = true }
 ok(twice, 'you can’t create a second workspace')
@@ -361,6 +364,51 @@ ok(!(await canWrite(U4, `${U1}/a.png`)), 'an admin can’t upload into another w
 ok(await canWrite(U1, `${U2}/a.png`), 'an admin can upload a teammate’s photo')
 ok(!(await canWrite(U4, `clients/aaaaaaaa-0000-0000-0000-000000000001/x.png`)), 'an admin can’t upload another workspace’s client logo')
 ok(!(await canWrite(U4, `random/x.png`)), 'unknown folders are refused, not errors')
+
+// ---- 6. account and workspace are linked ----
+const U6 = '66666666-6666-6666-6666-666666666666' // teammate in the solo workspace
+await q(`insert into auth.users (id, email) values ($1, 'mate@y.com')`, [U6])
+await as(U4, `insert into invites (email, role, client_ids) values ('late-mate@y.com', 'member', '{}')`)
+await db.exec(`select set_config('mydesk.system', 'on', false)`)
+await q(`update profiles set workspace_id = $1, role = 'admin' where id = $2`, [ws4, U6])
+await db.exec(`select set_config('mydesk.system', 'off', false)`)
+await as(U4, `insert into client_members (client_id, user_id) values ('cccccccc-0000-0000-0000-000000000001', $1)`, [U6])
+await as(U4, `insert into tasks (project_id, title, assignee_ids) values ('dddddddd-0000-0000-0000-000000000001', 'Shared', $1)`, [[U4, U6]])
+await q(`insert into deletion_requests (user_id, kind, workspace_id, token_hash, expires_at) values ($1, 'workspace', $2, 'h', now() + interval '30 minutes')`, [U4, ws4])
+const countIn = async (ws) => Number((await q(`select (select count(*) from clients where workspace_id = $1) + (select count(*) from tasks where workspace_id = $1)
+  + (select count(*) from invoice_settings where workspace_id = $1) + (select count(*) from invites where workspace_id = $1) as n`, [ws])).rows[0].n)
+const dataBefore = await countIn(ws4)
+const otherBefore = await countIn(ws1)
+
+// What api/account/delete-confirm does for an owner.
+await as(null, `select prepare_workspace_deletion($1)`, [ws4])
+await q(`delete from auth.users where id = $1`, [U4])
+const wsGone = (await q(`select count(*)::int c from workspaces where id = $1`, [ws4])).rows[0].c
+ok(dataBefore > 0 && wsGone === 0 && (await countIn(ws4)) === 0, 'deleting the owner’s account deletes their workspace and all its data')
+const mate = (await q(`select workspace_id, role from profiles where id = $1`, [U6])).rows[0]
+ok(mate && mate.workspace_id === null && mate.role === 'member', 'teammates keep their login but leave the deleted workspace')
+const mateAccess = (await q(`select count(*)::int c from client_members where user_id = $1`, [U6])).rows[0].c
+ok(mateAccess === 0, 'teammates lose access to the deleted workspace’s clients')
+const reqs = (await q(`select count(*)::int c from deletion_requests where user_id = $1`, [U4])).rows[0].c
+ok(reqs === 0, 'pending delete confirmations go with the account')
+ok((await countIn(ws1)) === otherBefore, 'other workspaces are untouched')
+await db.exec(`set role authenticated`)
+const fresh = (await as(U6, `select create_workspace('Mate Co') id`)).rows[0].id
+await db.exec(`reset role`)
+ok(Boolean(fresh), 'a former teammate can start their own workspace')
+
+// A non-owner deleting their account: their work is unassigned, the workspace stays.
+const byU2 = (await q(`select count(*)::int c from tasks where owner_id = $1`, [U2])).rows[0].c
+const tasksBefore = (await q(`select count(*)::int c from tasks where workspace_id = $1`, [ws1])).rows[0].c
+await as(null, `select prepare_member_removal($1)`, [U2])
+await q(`delete from auth.users where id = $1`, [U2])
+const stays = (await q(`select count(*)::int c from workspaces where id = $1`, [ws1])).rows[0].c
+ok(stays === 1, 'a member deleting their account leaves the workspace in place')
+const tasksAfter = (await q(`select count(*)::int c from tasks where workspace_id = $1`, [ws1])).rows[0].c
+ok(byU2 > 0 && tasksAfter === tasksBefore, `tasks a removed member created are kept (${byU2} created by them, ${tasksBefore} → ${tasksAfter})`)
+let ownerBlocked = false
+try { await as(null, `select prepare_member_removal($1)`, [U1]) } catch { ownerBlocked = true }
+ok(ownerBlocked, 'the owner can’t be removed like a member (their account goes with the workspace)')
 
 console.log(failures ? `\n${failures} check(s) failed` : '\nAll schema checks passed')
 process.exit(failures ? 1 : 0)

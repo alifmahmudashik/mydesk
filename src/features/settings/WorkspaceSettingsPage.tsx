@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { CurrencySelect } from '@/components/ui/currency-picker'
-import { Briefcase, CreditCard, Edit3, FileText, Image, Palette, Plus, Trash2, X } from 'lucide-react'
+import { AlertTriangle, Briefcase, CreditCard, Edit3, FileText, LayoutGrid, Plus, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
 import { Topbar, Content, PageHead, Section, SaveBar } from '@/components/ui/layout'
@@ -9,21 +9,18 @@ import { Field } from '@/components/ui/field'
 import { SUPPORTED_CURRENCIES } from '@/lib/currency'
 import { uid } from '@/lib/utils'
 import type { PaymentProfile } from '@/types'
-import { ColorPicker, WorkspaceLogo, isHex } from '@/features/workspace/brand'
-import { uploadLogo } from '@/features/workspace/CreateWorkspacePage'
+import { WorkspaceLogo } from '@/features/workspace/brand'
+import { DeleteSection } from '@/features/workspace/DeleteSection'
+import { useIsOwner } from '@/hooks/usePermissions'
 
 const COLORS = ['#4F46E5', '#0284C7', '#0D9488', '#0F0F14']
 
 export function WorkspaceSettingsPage() {
-  const { invoiceSettings, saveInvoiceSettings, workspace, saveWorkspace, me } = useData()
-  const [uploading, setUploading] = useState(false)
-  const logoRef = useRef<HTMLInputElement>(null)
+  const { invoiceSettings, saveInvoiceSettings, workspace, saveWorkspace } = useData()
+  const isOwner = useIsOwner()
   const initial = useMemo(
     () => ({
       workspace_name: workspace?.name ?? invoiceSettings?.workspace_name ?? '',
-      logo_url: workspace?.logo_url ?? null,
-      logo_color: workspace?.logo_color ?? '',
-      accent_color: workspace?.accent_color ?? '',
       business_name: invoiceSettings?.business_name ?? '',
       email: invoiceSettings?.email ?? '',
       business_address: invoiceSettings?.business_address ?? '',
@@ -47,16 +44,7 @@ export function WorkspaceSettingsPage() {
 
   const save = () => {
     const name = f.workspace_name.trim()
-    if (workspace) {
-      const patch = {
-        name: name || workspace.name,
-        logo_url: f.logo_url,
-        logo_color: isHex(f.logo_color) ? f.logo_color : null,
-        accent_color: isHex(f.accent_color) ? f.accent_color : null,
-      }
-      const changed = (Object.keys(patch) as (keyof typeof patch)[]).some((k) => (patch[k] ?? null) !== (workspace[k] ?? null))
-      if (changed) void saveWorkspace(patch)
-    }
+    if (workspace && name && name !== workspace.name) void saveWorkspace({ name })
     saveInvoiceSettings({
       workspace_name: f.workspace_name.trim() || null,
       business_name: f.business_name.trim() || null,
@@ -79,14 +67,6 @@ export function WorkspaceSettingsPage() {
     setEditing(p.id)
   }
 
-  const pickLogo = async (file: File) => {
-    if (!me) return
-    setUploading(true)
-    const url = await uploadLogo(file, me.id)
-    setUploading(false)
-    if (url) set('logo_url', url)
-  }
-
   const makeDefault = (id: string) => {
     const p = f.payment_profiles.find((x) => x.id === id)
     if (p) set('payment_profiles', [p, ...f.payment_profiles.filter((x) => x.id !== id)])
@@ -98,37 +78,21 @@ export function WorkspaceSettingsPage() {
         <button type="button" className="btn btn-pri" disabled={!dirty} onClick={save}>Save changes</button>
       </Topbar>
       <Content>
-        <PageHead title="Workspace settings" sub="Your workspace branding, and the business details used as the sender on every invoice." />
+        <PageHead title="Workspace settings" sub="Your workspace name, and the business details used as the sender on every invoice." />
         <SettingsLayout
           nav={[
-            { id: 'brand', label: 'Workspace', icon: <Palette className="i i-sm" /> },
+            { id: 'brand', label: 'Workspace', icon: <LayoutGrid className="i i-sm" /> },
             { id: 'business', label: 'Business', icon: <Briefcase className="i i-sm" /> },
             { id: 'payment', label: 'Payment methods', icon: <CreditCard className="i i-sm" /> },
             { id: 'invoice', label: 'Invoice defaults', icon: <FileText className="i i-sm" /> },
+            ...(isOwner ? [{ id: 'delete', label: 'Danger zone', icon: <AlertTriangle className="i i-sm" /> }] : []),
           ]}
         >
-          <Section id="brand" title="Workspace" desc="Your workspace name, logo and colours, as your whole team sees them.">
-            <Field label="Workspace name" hint="Shown at the top of the sidebar."><input className="inp" maxLength={80} placeholder="e.g. analyticsbyte" value={f.workspace_name} onChange={(e) => set('workspace_name', e.target.value)} /></Field>
-            <Field label="Logo">
-              <div className="row wrap" style={{ gap: 12 }}>
-                <WorkspaceLogo workspace={{ name: f.workspace_name || 'W', logo_url: f.logo_url, logo_color: f.logo_color || null }} size={44} />
-                <button type="button" className="btn btn-sm" disabled={uploading} onClick={() => logoRef.current?.click()}>
-                  <Image className="i i-sm" />{uploading ? 'Uploading…' : f.logo_url ? 'Replace logo' : 'Upload logo'}
-                </button>
-                {f.logo_url && <button type="button" className="btn btn-ghost btn-sm" onClick={() => set('logo_url', null)}>Remove</button>}
-                <input ref={logoRef} type="file" className="sr" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(e) => { const file = e.target.files?.[0]; if (file) void pickLogo(file); e.target.value = '' }} />
-              </div>
-            </Field>
-            <Field label="Logo colour" hint={f.logo_url ? 'Shows behind your logo.' : f.logo_color ? 'Without an uploaded logo, the sidebar shows your first letter on this colour.' : 'Not set: the sidebar shows the MyDesk flame.'}>
-              <div className="row wrap" style={{ gap: 10 }}>
-                <ColorPicker label="Logo colour" value={f.logo_color} onChange={(v) => set('logo_color', v)} />
-                {f.logo_color && <button type="button" className="btn btn-ghost btn-sm" onClick={() => set('logo_color', '')}>Reset</button>}
-              </div>
-            </Field>
-            <Field label="Accent colour" hint="Buttons, links and highlights across the app, for everyone in the workspace.">
-              <div className="row wrap" style={{ gap: 10 }}>
-                <ColorPicker label="Accent colour" value={f.accent_color} onChange={(v) => set('accent_color', v)} />
-                {f.accent_color && <button type="button" className="btn btn-ghost btn-sm" onClick={() => set('accent_color', '')}>Reset</button>}
+          <Section id="brand" title="Workspace" desc="What your whole team sees at the top of the sidebar.">
+            <Field label="Workspace name" hint="Your logo is its first letter.">
+              <div className="row" style={{ gap: 10 }}>
+                <WorkspaceLogo workspace={{ name: f.workspace_name || 'W' }} size={38} />
+                <input className="inp grow" maxLength={80} placeholder="e.g. analyticsbyte" value={f.workspace_name} onChange={(e) => set('workspace_name', e.target.value)} />
               </div>
             </Field>
           </Section>
@@ -212,6 +176,7 @@ export function WorkspaceSettingsPage() {
             </div>
             <Field label="Default note"><textarea className="inp" rows={2} value={f.default_note} onChange={(e) => set('default_note', e.target.value)} /></Field>
           </Section>
+          {isOwner && <DeleteSection />}
         </SettingsLayout>
       </Content>
       {dirty && <SaveBar note="Invoice details apply to new invoices" onCancel={() => setF(initial)} onSave={save} />}

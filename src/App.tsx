@@ -12,6 +12,7 @@ import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { HomePage } from '@/features/home/HomePage'
 import { CreateWorkspacePage } from '@/features/workspace/CreateWorkspacePage'
+import { ConfirmDeletePage } from '@/features/workspace/ConfirmDeletePage'
 
 const loadInboxPage = () => import('@/features/inbox/InboxPage')
 const InboxPage = lazy(() => loadInboxPage().then((m) => ({ default: m.InboxPage })))
@@ -96,6 +97,7 @@ function Routed() {
           <Route path="/account" element={<AccountPage />} />
           <Route path="/settings" element={<AdminOnly><WorkspaceSettingsPage /></AdminOnly>} />
           <Route path="/home" element={<HomePage />} />
+          <Route path="/confirm-delete" element={<ConfirmDeletePage />} />
           <Route path="/invite/:token" element={<Navigate to="/" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
@@ -134,7 +136,8 @@ export default function App() {
       isDesktop ||
       location.pathname === '/login' ||
       location.pathname === '/signin' ||
-      location.pathname === '/signup'
+      location.pathname === '/signup' ||
+      location.pathname === '/confirm-delete'
     ) {
       return <LoginPage initialMode={location.pathname === '/signup' ? 'signup' : 'signin'} />
     }

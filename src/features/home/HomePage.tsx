@@ -10,7 +10,7 @@ import {
   Folder,
   ListChecks,
   Monitor,
-  Palette,
+  Shield,
   Users,
 } from 'lucide-react'
 import { BrandLogo } from '@/features/auth/AuthLayout'
@@ -381,12 +381,12 @@ export function HomePage() {
 
           <div className="feature-card">
             <div className="feature-icon-wrap" style={{ color: '#DB2777' }}>
-              <Palette className="i" />
+              <Shield className="i" />
             </div>
-            <h3>Your Brand, Your Workspace</h3>
+            <h3>Private Workspaces</h3>
             <p>
-              Set your workspace name, logo, accent colour and business currency. Each workspace is
-              private: other businesses never see your clients, invoices or team.
+              Every business gets its own workspace. Other businesses never see your clients, invoices or
+              team, and you can export everything at any time.
             </p>
           </div>
         </div>
@@ -467,8 +467,8 @@ export function HomePage() {
           </div>
           <div className="step-card">
             <div className="step-number">Step 2</div>
-            <h3>Set up your workspace</h3>
-            <p>Add your workspace and business name, pick your currency, upload a logo and choose your colours.</p>
+            <h3>Name your workspace</h3>
+            <p>Give it your studio or business name. Add invoice details and payment methods whenever you're ready.</p>
           </div>
           <div className="step-card">
             <div className="step-number">Step 3</div>

@@ -1,7 +1,7 @@
 import { DesktopAppSettings, desktopBridge } from '@/features/settings/DesktopAppSettings'
 import { DesktopNotifSetting } from '@/features/notifications/desktop'
 import { useEffect, useState } from 'react'
-import { Bell, Lock, Monitor, Moon, Palette, Settings, Sun, User } from 'lucide-react'
+import { AlertTriangle, Bell, Lock, Monitor, Moon, Palette, Settings, Sun, User } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
@@ -13,6 +13,7 @@ import { Field, RadioCard, ToggleRow } from '@/components/ui/field'
 import { ProfileFields, draftPatch, profileDraft, type ProfileDraft } from '@/features/team/ProfileFields'
 import { supabase } from '@/lib/supabase'
 import type { NotificationPrefs } from '@/types'
+import { DeleteSection } from '@/features/workspace/DeleteSection'
 
 const DEFAULT_PREFS: Required<NotificationPrefs> = { assigned: true, mentioned: true, comment: false, overdue: true, weekly: true, due_soon: true, access: true }
 
@@ -90,6 +91,7 @@ export function AccountPage() {
             ...(desktopBridge ? [{ id: 'desktop', label: 'Desktop app', icon: <Monitor className="i i-sm" /> }] : []),
             { id: 'appearance', label: 'Appearance', icon: <Palette className="i i-sm" /> },
             { id: 'security', label: 'Password', icon: <Lock className="i i-sm" /> },
+            { id: 'delete', label: 'Delete account', icon: <AlertTriangle className="i i-sm" /> },
           ]}
         >
           <Section id="info" title="Personal info" desc="Shown to teammates on tasks and comments.">
@@ -134,6 +136,7 @@ export function AccountPage() {
               <span className="grow"><b className="m">Workspace settings</b><span className="small muted" style={{ display: 'block' }}>Business details, payment methods and invoice defaults.</span></span>
             </Link>
           )}
+          <DeleteSection />
         </SettingsLayout>
       </Content>
       {dirty && <SaveBar note="Changes apply to your account only" onCancel={() => { setDraft(profileDraft(me)); setPrefs({ ...DEFAULT_PREFS, ...(me.notification_prefs ?? {}) }) }} onSave={save} />}

@@ -76,8 +76,10 @@ Without this, emails still go out, but only once a day.
 
 ### 5. Sign in
 
-1. Open your app and click **Get started** to create an account. Anyone can sign up: each new account sets up its own workspace (name, business name, currency, logo and colours) and becomes its **owner**. Workspaces never see each other's data. People you invite join your workspace instead.
-2. Sidebar → your name → **Workspace settings**: change the workspace name, logo and colours, and add your business address and payment methods (used on invoices).
+1. Open your app and click **Get started** to create an account. Anyone can sign up: each new account names its own workspace and becomes its **owner**. Workspaces never see each other's data. People you invite join your workspace instead.
+2. Sidebar → your name → **Workspace settings**: rename the workspace, and add your business name, address, currency and payment methods (used on invoices).
+
+**Deleting.** An owner's account and their workspace are one thing: deleting either deletes both, with every client, project, task, invoice and file in it. Teammates keep their logins but leave the workspace. Anyone else can delete just their own account; their work stays. Deleting is in **Profile & preferences → Delete account** (and Workspace settings for owners) and takes four steps: download a data export, type the workspace name (or your email), open the single-use link we email you (with the export attached; it expires in 30 minutes), and type it once more.
 
 Upgrading from the single-team version: run `schema.sql` again. The first run moves the existing owner, team and all data into one workspace owned by that owner. Nothing is deleted.
 3. Test it: **Team → Invite member** with another email of yours. The invite should arrive within seconds.

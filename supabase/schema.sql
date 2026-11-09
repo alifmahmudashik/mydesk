@@ -177,17 +177,24 @@ create table if not exists invoices (
   created_at timestamptz not null default now()
 );
 
--- A workspace: one business with its own team, clients and data. Branding colours
--- are #RRGGBB only (they go straight into the page's CSS).
+-- A workspace: one business with its own team, clients and data. It belongs to its
+-- owner's account: deleting that account deletes the workspace and everything in it
+-- (teammates keep their logins but leave the workspace).
 create table if not exists workspaces (
   id uuid primary key default gen_random_uuid(),
   name text not null,
-  owner_id uuid references auth.users (id) on delete set null,
-  logo_url text,
-  logo_color text check (logo_color is null or logo_color ~ '^#[0-9A-Fa-f]{6}$'),
-  accent_color text check (accent_color is null or accent_color ~ '^#[0-9A-Fa-f]{6}$'),
+  owner_id uuid references auth.users (id) on delete cascade,
   created_at timestamptz not null default now()
 );
+
+-- Earlier versions: logo upload and colours were removed, and the owner link now
+-- cascades instead of leaving an ownerless workspace behind.
+alter table workspaces drop column if exists logo_url;
+alter table workspaces drop column if exists logo_color;
+alter table workspaces drop column if exists accent_color;
+alter table workspaces drop constraint if exists workspaces_owner_id_fkey;
+alter table workspaces add constraint workspaces_owner_id_fkey
+  foreign key (owner_id) references auth.users (id) on delete cascade;
 
 -- Private config (app URL + shared secret for instant email delivery, migration flags).
 create schema if not exists app_private;
@@ -1259,6 +1266,7 @@ create trigger client_members_after_insert after insert on client_members
 -- Removing a member: unassign their work first; the server then deletes the login.
 create or replace function public.prepare_member_removal(p_user uuid) returns void
 language plpgsql security definer set search_path = public as $$
+declare v_owner uuid; t text;
 begin
   if exists (select 1 from profiles where id = p_user and role = 'owner') then
     raise exception 'The owner cannot be removed';
@@ -1267,6 +1275,16 @@ begin
   update tasks set assignee_id = null where assignee_id = p_user;
   update subtasks set assignee_id = null where assignee_id = p_user;
   delete from client_members where user_id = p_user;
+  -- Rows record who created them (owner_id), and deleting a login deletes its rows.
+  -- Hand everything this person created to the workspace owner so the work stays.
+  select w.owner_id into v_owner from profiles p join workspaces w on w.id = p.workspace_id where p.id = p_user;
+  if v_owner is not null then
+    foreach t in array array[
+      'clients','projects','tasks','access_items','payments','project_notes','activity_log','invoice_settings','invoices'
+    ] loop
+      execute format('update %I set owner_id = $1 where owner_id = $2', t) using v_owner, p_user;
+    end loop;
+  end if;
 end $$;
 revoke execute on function public.prepare_member_removal(uuid) from public, anon, authenticated;
 
@@ -1706,20 +1724,15 @@ create policy "workspaces_admin_update" on workspaces for update
   with check (id = my_workspace_id() and is_admin());
 -- No insert/delete policies: workspaces are only created through create_workspace().
 
--- Sign-up step 2: a new person creates their workspace and becomes its owner.
-create or replace function public.create_workspace(
-  p_name text,
-  p_business_name text default null,
-  p_currency text default 'USD',
-  p_logo_color text default null,
-  p_accent_color text default null,
-  p_logo_url text default null
-) returns uuid
+-- Sign-up step 2: a new person names their workspace and becomes its owner.
+-- (Older versions took business name, currency, logo and colours too.)
+drop function if exists public.create_workspace(text, text, text, text, text, text);
+create or replace function public.create_workspace(p_name text) returns uuid
 language plpgsql security definer set search_path = public as $$
-declare v_uid uuid := auth.uid(); v_ws uuid; v_email text;
+declare v_uid uuid := auth.uid(); v_ws uuid; v_email text; v_name text := left(trim(coalesce(p_name, '')), 80);
 begin
   if v_uid is null then raise exception 'Sign in first'; end if;
-  if coalesce(trim(p_name), '') = '' then raise exception 'Give your workspace a name'; end if;
+  if v_name = '' then raise exception 'Give your workspace a name'; end if;
   -- Profiles are made at sign-up; this covers anyone whose sign-up predates the trigger.
   insert into profiles (id, email, display_name, role)
   select u.id, coalesce(u.email, ''), split_part(coalesce(u.email, 'user'), '@', 1), 'member'
@@ -1729,22 +1742,53 @@ begin
     raise exception 'You already belong to a workspace';
   end if;
 
-  insert into workspaces (name, owner_id, logo_color, accent_color, logo_url)
-  values (left(trim(p_name), 80), v_uid, nullif(p_logo_color, ''), nullif(p_accent_color, ''), nullif(p_logo_url, ''))
-  returning id into v_ws;
+  insert into workspaces (name, owner_id) values (v_name, v_uid) returning id into v_ws;
 
   perform set_config('mydesk.system', 'on', true);
   update profiles set workspace_id = v_ws, role = 'owner' where id = v_uid;
   perform set_config('mydesk.system', 'off', true);
 
   select email into v_email from profiles where id = v_uid;
-  insert into invoice_settings (owner_id, workspace_id, workspace_name, business_name, email, default_currency, brand_color)
-  values (v_uid, v_ws, left(trim(p_name), 80), nullif(trim(coalesce(p_business_name, '')), ''), nullif(v_email, ''),
-          coalesce(nullif(upper(trim(coalesce(p_currency, ''))), ''), 'USD'), nullif(p_accent_color, ''));
+  insert into invoice_settings (owner_id, workspace_id, workspace_name, email)
+  values (v_uid, v_ws, v_name, nullif(v_email, ''));
   return v_ws;
 end $$;
-revoke execute on function public.create_workspace(text, text, text, text, text, text) from public, anon;
-grant execute on function public.create_workspace(text, text, text, text, text, text) to authenticated;
+revoke execute on function public.create_workspace(text) from public, anon;
+grant execute on function public.create_workspace(text) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Deleting an account or a workspace. Done by the server (api/account/*) after
+-- an export, a typed confirmation and a single-use link sent by email.
+-- ---------------------------------------------------------------------------
+
+-- Pending "delete" confirmations. Only the token's hash is stored. No RLS policies:
+-- only the server (service role) reads or writes it.
+create table if not exists deletion_requests (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  kind text not null check (kind in ('account','workspace')),
+  workspace_id uuid references workspaces (id) on delete cascade,
+  token_hash text not null unique,
+  expires_at timestamptz not null,
+  used_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_deletion_requests_user on deletion_requests (user_id, created_at desc);
+alter table deletion_requests enable row level security;
+
+-- Server-only, before the owner's login is deleted (which deletes the workspace and,
+-- through it, every row in it): teammates leave the workspace and lose its inbox items.
+create or replace function public.prepare_workspace_deletion(p_ws uuid) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  delete from notifications where user_id in (select id from profiles where workspace_id = p_ws);
+  delete from client_members where client_id in (select id from clients where workspace_id = p_ws);
+  perform set_config('mydesk.system', 'on', true);
+  update profiles set workspace_id = null, role = 'member'
+  where workspace_id = p_ws and id is distinct from (select owner_id from workspaces where id = p_ws);
+  perform set_config('mydesk.system', 'off', true);
+end $$;
+revoke execute on function public.prepare_workspace_deletion(uuid) from public, anon, authenticated;
 
 -- Someone who signed up before being invited: show the open invite for their email
 -- on the "set up your workspace" screen so they can join instead.

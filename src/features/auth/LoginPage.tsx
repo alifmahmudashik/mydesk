@@ -11,7 +11,7 @@ type Mode = 'signin' | 'forgot' | 'signup'
 const COPY: Record<Mode, { title: string; sub: string; submit: string }> = {
   signin: { title: 'Welcome back', sub: 'Sign in to your workspace.', submit: 'Sign in' },
   forgot: { title: 'Reset your password', sub: 'We’ll email you a link to set a new one.', submit: 'Send reset link' },
-  signup: { title: 'Create your account', sub: 'Next you’ll set up your workspace: its name, currency, logo and colours.', submit: 'Create account' },
+  signup: { title: 'Create your account', sub: 'Next you’ll name your workspace.', submit: 'Create account' },
 }
 
 export function LoginPage({ initialMode = 'signin' }: { initialMode?: Mode } = {}) {

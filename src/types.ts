@@ -205,17 +205,12 @@ export interface Profile {
   created_at: string
 }
 
-/** One business's space (its team, clients and data) and its branding. */
+/** One business's space: its team, clients and data. */
 export interface Workspace {
   id: string
   name: string
+  /** The owner's account. Deleting it deletes the workspace too. */
   owner_id?: string | null
-  /** Uploaded logo. Without one, the sidebar shows the workspace's first letter. */
-  logo_url?: string | null
-  /** Background of the logo tile (#RRGGBB). */
-  logo_color?: string | null
-  /** Buttons, links and highlights across the app (#RRGGBB). */
-  accent_color?: string | null
   created_at: string
 }
 
