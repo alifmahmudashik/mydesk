@@ -78,8 +78,15 @@ const quote = (text: string) =>
 
 type Payload = Record<string, unknown>
 
+/** "@[Alif](4ba4…) please check" -> "@Alif please check". A token cut off at the end is dropped. */
+export function plainMentionText(text: string) {
+  return text.replace(/@\[([^\]]+)\]\([^)]*\)/g, '@$1').replace(/@\[[^\]]*\]?\(?[^)\s]*$/, '').trim()
+}
+
 /** Builds subject/html/text for a queued outbox email. */
-export function renderTemplate(template: string, p: Payload): { subject: string; html: string; text: string } {
+export function renderTemplate(template: string, raw: Payload): { subject: string; html: string; text: string } {
+  // Comments store mentions as @[Name](user-id); emails show them as @Name.
+  const p: Payload = typeof raw.excerpt === 'string' ? { ...raw, excerpt: plainMentionText(raw.excerpt) } : raw
   const link = (path: unknown) => `${env.appUrl}${String(path ?? '/')}`
   const actor = esc(p.actor ?? 'Someone')
   const title = esc(p.title)

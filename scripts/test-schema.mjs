@@ -126,6 +126,8 @@ n = await q(`select type, emailed from notifications where user_id = $1 and type
 ok(n.rows.length === 1 && n.rows[0].emailed, 'mention creates notification + email')
 n = await q(`select count(*)::int c from notifications where user_id = $1 and type = 'comment'`, [U1])
 ok(n.rows[0].c === 0, 'mentioned person is not double-notified as a plain comment')
+n = await q(`select excerpt from notifications where user_id = $1 and type = 'mentioned'`, [U1])
+ok(n.rows[0].excerpt === 'hey @Owner', 'mention codes become @Name in the notification text')
 
 // RLS: member can read their own notifications only, can't read the outbox.
 await db.exec(`grant usage on schema public to authenticated; grant all on all tables in schema public to authenticated;`)

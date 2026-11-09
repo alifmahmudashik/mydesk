@@ -855,7 +855,8 @@ declare v_task record; v_uid uuid; v_excerpt text;
 begin
   select t.id, t.title, t.project_id, t.assignee_ids, t.created_by, p.title as project_title into v_task
   from tasks t join projects p on p.id = t.project_id where t.id = new.task_id;
-  v_excerpt := left(regexp_replace(new.body, '<[^>]+>', '', 'g'), 240);
+  -- Strip HTML and turn @[Name](user-id) mention codes into @Name, then cut to length.
+  v_excerpt := left(regexp_replace(regexp_replace(new.body, '<[^>]+>', '', 'g'), '@\[([^]]+)\]\([^)]*\)', '@\1', 'g'), 240);
 
   foreach v_uid in array coalesce(new.mentions, '{}') loop
     if v_uid is distinct from new.author_id then
@@ -891,7 +892,7 @@ language plpgsql security definer set search_path = public as $$
 declare v_title text; v_uid uuid; v_excerpt text;
 begin
   select title into v_title from projects where id = new.project_id;
-  v_excerpt := left(regexp_replace(new.note, '<[^>]+>', '', 'g'), 240);
+  v_excerpt := left(regexp_replace(regexp_replace(new.note, '<[^>]+>', '', 'g'), '@\[([^]]+)\]\([^)]*\)', '@\1', 'g'), 240);
   foreach v_uid in array coalesce(new.mentions, '{}') loop
     if v_uid is distinct from new.author_id then
       perform notify(v_uid, 'mentioned_note', new.author_id, 'project', new.project_id, new.project_id,

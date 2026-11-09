@@ -28,7 +28,8 @@ export function TaskCreateModal({ open, onClose, defaults = {} }: Props) {
     title: '',
     description: '',
     project_id: defaults.project_id ?? openProjects[0]?.id ?? '',
-    assignee_ids: (defaults.assignee_id === undefined ? (me?.id ? [me.id] : []) : defaults.assignee_id ? [defaults.assignee_id] : []) as string[],
+    // Start unassigned; pick people yourself (a caller can still pre-fill someone).
+    assignee_ids: (defaults.assignee_id ? [defaults.assignee_id] : []) as string[],
     status: defaults.status ?? ('todo' as TaskStatus),
     priority: 'medium' as Priority,
     due_date: defaults.due_date ?? '',
