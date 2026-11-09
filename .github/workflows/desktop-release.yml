@@ -16,13 +16,24 @@ jobs:
     defaults:
       run:
         working-directory: desktop
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: npm ci
-      - name: Build and publish
-        run: npx electron-builder --win --publish always
+      - name: Build the installer
+        run: npx electron-builder --win --publish never
+      - name: Publish the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          gh release create "v$VERSION" \
+            "release/MyDesk-Setup-$VERSION.exe" \
+            "release/MyDesk-Setup-$VERSION.exe.blockmap" \
+            release/latest.yml \
+            --target "$GITHUB_SHA" \
+            --title "MyDesk for Windows $VERSION" \
+            --notes-file ../.github/desktop-release-notes.md
