@@ -2,7 +2,7 @@
 
 Client and project management for freelancers and small agencies. Clients, projects, tasks with comments and @mentions, an inbox, payments, branded invoices, analytics, team learning, and a team with per-client access. Runs in the browser and as a Windows app.
 
-**Live app:** https://mydesk.alifmahmud.com · **Windows app:** [latest release](https://github.com/alifmahmudashik/mydesk-v2/releases/latest)
+**Live app:** https://mydesk.alifmahmud.com · **Windows app:** [latest release](https://github.com/alifmahmudashik/mydesk/releases/latest)
 
 ## How it fits together
 
@@ -101,7 +101,7 @@ Most updates need nothing from you:
 
 It opens the live site in its own window, with the MyDesk icon and no browser bars, so it always shows the latest deployed version.
 
-**Install:** download `MyDesk-Setup-x.y.z.exe` from [Releases](https://github.com/alifmahmudashik/mydesk-v2/releases/latest) and double-click it. If Windows says "Windows protected your PC", click **More info → Run anyway** (the installer isn't code-signed).
+**Install:** download `MyDesk-Setup-x.y.z.exe` from [Releases](https://github.com/alifmahmudashik/mydesk/releases/latest) and double-click it. If Windows says "Windows protected your PC", click **More info → Run anyway** (the installer isn't code-signed).
 
 **Release a new version** (only when `desktop/` changes):
 
