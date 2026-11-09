@@ -1,4 +1,5 @@
 import { EditorContent, useEditor, type Editor, ReactNodeViewRenderer, NodeViewWrapper, NodeViewContent, type ReactNodeViewProps } from '@tiptap/react'
+import type { EditorView } from '@tiptap/pm/view'
 import StarterKit from '@tiptap/starter-kit'
 import CodeBlock from '@tiptap/extension-code-block'
 import LinkExtension from '@tiptap/extension-link'
@@ -36,31 +37,32 @@ function promptForLink(editor: Editor) {
   editor.chain().focus().extendMarkRange('link').setLink({ href: url.trim() }).run()
 }
 
-/** Custom CodeBlock node view with auto language detection, auto-beautification, and Quick Copy button. */
-function CodeBlockView({ node, editor, getPos, updateAttributes }: ReactNodeViewProps) {
-  const [copied, setCopied] = useState(false)
+/** Beautifies every code block in one transaction (positions are mapped, so several blocks are safe). */
+function beautifyCodeBlocks(view: EditorView, addToHistory = true) {
+  const { state } = view
+  const tr = state.tr
+  state.doc.descendants((node, pos) => {
+    if (node.type.name !== 'codeBlock') return true
+    const text = node.textContent
+    if (!text.trim()) return false
+    const { code, language } = beautifyCode(text)
+    const at = tr.mapping.map(pos)
+    if (code !== text) tr.replaceWith(at + 1, at + 1 + node.content.size, state.schema.text(code))
+    const lang = language === 'text' ? null : language
+    if (node.attrs.language !== lang) tr.setNodeMarkup(at, undefined, { ...node.attrs, language: lang })
+    return false
+  })
+  if (!tr.docChanged) return
+  if (!addToHistory) tr.setMeta('addToHistory', false)
+  view.dispatch(tr)
+}
 
+/** Code block with a detected-language label and a one-click Copy button. */
+function CodeBlockView({ node }: ReactNodeViewProps) {
+  const [copied, setCopied] = useState(false)
   const text = node.textContent
   const detected = detectLanguage(text)
-  const lang = (node.attrs.language as string) || (detected !== 'text' ? detected : 'code')
-
-  // Automatically beautify on mount if the code has irregular spacing or un-indented blocks
-  useEffect(() => {
-    if (!text || !text.trim()) return
-    const res = beautifyCode(text, node.attrs.language as string)
-    if (res.code !== text) {
-      const pos = typeof getPos === 'function' ? getPos() : null
-      if (pos !== null) {
-        const from = pos + 1
-        const to = pos + node.nodeSize - 1
-        const tr = editor.state.tr.replaceWith(from, to, editor.schema.text(res.code))
-        if (res.language && res.language !== 'text') {
-          updateAttributes({ language: res.language })
-        }
-        editor.view.dispatch(tr)
-      }
-    }
-  }, []) // run once on mount
+  const lang = detected === 'text' ? 'code' : detected
 
   const handleCopy = () => {
     if (!text) return
@@ -74,12 +76,7 @@ function CodeBlockView({ node, editor, getPos, updateAttributes }: ReactNodeView
       <div className="code-block-header" contentEditable={false}>
         <span className="code-block-lang">{lang.toUpperCase()}</span>
         <div className="code-block-actions">
-          <button
-            type="button"
-            className="code-action-btn"
-            onClick={handleCopy}
-            title="Quick copy code to clipboard"
-          >
+          <button type="button" className="code-action-btn" onClick={handleCopy} title="Copy code to clipboard">
             {copied ? <Check className="i i-xs" /> : <Copy className="i i-xs" />}
             <span>{copied ? 'Copied!' : 'Copy'}</span>
           </button>
@@ -124,42 +121,20 @@ export function RichText({ defaultValue, onSave, placeholder = 'Write somethingâ
     editorProps: {
       attributes: { 'aria-label': ariaLabel },
       handlePaste: (view, event) => {
-        const { state } = view
-        const { selection } = state
-        const node = selection.$from.node()
-        // If pasting directly inside an active codeBlock, auto-beautify the code on the fly!
-        if (node && node.type.name === 'codeBlock') {
-          const text = event.clipboardData?.getData('text/plain')
-          if (text) {
-            event.preventDefault()
-            const { code: formatted } = beautifyCode(text)
-            const tr = state.tr.replaceSelectionWith(state.schema.text(formatted))
-            view.dispatch(tr)
-            return true
-          }
-        }
-        return false
+        // Pasting into a code block: insert as plain text, then tidy the block.
+        if (view.state.selection.$from.parent.type.name !== 'codeBlock') return false
+        const text = event.clipboardData?.getData('text/plain')
+        if (!text) return false
+        event.preventDefault()
+        view.dispatch(view.state.tr.insertText(text))
+        beautifyCodeBlocks(view)
+        return true
       },
     },
+    // Tidy stored code on load without adding an undo step; it's saved on the next blur.
+    onCreate: ({ editor }) => beautifyCodeBlocks(editor.view, false),
     onBlur: ({ editor }) => {
-      // Auto-beautify any code blocks in the document before saving
-      let tr = editor.state.tr
-      let modified = false
-      editor.state.doc.descendants((node, pos) => {
-        if (node.type.name === 'codeBlock') {
-          const codeText = node.textContent
-          if (codeText.trim()) {
-            const res = beautifyCode(codeText, node.attrs.language as string)
-            if (res.code !== codeText) {
-              tr = tr.replaceWith(pos + 1, pos + node.nodeSize - 1, editor.schema.text(res.code))
-              modified = true
-            }
-          }
-        }
-      })
-      if (modified) {
-        editor.view.dispatch(tr)
-      }
+      beautifyCodeBlocks(editor.view)
       const html = editor.isEmpty ? '' : editor.getHTML()
       if (html === lastSaved.current) return
       lastSaved.current = html
@@ -181,28 +156,20 @@ export function RichText({ defaultValue, onSave, placeholder = 'Write somethingâ
   const ago = savedAt ? Math.floor((Date.now() - savedAt) / 60000) : null
 
   const toggleCodeBlock = () => {
-    if (editor.isActive('codeBlock')) {
+    const { from, to } = editor.state.selection
+    const selectedText = editor.state.doc.textBetween(from, to, '\n')
+    if (editor.isActive('codeBlock') || !selectedText.trim()) {
       editor.chain().focus().toggleCodeBlock().run()
-    } else {
-      // If text was selected when toggling into codeBlock, auto-beautify it
-      const { from, to } = editor.state.selection
-      const selectedText = editor.state.doc.textBetween(from, to, '\n')
-      if (selectedText.trim()) {
-        const { code: formatted, language } = beautifyCode(selectedText)
-        editor
-          .chain()
-          .focus()
-          .deleteRange({ from, to })
-          .insertContent({
-            type: 'codeBlock',
-            attrs: { language },
-            content: [{ type: 'text', text: formatted }],
-          })
-          .run()
-      } else {
-        editor.chain().focus().toggleCodeBlock().run()
-      }
+      return
     }
+    // Turn the whole selection (even several paragraphs) into one code block.
+    editor
+      .chain()
+      .focus()
+      .deleteRange({ from, to })
+      .insertContent({ type: 'codeBlock', content: [{ type: 'text', text: selectedText }] })
+      .run()
+    beautifyCodeBlocks(editor.view)
   }
 
   return (
@@ -243,65 +210,56 @@ export function RichText({ defaultValue, onSave, placeholder = 'Write somethingâ
   )
 }
 
+const ICON_ATTRS = 'class="i i-xs" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+const COPY_ICON = `<svg ${ICON_ATTRS}><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`
+const CHECK_ICON = `<svg ${ICON_ATTRS}><polyline points="20 6 9 17 4 12"/></svg>`
+
 /** Read-only render of stored description HTML (or legacy plain text). */
 export function RichView({ html, className }: { html?: string | null; className?: string }) {
   const ref = useRef<HTMLDivElement>(null)
 
+  // Give each stored code block the same tidy formatting, language label and Copy button as the editor.
   useEffect(() => {
     if (!ref.current) return
-    const pres = ref.current.querySelectorAll('pre')
-    pres.forEach((pre) => {
+    ref.current.querySelectorAll('pre').forEach((pre) => {
       if (pre.dataset.enhanced) return
       pre.dataset.enhanced = 'true'
 
-      const codeEl = pre.querySelector('code')
-      const rawText = codeEl?.innerText || pre.innerText || ''
+      const codeEl = pre.querySelector('code') ?? pre
+      const rawText = codeEl.textContent ?? ''
       if (!rawText.trim()) return
 
-      // Auto-beautify stored code with proper line breaks and indentation
-      const beautified = beautifyCode(rawText)
-      if (codeEl) codeEl.innerText = beautified.code
-      else pre.innerText = beautified.code
+      const { code, language } = beautifyCode(rawText)
+      codeEl.textContent = code
 
-      const lang = beautified.language !== 'text' ? beautified.language : detectLanguage(beautified.code)
+      const label = document.createElement('span')
+      label.className = 'code-block-lang'
+      label.textContent = (language === 'text' ? 'code' : language).toUpperCase()
 
+      const copyBtn = document.createElement('button')
+      copyBtn.type = 'button'
+      copyBtn.className = 'code-action-btn'
+      copyBtn.title = 'Copy code to clipboard'
+      copyBtn.innerHTML = `${COPY_ICON}<span>Copy</span>`
+      copyBtn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        void navigator.clipboard.writeText(code)
+        copyBtn.innerHTML = `${CHECK_ICON}<span>Copied!</span>`
+        setTimeout(() => (copyBtn.innerHTML = `${COPY_ICON}<span>Copy</span>`), 2000)
+      })
+
+      const actions = document.createElement('div')
+      actions.className = 'code-block-actions'
+      actions.append(copyBtn)
       const header = document.createElement('div')
       header.className = 'code-block-header'
-      header.innerHTML = `
-        <span class="code-block-lang">${(lang || 'code').toUpperCase()}</span>
-        <div class="code-block-actions">
-          <button type="button" class="code-action-btn copy-btn" title="Quick copy code">
-            <svg class="i i-xs" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-            <span>Copy</span>
-          </button>
-        </div>
-      `
-      const copyBtn = header.querySelector('.copy-btn') as HTMLButtonElement | null
-      copyBtn?.addEventListener('click', (e) => {
-        e.stopPropagation()
-        void navigator.clipboard.writeText(beautified.code)
-        if (copyBtn) {
-          copyBtn.innerHTML = `
-            <svg class="i i-xs" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-            <span>Copied!</span>
-          `
-        }
-        setTimeout(() => {
-          if (copyBtn) {
-            copyBtn.innerHTML = `
-              <svg class="i i-xs" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-              <span>Copy</span>
-            `
-          }
-        }, 2000)
-      })
+      header.append(label, actions)
 
       pre.classList.add('code-block-pre')
       const wrapper = document.createElement('div')
       wrapper.className = 'code-block-wrapper'
-      pre.parentNode?.insertBefore(wrapper, pre)
-      wrapper.appendChild(header)
-      wrapper.appendChild(pre)
+      pre.before(wrapper)
+      wrapper.append(header, pre)
     })
   }, [html])
 

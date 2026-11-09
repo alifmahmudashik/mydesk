@@ -1,279 +1,248 @@
 /**
- * Code detection & auto-beautification utility.
- * Normalizes line breaks, eliminates excessive blank lines (like double-spaced pastes),
- * fixes bracket indentation (2 spaces), and formats object/code syntax.
+ * Code block language detection and auto-beautification.
+ *
+ * This runs automatically (on paste, load and blur), so it must never change what code means.
+ * Only JSON, JS-like code, CSS and HTML get re-indented. Everything else (Python, shell, SQL,
+ * YAML, plain text) keeps its own indentation and only gets whitespace tidied.
+ * Every formatter is idempotent: running it twice gives the same result as running it once.
  */
 
-export function detectLanguage(code: string): string {
+export type CodeLanguage = 'json' | 'html' | 'css' | 'sql' | 'python' | 'bash' | 'javascript' | 'text'
+
+export function detectLanguage(code: string): CodeLanguage {
   const trimmed = code.trim()
   if (!trimmed) return 'text'
 
-  // JSON detection
-  if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+  if (/^[{[]/.test(trimmed) && /[}\]]$/.test(trimmed)) {
     try {
       JSON.parse(trimmed)
       return 'json'
     } catch {
-      // Might be JS object literal
+      // Probably a JS object literal; keep checking.
     }
   }
 
-  // HTML / XML detection
-  if (
-    /^<(!DOCTYPE|[a-zA-Z1-6]+(\s+[^>]*>|>))[\s\S]*>$/i.test(trimmed) ||
-    /<\/(div|p|span|a|ul|li|table|html|body|head|script|style)>/i.test(trimmed)
-  ) {
+  if (/^<(!DOCTYPE|[a-zA-Z][a-zA-Z0-9-]*)(\s[^>]*)?\/?>/i.test(trimmed) || /<\/(div|p|span|a|ul|ol|li|table|tr|td|html|body|head|script|style|section|button)>/i.test(trimmed)) {
     return 'html'
   }
 
-  // SQL detection
-  if (/^\s*(SELECT|INSERT\s+INTO|UPDATE|DELETE\s+FROM|CREATE\s+TABLE|ALTER\s+TABLE|DROP\s+TABLE|WITH)\s+/i.test(trimmed)) {
+  if (/^\s*(SELECT|INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|CREATE\s+TABLE|ALTER\s+TABLE|DROP\s+TABLE|WITH\s+\w+\s+AS)\b/i.test(trimmed)) {
     return 'sql'
   }
 
-  // CSS detection
-  if (/^[.#a-zA-Z0-9_\-\s,:]+\{\s*[a-zA-Z\-]+\s*:[^;]+;/m.test(trimmed)) {
-    return 'css'
-  }
-
-  // Python detection
-  if (/^\s*(def\s+\w+\(.*\):|import\s+\w+|from\s+\w+\s+import|class\s+\w+.*:|if\s+__name__\s*==)/m.test(trimmed)) {
+  if (/^\s*(def\s+\w+\s*\(.*\)\s*(->.*)?:|class\s+\w+.*:|from\s+[\w.]+\s+import\s|import\s+\w+\s*$|if\s+__name__\s*==|(elif|for|while|with)\s.*:\s*$|else:\s*$|print\()/m.test(trimmed)) {
     return 'python'
   }
 
-  // Shell / Bash detection
-  if (
-    /^\s*(npm|pnpm|yarn|npx|bun|curl|git|docker|echo|cd|mkdir|rm|export|cat)\s+/m.test(trimmed) ||
-    /^\s*\$\s+[a-z]/m.test(trimmed)
-  ) {
+  if (/^[.#:@a-zA-Z0-9_\-\s,>*[\]="']+\{\s*[a-zA-Z-]+\s*:[^;{}]+;/m.test(trimmed) && !/\b(function|const|let|var|=>)\b/.test(trimmed)) {
+    return 'css'
+  }
+
+  if (/^\s*(npm|pnpm|yarn|npx|bun|curl|wget|git|docker|sudo|apt|brew|echo|cd|ls|mkdir|rm|cp|mv|export|cat|chmod)\s/m.test(trimmed) || /^\s*\$\s+\S/m.test(trimmed) || /^#!\/bin\//.test(trimmed)) {
     return 'bash'
   }
 
-  // JavaScript / TypeScript detection
   if (
-    /dataLayer\.push|console\.log|const\s+\w+|let\s+\w+|var\s+\w+|function\s*\(|function\s+\w+|import\s+.*from|export\s+(default\s+)?|=>/m.test(trimmed) ||
-    /^[a-zA-Z_$][a-zA-Z0-9_$]*\s*:\s*[{["'0-9a-zA-Z]/m.test(trimmed) ||
-    /^[a-zA-Z_$][a-zA-Z0-9_$]*\(/m.test(trimmed)
+    /dataLayer\.push|gtag\(|fbq\(|console\.\w+\(|\b(const|let|var)\s+[\w$]+|\bfunction\b|\bimport\s.*\bfrom\b|\bexport\s|=>|document\.|window\./.test(trimmed) ||
+    /^[\w$.]+\s*\(.*[)({]\s*;?$/m.test(trimmed)
   ) {
     return 'javascript'
   }
 
-  return 'javascript'
+  return 'text'
 }
 
-export function beautifyCode(rawCode: string, explicitLang?: string): { code: string; language: string } {
-  if (!rawCode || !rawCode.trim()) return { code: rawCode, language: 'text' }
+export function beautifyCode(rawCode: string): { code: string; language: CodeLanguage } {
+  const language = detectLanguage(rawCode)
+  if (!rawCode.trim()) return { code: rawCode, language }
 
-  const lang = explicitLang && explicitLang !== 'null' ? explicitLang : detectLanguage(rawCode)
+  switch (language) {
+    case 'json':
+      try {
+        return { code: JSON.stringify(JSON.parse(rawCode.trim()), null, 2), language }
+      } catch {
+        return { code: beautifyJs(rawCode), language }
+      }
+    case 'javascript':
+      return { code: beautifyJs(rawCode), language }
+    case 'css':
+      return { code: beautifyCss(rawCode), language }
+    case 'html':
+      return { code: beautifyHtml(rawCode), language }
+    default:
+      // Indentation can carry meaning here (Python, YAML) or be deliberate, so keep it.
+      return { code: tidyLines(rawCode), language }
+  }
+}
 
-  if (lang === 'json') {
-    try {
-      const parsed = JSON.parse(rawCode.trim())
-      return { code: JSON.stringify(parsed, null, 2), language: 'json' }
-    } catch {
-      // Fall through to JS formatter
+/**
+ * Whitespace-only cleanup that keeps each line's indentation: normalises line endings, strips
+ * trailing spaces, removes the blank line after every line that web/GTM copies add, and
+ * squeezes runs of blank lines down to one.
+ */
+function tidyLines(code: string): string {
+  const lines = splitLines(code).map((l) => l.replace(/\s+$/, ''))
+  const doubleSpaced = isDoubleSpaced(lines)
+  const out: string[] = []
+  for (const line of lines) {
+    if (line === '') {
+      if (doubleSpaced) continue
+      if (out.length && out[out.length - 1] !== '') out.push('')
+    } else {
+      out.push(line)
     }
   }
+  while (out.length && out[out.length - 1] === '') out.pop()
+  return out.join('\n')
+}
 
-  if (lang === 'html') {
-    return { code: beautifyHtml(rawCode), language: 'html' }
+function splitLines(code: string): string[] {
+  return code.replace(/\r\n?/g, '\n').split('\n')
+}
+
+/** True when nearly every line is followed by a blank one (typical of copied web code). */
+function isDoubleSpaced(lines: string[]): boolean {
+  const nonEmpty = lines.filter((l) => l.trim()).length
+  const empty = lines.length - nonEmpty
+  return nonEmpty > 2 && empty / nonEmpty >= 0.7
+}
+
+/** The brackets on one line, in order, ignoring strings and // comments. */
+function brackets(line: string): string[] {
+  let quote: string | null = null
+  const found: string[] = []
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (quote) {
+      if (ch === '\\') i++
+      else if (ch === quote) quote = null
+      continue
+    }
+    if (ch === '"' || ch === "'" || ch === '`') quote = ch
+    else if (ch === '/' && line[i + 1] === '/') break
+    else if ('{[()]}'.includes(ch)) found.push(ch)
   }
-
-  if (lang === 'css') {
-    return { code: beautifyCss(rawCode), language: 'css' }
-  }
-
-  if (lang === 'sql') {
-    return { code: beautifySql(rawCode), language: 'sql' }
-  }
-
-  return { code: beautifyJs(rawCode), language: lang }
+  return found
 }
 
 function beautifyJs(code: string): string {
-  // Normalize line breaks
-  const rawLines = code.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
+  const tidied = tidyLines(code)
+  // Re-indenting would change multi-line strings and block comments, so leave those alone.
+  if (/`[^`]*\n[^`]*`/.test(tidied) || /\/\*[\s\S]*\n[\s\S]*\*\//.test(tidied)) return tidied
 
-  // Check if code has excessive double-spacing (e.g. pasted from web where every other line is empty)
-  const nonEmptyCount = rawLines.filter((l) => l.trim().length > 0).length
-  const emptyCount = rawLines.filter((l) => l.trim().length === 0).length
-  const isPastedDoubleSpaced = nonEmptyCount > 2 && emptyCount / nonEmptyCount > 0.35
+  const lines = tidied.split('\n').map((l) => l.trim())
+  // No multi-line brackets means indentation is the user's own (or meaningful): keep it.
+  const hasBlocks = lines.some((l) => /[{[(]$/.test(l.replace(/\s*\/\/.*$/, '')) || /^[}\])]/.test(l))
+  if (!hasBlocks) return tidied
 
-  const cleanedLines: string[] = []
-  for (let i = 0; i < rawLines.length; i++) {
-    const trimmed = rawLines[i].trim()
-    if (!trimmed) {
-      if (isPastedDoubleSpaced) {
-        // Drop alternate empty lines if the entire pasted snippet is double-spaced
-        continue
-      }
-      // Otherwise keep at most 1 empty line between logical sections
-      if (cleanedLines.length > 0 && cleanedLines[cleanedLines.length - 1] !== '') {
-        const prev = cleanedLines[cleanedLines.length - 1]
-        // Never keep an empty line right after an opening bracket
-        if (!/[\{\[\(]$/.test(prev)) {
-          cleanedLines.push('')
-        }
-      }
-    } else {
-      cleanedLines.push(trimmed)
-    }
-  }
+  // Drop blank lines straight after an opener or straight before a closer.
+  const cleaned = lines.filter((l, i) => {
+    if (l !== '') return true
+    const prev = lines[i - 1] ?? ''
+    const next = lines[i + 1] ?? ''
+    return !/[{[(]$/.test(prev) && !/^[}\])]/.test(next)
+  })
 
-  // Remove trailing empty lines
-  while (cleanedLines.length > 0 && cleanedLines[cleanedLines.length - 1] === '') {
-    cleanedLines.pop()
-  }
-
-  // Remove empty lines right before a closing bracket
-  for (let i = cleanedLines.length - 1; i > 0; i--) {
-    if (cleanedLines[i - 1] === '' && /^[\}\]\)]/.test(cleanedLines[i])) {
-      cleanedLines.splice(i - 1, 1)
-    }
-  }
-
-  // Indentation calculation
-  let depth = 0
-  const result: string[] = []
-
-  for (let i = 0; i < cleanedLines.length; i++) {
-    let line = cleanedLines[i]
-
+  // Each indent level remembers how many brackets its line left open, so a line that opens
+  // several at once ("push({", "fn(a, function () {") indents one level, closed by "})".
+  const levels: number[] = []
+  const out: string[] = []
+  for (let line of cleaned) {
     if (line === '') {
-      result.push('')
+      out.push('')
       continue
     }
-
-    // Check how many closers start this line: e.g. "}", "})", "],", "};"
-    const leadingClosers = line.match(/^[\}\]\)]+/)
-    let closerCount = leadingClosers ? leadingClosers[0].length : 0
-
-    // If combo like "})", count closing as 1 logical un-indent level
-    if (leadingClosers && leadingClosers[0].length > 1 && /^[\}\]]\s*[\)\],]/.test(line)) {
-      closerCount = 1
-    }
-
-    const lineDepth = Math.max(0, depth - closerCount)
-
-    // Normalize spacing in object keys: "key : value" -> "key: value"
-    line = line.replace(/^([a-zA-Z0-9_$]+|"[^"]+"|'[^']+')\s*:\s*/, '$1: ')
-
-    result.push('  '.repeat(lineDepth) + line)
-
-    // Calculate net change in brackets outside string literals
-    let inSingleQuote = false
-    let inDoubleQuote = false
-    let inBacktick = false
-    let netChange = 0
-
-    for (let c = 0; c < line.length; c++) {
-      const ch = line[c]
-      const prev = c > 0 ? line[c - 1] : ''
-
-      if (ch === "'" && !inDoubleQuote && !inBacktick && prev !== '\\') inSingleQuote = !inSingleQuote
-      else if (ch === '"' && !inSingleQuote && !inBacktick && prev !== '\\') inDoubleQuote = !inDoubleQuote
-      else if (ch === '`' && !inSingleQuote && !inDoubleQuote && prev !== '\\') inBacktick = !inBacktick
-      else if (!inSingleQuote && !inDoubleQuote && !inBacktick) {
-        if (ch === '{' || ch === '[' || ch === '(') netChange++
-        else if (ch === '}' || ch === ']' || ch === ')') netChange--
+    const found = brackets(line)
+    // Closers at the very start of the line ("}", "})", "],") pull the line itself left.
+    const leadingClosers = (line.match(/^[}\])\s]*/)?.[0] ?? '').replace(/\s/g, '').length
+    let lineDepth = levels.length
+    let openedHere = false
+    found.forEach((b, i) => {
+      if ('{[('.includes(b)) {
+        if (openedHere) levels[levels.length - 1]++
+        else levels.push(1)
+        openedHere = true
+      } else if (levels.length) {
+        levels[levels.length - 1]--
+        if (levels[levels.length - 1] === 0) {
+          levels.pop()
+          openedHere = false
+        }
       }
-    }
-
-    // If line ends with call + object opening like "({", count as 1 indent step
-    if (/[\(\[]\s*[\{\[]\s*$/.test(line) && netChange > 1) {
-      netChange = 1
-    }
-
-    depth = Math.max(0, depth + netChange)
+      if (i === leadingClosers - 1) lineDepth = levels.length
+    })
+    // "key : value" -> "key: value" (only when a value follows, so "default:" stays as is).
+    line = line.replace(/^([\w$]+|"[^"]*"|'[^']*')\s*:\s*(?=\S)/, '$1: ')
+    out.push('  '.repeat(lineDepth) + line)
   }
-
-  return result.join('\n')
-}
-
-function beautifyHtml(html: string): string {
-  let depth = 0
-  const tokens = html.replace(/\r\n/g, '\n').replace(/>\s*</g, '>\n<').split('\n')
-  const result: string[] = []
-
-  for (const raw of tokens) {
-    const line = raw.trim()
-    if (!line) continue
-
-    const isClosing = /^<\/[^>]+>/.test(line)
-    const isSelfClosing = /^<[^>]+\/>/.test(line) || /^<(area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)[^>]*>/i.test(line)
-    const isOpening = /^<[^/!][^>]*>/.test(line) && !isSelfClosing
-
-    if (isClosing) depth = Math.max(0, depth - 1)
-
-    result.push('  '.repeat(depth) + line)
-
-    if (isOpening) depth++
-  }
-
-  return result.join('\n')
+  return out.join('\n')
 }
 
 function beautifyCss(css: string): string {
-  const text = css.replace(/\{/g, ' {\n').replace(/\}/g, '\n}\n').replace(/;/g, ';\n')
-  const lines = text.replace(/\r\n/g, '\n').split('\n')
-  let depth = 0
-  const result: string[] = []
+  // Break after { ; } outside strings, parentheses and comments (so url(data:...;base64) survives).
+  let text = ''
+  let quote: string | null = null
+  let parens = 0
+  let comment = false
+  const src = css.replace(/\r\n?/g, '\n')
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i]
+    text += ch
+    if (comment) {
+      if (ch === '*' && src[i + 1] === '/') {
+        text += '/'
+        i++
+        comment = false
+      }
+      continue
+    }
+    if (quote) {
+      if (ch === '\\') text += src[++i] ?? ''
+      else if (ch === quote) quote = null
+      continue
+    }
+    if (ch === '/' && src[i + 1] === '*') comment = true
+    else if (ch === '"' || ch === "'") quote = ch
+    else if (ch === '(') parens++
+    else if (ch === ')') parens = Math.max(0, parens - 1)
+    else if (parens === 0 && (ch === '{' || ch === ';' || ch === '}')) {
+      if (ch === '}') text = text.slice(0, -1) + '\n}'
+      text += '\n'
+    }
+  }
 
-  for (const raw of lines) {
+  let depth = 0
+  const out: string[] = []
+  for (const raw of text.split('\n')) {
     let line = raw.trim()
     if (!line) continue
-
     if (line.startsWith('}')) depth = Math.max(0, depth - 1)
-
-    if (depth > 0 && line.includes(':') && !line.includes('{')) {
-      line = line.replace(/^\s*([a-zA-Z\-]+)\s*:\s*/, '$1: ')
-    }
-
-    result.push('  '.repeat(depth) + line)
-
+    if (line.endsWith('{')) line = line.replace(/\s*\{$/, ' {')
+    else if (depth > 0) line = line.replace(/^([a-zA-Z-]+)\s*:\s*/, '$1: ')
+    out.push('  '.repeat(depth) + line)
     if (line.endsWith('{')) depth++
   }
-
-  return result.join('\n')
+  return out.join('\n')
 }
 
-function beautifySql(sql: string): string {
-  const keywords = [
-    'SELECT',
-    'FROM',
-    'WHERE',
-    'AND',
-    'OR',
-    'LEFT JOIN',
-    'RIGHT JOIN',
-    'INNER JOIN',
-    'JOIN',
-    'GROUP BY',
-    'ORDER BY',
-    'LIMIT',
-    'OFFSET',
-    'INSERT INTO',
-    'VALUES',
-    'UPDATE',
-    'SET',
-    'DELETE FROM',
-    'HAVING',
-  ]
-  let formatted = sql.replace(/\s+/g, ' ').trim()
+const VOID_TAGS = /^<(area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)\b/i
 
-  for (const kw of keywords) {
-    const re = new RegExp('\\b' + kw.replace(' ', '\\s+') + '\\b', 'gi')
-    formatted = formatted.replace(re, '\n' + kw)
+function beautifyHtml(html: string): string {
+  // Whitespace inside these is significant (or is code), so don't reflow.
+  if (/<(pre|textarea|script|style)\b/i.test(html)) return tidyLines(html)
+
+  const lines = html.replace(/\r\n?/g, '\n').replace(/>\s*</g, '>\n<').split('\n')
+  let depth = 0
+  const out: string[] = []
+  for (const raw of lines) {
+    const line = raw.trim()
+    if (!line) continue
+    const closing = /^<\//.test(line)
+    const tag = line.match(/^<([a-zA-Z][\w-]*)/)?.[1]
+    const opening = !!tag && !VOID_TAGS.test(line) && !/\/>$/.test(line) && !new RegExp(`</${tag}>\\s*$`, 'i').test(line)
+    if (closing) depth = Math.max(0, depth - 1)
+    out.push('  '.repeat(depth) + line)
+    if (opening) depth++
   }
-
-  return formatted
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .map((line, i) => {
-      if (i === 0) return line
-      if (/^(AND|OR|LEFT|RIGHT|INNER|JOIN|VALUES|SET)/i.test(line)) return '  ' + line
-      return line
-    })
-    .join('\n')
+  return out.join('\n')
 }
