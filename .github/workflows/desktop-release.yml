@@ -30,10 +30,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION=$(node -p "require('./package.json').version")
-          gh release create "v$VERSION" \
-            "release/MyDesk-Setup-$VERSION.exe" \
-            "release/MyDesk-Setup-$VERSION.exe.blockmap" \
-            release/latest.yml \
-            --target "$GITHUB_SHA" \
-            --title "MyDesk for Windows $VERSION" \
-            --notes-file ../.github/desktop-release-notes.md
+          FILES=("release/MyDesk-Setup-$VERSION.exe" "release/MyDesk-Setup-$VERSION.exe.blockmap" release/latest.yml)
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            # Already there (e.g. from an earlier, interrupted run): fill it in.
+            gh release upload "v$VERSION" "${FILES[@]}" --clobber
+            gh release edit "v$VERSION" --title "MyDesk for Windows $VERSION" --notes-file ../.github/desktop-release-notes.md --draft=false --latest
+          else
+            gh release create "v$VERSION" "${FILES[@]}" \
+              --target "$GITHUB_SHA" \
+              --title "MyDesk for Windows $VERSION" \
+              --notes-file ../.github/desktop-release-notes.md
+          fi
