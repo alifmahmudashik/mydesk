@@ -1,0 +1,28 @@
+# Builds the Windows installer on GitHub and publishes it as a release
+# (installer + .blockmap + latest.yml, which installed apps use to update).
+# Run it from the Actions tab ("Run workflow") or: gh workflow run desktop-release.yml
+# It releases whatever "version" desktop/package.json has, as tag v<version>.
+name: Desktop release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Build and publish
+        run: npx electron-builder --win --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

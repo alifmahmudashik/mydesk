@@ -51,7 +51,8 @@
       {
         "provider": "github",
         "owner": "alifmahmudashik",
-        "repo": "mydesk"
+        "repo": "mydesk",
+        "releaseType": "release"
       }
     ]
   },
