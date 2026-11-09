@@ -38,7 +38,7 @@ export function HomePage() {
           <nav className="home-nav-links">
             <a href="#features">Features</a>
             <a href="#desktop">Desktop app</a>
-            <a href="#architecture">Privacy</a>
+            <a href="#setup">Setup</a>
             <a href={GITHUB_REPO_URL} target="_blank" rel="noreferrer" className="row-sm">
               <span>GitHub</span>
               <ExternalLink className="i i-xs" />
@@ -57,7 +57,7 @@ export function HomePage() {
             <Link to="/login" className="btn btn-sm btn-ghost">
               Sign in
             </Link>
-            <Link to="/login" className="btn btn-sm btn-pri">
+            <Link to="/login" className="btn btn-sm home-cta-primary">
               Get started
             </Link>
           </div>
@@ -68,34 +68,32 @@ export function HomePage() {
       <section className="home-hero">
         <div className="home-pill-badge">
           <span className="home-badge-dot" />
-          <span>Web app and native Windows desktop client</span>
+          <span>Web app &amp; Windows desktop client</span>
         </div>
 
         <h1 className="home-headline">
-          Client and project management for freelancers and small teams.
+          Manage your freelance clients, projects, and invoices in one place.
         </h1>
 
         <p className="home-subhead">
-          Organize client tasks with checklists and comments, track billable time, send itemized
-          invoices, and record payments. Private to your workspace, with zero subscription fees.
+          MyDesk keeps your project tasks, client notes, timers, and PDF invoices together.
+          Private to your workspace, with no monthly per-seat subscription.
         </p>
 
         <div className="home-cta-row">
-          <Link to="/login" className="btn btn-pri btn-lg">
-            <span>Open your workspace</span>
+          <Link to="/login" className="btn btn-lg home-cta-primary">
+            <span>Open workspace</span>
           </Link>
           <a
-            href={LATEST_RELEASE_URL}
-            target="_blank"
-            rel="noreferrer"
+            href={WINDOWS_EXE_URL}
             className="btn btn-lg home-download-btn"
           >
             <Monitor className="i i-sm" />
-            <span>Download for Windows (v1.2.0)</span>
+            <span>Download for Windows (.exe)</span>
           </a>
         </div>
         <p className="home-hero-meta">
-          Windows 10 / 11 · 64-bit installer · Self-hosted with Supabase &amp; Vercel
+          Windows 10 &amp; 11 · 64-bit installer · Self-hosted on Supabase &amp; Vercel
         </p>
       </section>
 
@@ -142,7 +140,7 @@ export function HomePage() {
                 <span>Time Clock</span>
               </button>
             </div>
-            <span className="home-preview-tag hide-sm">Live preview</span>
+            <span className="home-preview-tag hide-sm">Interactive preview</span>
           </div>
 
           <div className="home-preview-body">
@@ -151,7 +149,7 @@ export function HomePage() {
                 <div className="preview-row-head">
                   <div>
                     <h3 className="preview-pane-title">Brand Identity &amp; Web Platform</h3>
-                    <p className="preview-pane-sub">Acme Studios · Due next Friday · 8 of 12 tasks done</p>
+                    <p className="preview-pane-sub">Acme Studios · 8 of 12 tasks completed</p>
                   </div>
                   <span className="pill pri">In progress</span>
                 </div>
@@ -163,18 +161,18 @@ export function HomePage() {
                   </div>
                   <div className="preview-task-item done">
                     <span className="preview-check checked"><CheckCircle2 className="i i-xs" /></span>
-                    <span className="preview-task-title">Draft client invoice NW-014 for milestone 1</span>
+                    <span className="preview-task-title">Send milestone invoice INV-014 to client</span>
                     <span className="preview-assignee">Alif M.</span>
                   </div>
                   <div className="preview-task-item">
                     <span className="preview-check" />
-                    <span className="preview-task-title">Implement dataLayer events for lead widget</span>
+                    <span className="preview-task-title">Implement dataLayer events with code auto-format</span>
                     <span className="badge">Code block</span>
                     <span className="preview-assignee">Sarah K.</span>
                   </div>
                   <div className="preview-task-item">
                     <span className="preview-check" />
-                    <span className="preview-task-title">Final review with client stakeholders</span>
+                    <span className="preview-task-title">Deliver final handoff assets to client</span>
                     <span className="preview-assignee">Unassigned</span>
                   </div>
                 </div>
@@ -187,7 +185,7 @@ export function HomePage() {
                   <div className="preview-kpi">
                     <span className="kpi-label">Earned this month</span>
                     <span className="kpi-val">$8,450</span>
-                    <span className="kpi-sub t-ok">3 paid invoices</span>
+                    <span className="kpi-sub" style={{ color: 'var(--h-green)' }}>3 paid invoices</span>
                   </div>
                   <div className="preview-kpi">
                     <span className="kpi-label">Outstanding balance</span>
@@ -197,7 +195,7 @@ export function HomePage() {
                   <div className="preview-kpi">
                     <span className="kpi-label">Overdue</span>
                     <span className="kpi-val">$0</span>
-                    <span className="kpi-sub t-ok">All payments on track</span>
+                    <span className="kpi-sub" style={{ color: 'var(--h-green)' }}>All payments current</span>
                   </div>
                 </div>
                 <div className="preview-table">
@@ -284,7 +282,7 @@ export function HomePage() {
                 <div className="preview-timer-box">
                   <div className="timer-display">
                     <span className="timer-digits">02:44:18</span>
-                    <span className="pill ok timer-status">Timer running</span>
+                    <span className="pill ok timer-status">Running</span>
                   </div>
                   <div className="timer-meta">
                     <b>Acme Studios</b> · Web Platform API Integration
@@ -306,7 +304,7 @@ export function HomePage() {
                   <div className="preview-table-row">
                     <span>Yesterday</span>
                     <span>Northwind Labs</span>
-                    <span>Schema migration script</span>
+                    <span>Database schema migration</span>
                     <span className="r num">3h 10m</span>
                   </div>
                 </div>
@@ -319,78 +317,76 @@ export function HomePage() {
       {/* Feature Grid */}
       <section id="features" className="home-section">
         <div className="home-section-head">
-          <span className="home-section-eyebrow">Everything you need</span>
-          <h2 className="home-section-title">Built for how independent developers and agencies work</h2>
+          <h2 className="home-section-title">Built for daily client work</h2>
           <p className="home-section-sub">
-            No bloated enterprise workflows or mandatory subscriptions. Just clear records of your
-            clients, projects, and finances.
+            Track tasks, billable hours, and payments without switching between four separate tools.
           </p>
         </div>
 
         <div className="home-features-grid">
           <div className="feature-card">
-            <div className="feature-icon-wrap" style={{ color: '#6366F1' }}>
+            <div className="feature-icon-wrap" style={{ color: '#818CF8' }}>
               <Folder className="i" />
             </div>
-            <h3>Project &amp; Task Tracking</h3>
+            <h3>Tasks &amp; Milestones</h3>
             <p>
-              Organize engagements by client. Write structured task descriptions, attach deliverables,
-              track due dates, and format code blocks automatically with syntax detection.
+              Group work by client and project. Write structured descriptions, attach deliverables,
+              check off subtasks, and paste code snippets with auto-formatting.
             </p>
           </div>
 
           <div className="feature-card">
-            <div className="feature-icon-wrap" style={{ color: '#22C55E' }}>
+            <div className="feature-icon-wrap" style={{ color: '#34D399' }}>
               <FileText className="i" />
             </div>
-            <h3>Invoices &amp; Billing</h3>
+            <h3>PDF Invoicing</h3>
             <p>
-              Generate clean, branded PDF invoices with custom line items. Track payment due dates,
-              record partial or full payments, and keep an accurate record of monthly revenue.
+              Generate itemized invoices in any currency. Send them directly, record payments when
+              they land, and keep track of what clients still owe.
             </p>
           </div>
 
           <div className="feature-card">
-            <div className="feature-icon-wrap" style={{ color: '#0EA5E9' }}>
+            <div className="feature-icon-wrap" style={{ color: '#38BDF8' }}>
               <Briefcase className="i" />
             </div>
-            <h3>Client Directory</h3>
+            <h3>Client Records</h3>
             <p>
-              Store hourly rates, default currencies, retainers, contact details, and contracts. Keep
-              all context in one client profile instead of scattered across emails and spreadsheets.
+              Store hourly rates, default currencies, retainers, contact details, and project histories
+              together in one client profile.
             </p>
           </div>
 
           <div className="feature-card">
-            <div className="feature-icon-wrap" style={{ color: '#F59E0B' }}>
+            <div className="feature-icon-wrap" style={{ color: '#FBBF24' }}>
               <Clock className="i" />
             </div>
-            <h3>Live Time Clock</h3>
+            <h3>Built-in Timer</h3>
             <p>
-              Start and stop timers while you work or log sessions manually. Summarize billable hours by
-              project before drafting an invoice.
+              Start and stop timers while you work, or log sessions after the fact. Review billable
+              hours by project before generating an invoice.
             </p>
           </div>
 
           <div className="feature-card">
-            <div className="feature-icon-wrap" style={{ color: '#8B5CF6' }}>
+            <div className="feature-icon-wrap" style={{ color: '#A78BFA' }}>
               <Users className="i" />
             </div>
-            <h3>Team Roles &amp; Privacy</h3>
+            <h3>Team &amp; Contractor Access</h3>
             <p>
-              Invite collaborators with explicit permissions. Members can access assigned client tasks
-              without viewing invoices, balances, or private financial records.
+              Invite collaborators to specific clients. Teammates can manage assigned tasks without
+              seeing your invoices, rates, or revenue.
             </p>
           </div>
 
           <div className="feature-card">
-            <div className="feature-icon-wrap" style={{ color: '#EC4899' }}>
+            <div className="feature-icon-wrap" style={{ color: '#F472B6' }}>
               <Shield className="i" />
             </div>
-            <h3>Your Database, Your Data</h3>
+            <h3>Zero Monthly Fees</h3>
             <p>
-              Powered by your own Supabase instance. You retain complete ownership of your database
-              without third-party lock-in or telemetry tracking.
+              Runs on your own Supabase database. You retain complete ownership of your client records
+              and invoice data, with no per-user subscriptions.
             </p>
           </div>
         </div>
@@ -400,20 +396,18 @@ export function HomePage() {
       <section id="desktop" className="home-desktop-section">
         <div className="home-desktop-card">
           <div className="desktop-card-content">
-            <span className="home-section-eyebrow">Windows App</span>
             <h2>Prefer a dedicated desktop window?</h2>
             <p>
-              MyDesk includes a standalone Windows client built with Electron. It matches the
-              frameless Windows 11 style, runs quietly in your taskbar, starts on boot, and keeps
-              you signed in without browser tab clutter.
+              MyDesk includes a standalone Windows client built with Electron. It matches Windows 11,
+              runs quietly in your taskbar, starts on boot, and keeps you signed in without browser tab clutter.
             </p>
             <ul className="desktop-feature-list">
-              <li>Frameless dark interface blending with your desktop theme</li>
+              <li>Frameless dark interface blending with your Windows desktop theme</li>
               <li>Always stays up to date with the latest web deployments</li>
               <li>Runs in background with native Windows notifications</li>
             </ul>
             <div className="row wrap" style={{ gap: 12, marginTop: 24 }}>
-              <a href={WINDOWS_EXE_URL} className="btn btn-pri btn-lg">
+              <a href={WINDOWS_EXE_URL} className="btn btn-lg home-cta-primary">
                 <Download className="i i-sm" />
                 <span>Download MyDesk Setup 1.2.0 (.exe)</span>
               </a>
@@ -456,48 +450,45 @@ export function HomePage() {
         </div>
       </section>
 
-      {/* Architecture / Privacy Section */}
-      <section id="architecture" className="home-section">
+      {/* How to run / setup */}
+      <section id="setup" className="home-section">
         <div className="home-section-head">
-          <span className="home-section-eyebrow">Architecture</span>
-          <h2 className="home-section-title">Clean, transparent technology stack</h2>
+          <h2 className="home-section-title">Three steps to your own workspace</h2>
           <p className="home-section-sub">
-            Built on proven open-source foundations. Run it directly or deploy your own instance in
-            minutes.
+            Deploy in minutes using free tiers on Supabase and Vercel.
           </p>
         </div>
 
-        <div className="home-arch-grid">
-          <div className="arch-card">
-            <b>Frontend</b>
-            <p>React 19, TypeScript, and Vite. Fast load times, responsive layouts, and zero heavy UI framework overhead.</p>
+        <div className="home-steps-grid">
+          <div className="step-card">
+            <div className="step-number">Step 1</div>
+            <h3>Run Database Script</h3>
+            <p>Paste schema.sql into your free Supabase project. One file creates all tables, policies, and indexes.</p>
           </div>
-          <div className="arch-card">
-            <b>Database &amp; Auth</b>
-            <p>Supabase PostgreSQL with Row Level Security (RLS). Direct real-time updates and secure multi-user permissions.</p>
+          <div className="step-card">
+            <div className="step-number">Step 2</div>
+            <h3>Deploy to Vercel</h3>
+            <p>Connect your GitHub fork to Vercel and paste your Supabase keys under environment variables.</p>
           </div>
-          <div className="arch-card">
-            <b>Email Notifications</b>
-            <p>Resend integration for clean transactional emails when team members are assigned tasks or mentioned in comments.</p>
-          </div>
-          <div className="arch-card">
-            <b>Desktop Wrapper</b>
-            <p>Lightweight Electron shell supporting auto-updates via GitHub releases and persistent window sizing.</p>
+          <div className="step-card">
+            <div className="step-number">Step 3</div>
+            <h3>Sign in and Work</h3>
+            <p>The first account you create becomes the workspace owner. Invite your team or download the desktop app.</p>
           </div>
         </div>
       </section>
 
-      {/* Bottom CTA */}
+      {/* Bottom CTA (Always Dark Surface) */}
       <section className="home-bottom-cta">
         <h2>Start organizing your client work today</h2>
         <p>Sign in to your existing workspace or set up a new instance.</p>
         <div className="row wrap justify-center" style={{ gap: 14, marginTop: 24 }}>
-          <Link to="/login" className="btn btn-pri btn-lg">
+          <Link to="/login" className="btn btn-lg home-cta-primary">
             <span>Sign in to MyDesk</span>
           </Link>
-          <a href={WINDOWS_EXE_URL} className="btn btn-lg">
+          <a href={WINDOWS_EXE_URL} className="btn btn-lg home-download-btn">
             <Download className="i i-sm" />
-            <span>Download for Windows</span>
+            <span>Download for Windows (.exe)</span>
           </a>
         </div>
       </section>
@@ -511,7 +502,7 @@ export function HomePage() {
               <b>MyDesk</b>
             </div>
             <p className="footer-desc">
-              Client and project workspace for independent professionals and small studios.
+              Client and project workspace for independent developers, designers, and studios.
             </p>
           </div>
 
@@ -520,7 +511,7 @@ export function HomePage() {
               <span className="footer-heading">Product</span>
               <a href="#features">Features</a>
               <a href="#desktop">Desktop app</a>
-              <a href="#architecture">Architecture</a>
+              <a href="#setup">Setup</a>
             </div>
 
             <div className="footer-col">
