@@ -6,7 +6,6 @@ import { signOut } from '@/hooks/useAuth'
 import { useData } from '@/data/store'
 import { Field } from '@/components/ui/field'
 import { AuthLayout } from '@/features/auth/AuthLayout'
-import { WorkspaceLogo } from '@/features/workspace/brand'
 
 interface PendingInvite {
   id: string
@@ -71,10 +70,7 @@ export function CreateWorkspacePage() {
 
       <form className="stack" style={{ marginTop: 24 }} onSubmit={submit}>
         <Field label="Workspace name" hint="Usually your studio, agency or business name.">
-          <div className="row" style={{ gap: 10 }}>
-            <WorkspaceLogo workspace={{ name: name || 'W' }} size={38} />
-            <input className="inp grow" required maxLength={80} autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Northwind Studio" />
-          </div>
+          <input className="inp" required maxLength={80} autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Northwind Studio" />
         </Field>
         <button type="submit" className="btn btn-pri btn-lg btn-block" disabled={busy || !name.trim()}>
           {busy ? 'Creating…' : 'Create workspace'}

@@ -9,7 +9,6 @@ import { Field } from '@/components/ui/field'
 import { SUPPORTED_CURRENCIES } from '@/lib/currency'
 import { uid } from '@/lib/utils'
 import type { PaymentProfile } from '@/types'
-import { WorkspaceLogo } from '@/features/workspace/brand'
 import { DeleteSection } from '@/features/workspace/DeleteSection'
 import { useIsOwner } from '@/hooks/usePermissions'
 
@@ -89,11 +88,8 @@ export function WorkspaceSettingsPage() {
           ]}
         >
           <Section id="brand" title="Workspace" desc="What your whole team sees at the top of the sidebar.">
-            <Field label="Workspace name" hint="Your logo is its first letter.">
-              <div className="row" style={{ gap: 10 }}>
-                <WorkspaceLogo workspace={{ name: f.workspace_name || 'W' }} size={38} />
-                <input className="inp grow" maxLength={80} placeholder="e.g. analyticsbyte" value={f.workspace_name} onChange={(e) => set('workspace_name', e.target.value)} />
-              </div>
+            <Field label="Workspace name">
+              <input className="inp" maxLength={80} placeholder="e.g. analyticsbyte" value={f.workspace_name} onChange={(e) => set('workspace_name', e.target.value)} />
             </Field>
           </Section>
 

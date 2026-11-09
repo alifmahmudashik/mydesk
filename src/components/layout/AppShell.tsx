@@ -106,10 +106,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="app">
       <aside className="side" aria-label="Sidebar">
         <div className="brand">
-          <WorkspaceLogo workspace={workspace} />
+          <WorkspaceLogo />
           <div className="name">
-            <b className="trunc">{workspace?.name || invoiceSettings?.workspace_name || (demoMode ? 'Demo workspace' : 'MyDesk')}</b>
-            <small>MyDesk</small>
+            <b>MyDesk</b>
+            <small className="trunc">{workspace?.name || invoiceSettings?.workspace_name || (demoMode ? 'Demo workspace' : 'Workspace')}</small>
           </div>
           <ThemeToggle />
           <button type="button" className={`bell${unread ? ' has-unread' : ''}`} aria-label={`Inbox, ${unread} unread`} onClick={() => navigate('/inbox')}>

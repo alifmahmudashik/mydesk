@@ -1,11 +1,8 @@
-import type { Workspace } from '@/types'
-
-/** The workspace logo: its first letter on the app's accent colour. */
-export function WorkspaceLogo({ workspace, size = 32 }: { workspace: Pick<Workspace, 'name'> | null | undefined; size?: number }) {
-  const letter = (workspace?.name?.trim()[0] ?? 'M').toUpperCase()
+/** The MyDesk flame logo tile, shown at the top of the sidebar for every workspace. */
+export function WorkspaceLogo({ size = 32 }: { size?: number }) {
   return (
-    <div className="logo" style={{ width: size, height: size, flex: 'none', fontSize: Math.round(size * 0.47) }} aria-hidden>
-      {letter}
+    <div className="logo" style={{ width: size, height: size, flex: 'none' }}>
+      <img src="/mydesk-fire.png" alt="" style={{ width: size * 0.7, height: size * 0.7 }} />
     </div>
   )
 }
