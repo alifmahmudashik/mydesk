@@ -11,6 +11,7 @@ import { InviteAcceptPage } from '@/features/auth/InviteAcceptPage'
 import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { HomePage } from '@/features/home/HomePage'
+import { CreateWorkspacePage } from '@/features/workspace/CreateWorkspacePage'
 
 const loadInboxPage = () => import('@/features/inbox/InboxPage')
 const InboxPage = lazy(() => loadInboxPage().then((m) => ({ default: m.InboxPage })))
@@ -107,6 +108,8 @@ export default function App() {
   usePrefs()
   const { session, loading, authRequired, recovery, clearRecovery, authed } = useAuth()
   const init = useData((s) => s.init)
+  const ready = useData((s) => s.ready)
+  const me = useData((s) => s.me)
   const location = useLocation()
   const isDesktop =
     typeof window !== 'undefined' &&
@@ -133,10 +136,14 @@ export default function App() {
       location.pathname === '/signin' ||
       location.pathname === '/signup'
     ) {
-      return <LoginPage initialMode={location.pathname === '/signup' ? 'setup' : 'signin'} />
+      return <LoginPage initialMode={location.pathname === '/signup' ? 'signup' : 'signin'} />
     }
     return <HomePage />
   }
+
+  // Signed up but not in a workspace yet: set one up (or join an invite) first.
+  // (workspace_id is undefined, not null, until schema.sql has been run.)
+  if (ready && me && me.workspace_id === null) return <CreateWorkspacePage />
 
   return (
     <AppShell>

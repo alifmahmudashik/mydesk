@@ -807,3 +807,17 @@ html.desktop .side::-webkit-scrollbar { width: 0; } /* still scrolls with the wh
   white-space: pre !important;
   tab-size: 2;
 }
+
+/* Workspace setup + branding */
+.ws-swatch { width: 28px; height: 28px; border-radius: 99px; border: 2px solid var(--panel); box-shadow: 0 0 0 1px var(--line2); display: grid; place-items: center; font-size: 13px; font-weight: 700; cursor: pointer; padding: 0; transition: transform .12s var(--ease); }
+.ws-swatch:hover { transform: scale(1.08); }
+.ws-swatch[aria-checked="true"] { box-shadow: 0 0 0 2px var(--ink); }
+.ws-swatch-custom { position: relative; background: conic-gradient(#EF4444, #F59E0B, #22C55E, #0EA5E9, #6366F1, #EC4899, #EF4444); color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .4); }
+.ws-swatch-custom input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.ws-swatch-custom:focus-within { box-shadow: 0 0 0 2px var(--ink); }
+.ws-invite { display: flex; align-items: center; gap: 12px; margin-top: 18px; padding: 12px 14px; border: 1px solid var(--pri-mid); background: var(--pri-soft); border-radius: 10px; }
+.ws-invite b { display: block; font-size: 13.5px; }
+.ws-preview { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft2); }
+.ws-preview b { font-size: 13.5px; }
+.ws-preview small { font-size: 12px; }
+.ws-preview-btn { font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 6px; }

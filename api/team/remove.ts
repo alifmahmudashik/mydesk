@@ -8,8 +8,8 @@ export const POST = handle(async (req) => {
   if (user_id === caller.id) throw new HttpError(400, "You can't remove yourself")
 
   const sb = adminClient()
-  const { data: target } = await sb.from('profiles').select('id, role, email').eq('id', user_id).single()
-  if (!target) throw new HttpError(404, 'Member not found')
+  const { data: target } = await sb.from('profiles').select('id, role, email, workspace_id').eq('id', user_id).single()
+  if (!target || target.workspace_id !== caller.workspace_id) throw new HttpError(404, 'Member not found')
   if (target.role === 'owner') throw new HttpError(403, 'The owner cannot be removed')
   if (target.role === 'admin' && caller.role !== 'owner') throw new HttpError(403, 'Only the owner can remove an admin')
 
@@ -19,6 +19,7 @@ export const POST = handle(async (req) => {
   if (error) throw new HttpError(500, error.message)
 
   await sb.from('activity_log').insert({
+    workspace_id: caller.workspace_id,
     owner_id: caller.id,
     actor_id: caller.id,
     entity: 'member',

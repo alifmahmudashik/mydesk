@@ -64,6 +64,7 @@ export interface Caller {
   email: string
   role: 'owner' | 'admin' | 'member'
   name: string
+  workspace_id: string | null
 }
 
 /** Resolves the signed-in user from the browser's Supabase access token. */
@@ -75,7 +76,7 @@ export async function requireUser(req: Request): Promise<Caller> {
   if (error || !data.user) throw new HttpError(401, 'Session expired, sign in again')
   const { data: profile } = await sb
     .from('profiles')
-    .select('id, email, role, display_name, full_name')
+    .select('id, email, role, display_name, full_name, workspace_id')
     .eq('id', data.user.id)
     .single()
   if (!profile) throw new HttpError(403, 'No profile for this user')
@@ -84,11 +85,12 @@ export async function requireUser(req: Request): Promise<Caller> {
     email: profile.email,
     role: profile.role,
     name: profile.display_name || profile.full_name || profile.email.split('@')[0],
+    workspace_id: profile.workspace_id ?? null,
   }
 }
 
 export async function requireAdmin(req: Request) {
   const caller = await requireUser(req)
-  if (caller.role === 'member') throw new HttpError(403, 'Only owners and admins can do this')
+  if (caller.role === 'member' || !caller.workspace_id) throw new HttpError(403, 'Only owners and admins can do this')
   return caller
 }

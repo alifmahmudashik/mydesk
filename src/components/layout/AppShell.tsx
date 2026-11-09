@@ -14,6 +14,7 @@ import { Menu, MenuItem, MenuSep, MenuTitle } from '@/components/ui/menu'
 import { CommandPalette } from '@/components/layout/CommandPalette'
 import { CreateHost } from '@/features/create/CreateHost'
 import { DesktopNotifPrompt, useDesktopNotifications } from '@/features/notifications/desktop'
+import { WorkspaceLogo, useWorkspaceAccent } from '@/features/workspace/brand'
 import { clientColor, clientDisplayName, effectivePaymentStatus, OPEN_PROJECT, OPEN_TASK, profileFullName, isAssignedTo } from '@/lib/derive'
 
 const roleLabel = { owner: 'Owner', admin: 'Admin', member: 'Member' } as const
@@ -31,7 +32,8 @@ function NavItem({ to, icon, children, end, extra, alsoActive }: { to: string; i
 
 export function AppShell({ children }: { children: ReactNode }) {
   const isAdmin = useIsAdmin()
-  const { me, notifications, tasks, projects, clients, payments, invoiceSettings, demoMode, learning } = useData()
+  const { me, notifications, tasks, projects, clients, payments, invoiceSettings, demoMode, learning, workspace } = useData()
+  useWorkspaceAccent(workspace?.accent_color)
   const { openCreate, setSearch } = useUI()
   const navigate = useNavigate()
   const location = useLocation()
@@ -105,10 +107,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="app">
       <aside className="side" aria-label="Sidebar">
         <div className="brand">
-          <div className="logo"><img src="/mydesk-fire.png" alt="" /></div>
+          <WorkspaceLogo workspace={workspace} />
           <div className="name">
-            <b>MyDesk</b>
-            <small>{invoiceSettings?.workspace_name || (demoMode ? 'Demo workspace' : 'Workspace')}</small>
+            <b className="trunc">{workspace?.name || invoiceSettings?.workspace_name || (demoMode ? 'Demo workspace' : 'MyDesk')}</b>
+            <small>MyDesk</small>
           </div>
           <ThemeToggle />
           <button type="button" className={`bell${unread ? ' has-unread' : ''}`} aria-label={`Inbox, ${unread} unread`} onClick={() => navigate('/inbox')}>

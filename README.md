@@ -76,8 +76,10 @@ Without this, emails still go out, but only once a day.
 
 ### 5. Sign in
 
-1. Open your app. For a new workspace, click **Setting up?** on the sign-in page and create the first account. The first account is the **owner**.
-2. Sidebar → your name → **Workspace settings**: add your business name, address and payment methods (used on invoices).
+1. Open your app and click **Get started** to create an account. Anyone can sign up: each new account sets up its own workspace (name, business name, currency, logo and colours) and becomes its **owner**. Workspaces never see each other's data. People you invite join your workspace instead.
+2. Sidebar → your name → **Workspace settings**: change the workspace name, logo and colours, and add your business address and payment methods (used on invoices).
+
+Upgrading from the single-team version: run `schema.sql` again. The first run moves the existing owner, team and all data into one workspace owned by that owner. Nothing is deleted.
 3. Test it: **Team → Invite member** with another email of yours. The invite should arrive within seconds.
 
 Done.

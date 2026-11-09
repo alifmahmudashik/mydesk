@@ -20,8 +20,8 @@ export const POST = handle(async (req) => {
   if (body.pdf_base64 && body.pdf_base64.length > 7_000_000) throw new HttpError(413, 'Invoice PDF is too large to attach')
 
   const sb = adminClient()
-  const { data: payment } = await sb.from('payments').select('id, client_id, amount, currency').eq('id', body.payment_id).single()
-  if (!payment) throw new HttpError(404, 'Payment not found')
+  const { data: payment } = await sb.from('payments').select('id, client_id, amount, currency, workspace_id').eq('id', body.payment_id).single()
+  if (!payment || payment.workspace_id !== caller.workspace_id) throw new HttpError(404, 'Payment not found')
 
   const html = layout({
     heading: esc(body.subject),
@@ -42,6 +42,7 @@ export const POST = handle(async (req) => {
   await sb.from('payment_reminders').insert({ payment_id: payment.id, sent_by: caller.id, to_email: body.to.trim(), subject: body.subject.trim() })
   await sb.from('payments').update({ last_reminded_at: now }).eq('id', payment.id)
   await sb.from('activity_log').insert({
+    workspace_id: caller.workspace_id,
     owner_id: caller.id,
     actor_id: caller.id,
     entity: 'payment',

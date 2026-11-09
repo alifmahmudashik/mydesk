@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
 import { deriveProjectKey } from '@/lib/derive'
 import type {
-  AccessItem, ActivityAction, ActivityEntity, ActivityEvent, AppNotification, Client, ClientMember, Invite, Invoice, InvoiceSettings, Payment, PaymentReminder, Profile, Project, ProjectNote, Subtask, Task, TaskAttachment, TaskComment, TaskWatcher, TimeEntry, LearningGoal, LearningItem, LearningTopic, LearningLesson, LearningResource, LearningTopicMember, LearningProgress, TeamLink, CodeSnippet,
+  AccessItem, ActivityAction, ActivityEntity, ActivityEvent, AppNotification, Client, ClientMember, Invite, Invoice, InvoiceSettings, Payment, PaymentReminder, Profile, Project, ProjectNote, Subtask, Task, TaskAttachment, TaskComment, TaskWatcher, TimeEntry, LearningGoal, LearningItem, LearningTopic, LearningLesson, LearningResource, LearningTopicMember, LearningProgress, TeamLink, CodeSnippet, Workspace,
 } from '@/types'
 
 const LOCAL_KEY = 'mydesk-data-v3'
@@ -78,6 +78,10 @@ interface DataState extends DemoData {
   snippetsReady: boolean
   demoMode: boolean
   me: Profile | null
+  /** The signed-in person's workspace (null until they create or join one). */
+  workspace: Workspace | null
+  /** Saves name / logo / colours. Resolves false if the save failed. */
+  saveWorkspace: (patch: Partial<Omit<Workspace, 'id' | 'created_at'>>) => Promise<boolean>
   /** Ids of teammates with the app open right now (realtime presence). */
   onlineIds: string[]
   init: () => Promise<void>
@@ -92,6 +96,27 @@ interface DataState extends DemoData {
   /** When this person last opened the Inbox (per device). The bell only lights up for newer items. */
   inboxSeenAt: string
   markInboxSeen: () => void
+}
+
+const DEMO_WORKSPACE_KEY = 'mydesk-demo-workspace'
+
+/** Demo mode keeps the workspace branding in this browser only. */
+function loadDemoWorkspace(name?: string | null): Workspace {
+  const base: Workspace = { id: 'demo-workspace', name: name || 'Demo workspace', created_at: new Date().toISOString() }
+  try {
+    const saved = localStorage.getItem(DEMO_WORKSPACE_KEY)
+    return saved ? { ...base, ...(JSON.parse(saved) as Partial<Workspace>) } : base
+  } catch {
+    return base
+  }
+}
+
+function saveDemoWorkspace(ws: Workspace) {
+  try {
+    localStorage.setItem(DEMO_WORKSPACE_KEY, JSON.stringify(ws))
+  } catch {
+    // storage unavailable: the change lasts until reload
+  }
 }
 
 function snapshot(s: DataState): DemoData {
@@ -325,6 +350,7 @@ export const useData = create<DataState>((set, get) => {
     },
     demoMode: !supabase,
     me: null,
+    workspace: null,
     onlineIds: [],
     logActivity,
 
@@ -340,7 +366,7 @@ export const useData = create<DataState>((set, get) => {
           data.profiles.find((p) => p.role === 'owner') ||
           null
         const view = me && me.role === 'member' ? scopedToMember(data, me) : data
-        set({ ...view, me, ready: true, inboxSeenAt: readSeen(me?.id), onlineIds: data.profiles.slice(1, 2).map((p) => p.id) })
+        set({ ...view, me, workspace: loadDemoWorkspace(data.invoiceSettings?.workspace_name), ready: true, inboxSeenAt: readSeen(me?.id), onlineIds: data.profiles.slice(1, 2).map((p) => p.id) })
         return
       }
       const sb = supabase
@@ -380,6 +406,7 @@ export const useData = create<DataState>((set, get) => {
           all<LearningProgress>('learning_progress', 'created_at', true),
           all<TeamLink>('team_links', 'position', true),
           all<CodeSnippet>('code_snippets', 'position', true),
+          sb.from('workspaces').select('*').limit(1).maybeSingle(),
         ] as const)
 
       let res = await fetchAll()
@@ -396,6 +423,7 @@ export const useData = create<DataState>((set, get) => {
         clients, projects, tasks, accessItems, payments, notes, activity, profiles, members, invoices,
         invoiceSettings, subtasks, comments, attachments, timeEntries, watchers, notifications, invites,
         reminders, user, learning, goals, topics, lessons, resources, topicMembers, progress, teamLinks, snippets,
+        workspace,
       ] = res
       const profileRows = profiles.data ?? []
       const meId = user.data.user?.id
@@ -435,6 +463,7 @@ export const useData = create<DataState>((set, get) => {
         snippets: snippets.data ?? [],
         snippetsReady: !snippets.error,
         me: profileRows.find((p) => p.id === meId) ?? null,
+        workspace: (workspace.data as Workspace | null) ?? null,
         inboxSeenAt: readSeen(meId),
         ready: true,
       })
@@ -524,6 +553,23 @@ export const useData = create<DataState>((set, get) => {
             if (error) revert(prev, error.message)
           })
       }
+    },
+
+    saveWorkspace: async (patch) => {
+      const prev = get().workspace
+      if (!prev) return false
+      set({ workspace: { ...prev, ...patch } })
+      if (!supabase) {
+        saveDemoWorkspace({ ...prev, ...patch })
+        return true
+      }
+      const { error } = await supabase.from('workspaces').update(patch).eq('id', prev.id)
+      if (error) {
+        set({ workspace: prev })
+        toast.error('Couldn’t save workspace', { description: error.message })
+        return false
+      }
+      return true
     },
 
     markNotificationsRead: (ids) => {

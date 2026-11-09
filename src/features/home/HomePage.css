@@ -1,35 +1,50 @@
 /* ==========================================================================
-   Home / Landing Page — Polished, Self-Contained Dark Theme
+   Home / Landing Page: self-contained light theme (ignores the app's dark mode)
    ========================================================================== */
 
 .home-root {
-  --h-bg: #121216;
-  --h-surface: #18181E;
-  --h-surface-card: #1E1E26;
-  --h-surface-elevated: #242430;
-  --h-surface-subtle: rgba(255, 255, 255, 0.035);
-  
-  --h-border: rgba(255, 255, 255, 0.08);
-  --h-border-subtle: rgba(255, 255, 255, 0.05);
-  --h-border-hover: rgba(255, 255, 255, 0.18);
-  --h-border-active: rgba(99, 102, 241, 0.4);
-  
-  --h-text: #F3F3F7;
-  --h-text-muted: #A3A3B2;
-  --h-text-dim: #717182;
-  
-  --h-pri: #6366F1;
-  --h-pri-hover: #4F46E5;
-  --h-pri-soft: rgba(99, 102, 241, 0.14);
-  --h-pri-glow: rgba(99, 102, 241, 0.25);
-  
-  --h-green: #22C55E;
-  --h-green-soft: rgba(34, 197, 94, 0.12);
-  --h-amber: #F59E0B;
-  --h-amber-soft: rgba(245, 158, 11, 0.12);
+  --h-bg: #FAFAFC;
+  --h-surface: #FFFFFF;
+  --h-surface-card: #FFFFFF;
+  --h-surface-elevated: #F4F4F8;
+  --h-surface-subtle: #F4F4F8;
+  --h-surface-tint: #F7F7FA;
+
+  --h-border: #E4E4EC;
+  --h-border-subtle: #EEEEF3;
+  --h-border-hover: #C9C9D6;
+  --h-border-active: rgba(79, 70, 229, 0.4);
+
+  --h-text: #0F0F14;
+  --h-text-muted: #4B4B58;
+  --h-text-dim: #6B6B78;
+
+  --h-pri: #4F46E5;
+  --h-pri-hover: #4338CA;
+  --h-pri-soft: #EEF0FF;
+  --h-pri-glow: rgba(79, 70, 229, 0.22);
+
+  --h-green: #16A34A;
+  --h-green-soft: #E7F6EE;
+  --h-amber: #D97706;
+  --h-amber-soft: #FFF4E0;
+
+  --h-shadow-sm: 0 1px 2px rgba(16, 16, 24, 0.05);
+  --h-shadow-lg: 0 24px 60px rgba(16, 16, 24, 0.10), 0 2px 8px rgba(16, 16, 24, 0.05);
+
+  /* App components used on this page (buttons, pills) always render light here. */
+  color-scheme: light;
+  --panel: #FFFFFF; --soft: #F1F2F6; --soft2: #F5F6F9;
+  --line: #DADBE3; --line2: #D2D3DC; --line3: #C0C1CC;
+  --ink: #0F0F14; --ink2: #2A2A33; --ink3: #45454F; --mute: #5E5E6B; --faint: #6B6B78;
+  --on-ink: #fff; --hover: rgba(15, 15, 20, .05);
+  --pri: #4F46E5; --pri-h: #4338CA; --pri-soft: #EEF0FF; --pri-mid: #C7C9F5; --pri-deep: #312E81;
+  --ok: #0B6B3F; --ok-bg: #E7F6EE; --warn: #8A4B00; --warn-bg: #FFF4E0;
   
   min-height: 100vh;
-  background-color: var(--h-bg) !important;
+  background:
+    radial-gradient(1100px 520px at 50% -140px, rgba(79, 70, 229, 0.10), transparent 70%),
+    var(--h-bg) !important;
   color: var(--h-text) !important;
   font-family: inherit;
   display: flex;
@@ -46,7 +61,7 @@
   top: 0;
   z-index: 50;
   backdrop-filter: blur(16px);
-  background: rgba(18, 18, 22, 0.88);
+  background: rgba(250, 250, 252, 0.85);
   border-bottom: 1px solid var(--h-border);
 }
 
@@ -137,7 +152,7 @@
   font-weight: 700;
   line-height: 1.14;
   letter-spacing: -0.035em;
-  color: #FFFFFF;
+  color: var(--h-text);
   margin: 0 0 18px;
 }
 
@@ -171,6 +186,7 @@
   background: var(--h-surface-card) !important;
   color: var(--h-text) !important;
   border: 1px solid var(--h-border) !important;
+  box-shadow: var(--h-shadow-sm);
 }
 
 .home-download-btn:hover {
@@ -199,7 +215,7 @@
   border: 1px solid var(--h-border) !important;
   border-radius: 14px;
   overflow: hidden;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--h-shadow-lg);
 }
 
 .home-preview-topbar {
@@ -207,7 +223,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 10px 18px;
-  background: #141418 !important;
+  background: var(--h-surface-tint) !important;
   border-bottom: 1px solid var(--h-border) !important;
 }
 
@@ -246,13 +262,13 @@
 }
 
 .preview-tab-btn:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(15, 15, 20, 0.05);
   color: var(--h-text);
 }
 
 .preview-tab-btn.active {
   background: var(--h-pri-soft);
-  color: #A5B4FC;
+  color: var(--h-pri);
 }
 
 .home-preview-tag {
@@ -266,14 +282,14 @@
 .home-preview-body {
   padding: 24px;
   min-height: 270px;
-  background: #15151B !important;
+  background: var(--h-surface-tint) !important;
 }
 
 .preview-pane-title {
   font-size: 16.5px;
   font-weight: 600;
   margin: 0;
-  color: #FFFFFF;
+  color: var(--h-text);
 }
 
 .preview-pane-sub {
@@ -362,7 +378,7 @@
 .kpi-val {
   font-size: 24px;
   font-weight: 700;
-  color: #FFFFFF;
+  color: var(--h-text);
 }
 
 .kpi-sub {
@@ -396,7 +412,7 @@
   font-weight: 600;
   text-transform: uppercase;
   color: var(--h-text-dim);
-  background: #141418 !important;
+  background: var(--h-surface-tint) !important;
 }
 
 /* Clients Grid Preview */
@@ -425,7 +441,7 @@
 .client-card-top b {
   display: block;
   font-size: 14px;
-  color: #FFFFFF;
+  color: var(--h-text);
 }
 
 .client-card-top small {
@@ -452,7 +468,7 @@
 }
 
 .client-card-stats b {
-  color: #FFFFFF;
+  color: var(--h-text);
   font-size: 13.5px;
 }
 
@@ -474,7 +490,7 @@
   font-size: 38px;
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: #FFFFFF;
+  color: var(--h-text);
 }
 
 .timer-display {
@@ -508,7 +524,7 @@
   font-weight: 700;
   letter-spacing: -0.025em;
   margin: 0 0 12px;
-  color: #FFFFFF;
+  color: var(--h-text);
 }
 
 .home-section-sub {
@@ -519,7 +535,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   Features Grid (Always Dark Cards)
+   Features Grid
    -------------------------------------------------------------------------- */
 .home-features-grid {
   display: grid;
@@ -532,6 +548,7 @@
   background: var(--h-surface-card) !important;
   border: 1px solid var(--h-border) !important;
   border-radius: 12px;
+  box-shadow: var(--h-shadow-sm);
   transition: transform 0.2s ease, border-color 0.2s ease;
 }
 
@@ -544,8 +561,8 @@
   width: 40px;
   height: 40px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--h-border);
+  background: color-mix(in srgb, currentColor 10%, white);
+  border: 1px solid color-mix(in srgb, currentColor 18%, white);
   display: grid;
   place-items: center;
   margin-bottom: 18px;
@@ -555,7 +572,7 @@
   font-size: 16.5px;
   font-weight: 600;
   margin: 0 0 8px;
-  color: #FFFFFF !important;
+  color: var(--h-text) !important;
 }
 
 .feature-card p {
@@ -575,8 +592,8 @@
 }
 
 .home-desktop-card {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, #171720 100%) !important;
-  border: 1px solid rgba(99, 102, 241, 0.25) !important;
+  background: linear-gradient(135deg, #EEF0FF 0%, #FFFFFF 70%) !important;
+  border: 1px solid #DCDDF7 !important;
   border-radius: 14px;
   padding: 44px;
   display: grid;
@@ -590,7 +607,7 @@
   font-weight: 700;
   letter-spacing: -0.02em;
   margin: 0 0 14px;
-  color: #FFFFFF;
+  color: var(--h-text);
 }
 
 .desktop-card-content p {
@@ -624,16 +641,16 @@
 }
 
 .desktop-mockup {
-  background: #111116;
+  background: #FFFFFF;
   border-radius: 10px;
   border: 1px solid var(--h-border);
   overflow: hidden;
-  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--h-shadow-lg);
 }
 
 .mockup-header {
   height: 36px;
-  background: #1B1B22;
+  background: var(--h-surface-tint);
   display: flex;
   align-items: center;
   padding: 0 12px;
@@ -658,7 +675,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(15, 15, 20, 0.18);
 }
 
 .mockup-content {
@@ -668,7 +685,7 @@
 }
 
 .mockup-sidebar {
-  background: #16161D;
+  background: #26262B;
   border-right: 1px solid var(--h-border);
   padding: 8px;
   display: flex;
@@ -680,12 +697,12 @@
   font-size: 11px;
   padding: 5px 8px;
   border-radius: 4px;
-  color: var(--h-text-dim);
+  color: #A6A6B1;
 }
 
 .mockup-nav-item.active {
-  background: var(--h-pri-soft);
-  color: #A5B4FC;
+  background: rgba(139, 143, 250, 0.18);
+  color: #C7C9FD;
 }
 
 .mockup-main {
@@ -697,7 +714,7 @@
 
 .mockup-card {
   height: 48px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--h-surface-tint);
   border: 1px solid var(--h-border);
   border-radius: 6px;
 }
@@ -707,7 +724,8 @@
    -------------------------------------------------------------------------- */
 .home-steps-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  width: 100%;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -716,13 +734,14 @@
   background: var(--h-surface-card) !important;
   border: 1px solid var(--h-border) !important;
   border-radius: 10px;
+  box-shadow: var(--h-shadow-sm);
 }
 
 .step-number {
   font-family: 'Geist Mono', ui-monospace, monospace;
   font-size: 11px;
   font-weight: 700;
-  color: #818CF8;
+  color: var(--h-pri);
   margin-bottom: 8px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -731,7 +750,7 @@
 .step-card h3 {
   font-size: 15.5px;
   font-weight: 600;
-  color: #FFFFFF;
+  color: var(--h-text);
   margin: 0 0 6px;
 }
 
@@ -743,10 +762,10 @@
 }
 
 /* --------------------------------------------------------------------------
-   Bottom Call to Action (Pure Dark Surface, NO White Banner)
+   Bottom Call to Action
    -------------------------------------------------------------------------- */
 .home-bottom-cta {
-  background: #16161D !important;
+  background: linear-gradient(180deg, #EEF0FF 0%, var(--h-bg) 100%) !important;
   border-top: 1px solid var(--h-border) !important;
   border-bottom: 1px solid var(--h-border) !important;
   padding: 64px 24px;
@@ -757,7 +776,7 @@
   font-size: 27px;
   font-weight: 700;
   margin: 0 0 10px;
-  color: #FFFFFF !important;
+  color: var(--h-text) !important;
 }
 
 .home-bottom-cta p {
@@ -843,6 +862,9 @@
    Responsive
    -------------------------------------------------------------------------- */
 @media (max-width: 768px) {
+  .home-steps-grid {
+    grid-template-columns: 1fr;
+  }
   .home-nav-links {
     display: none;
   }

@@ -63,6 +63,13 @@ const U3 = '33333333-3333-3333-3333-333333333333' // invited later
 // ---- 1. existing database ----
 await db.exec(prep(readFileSync(oldPath ?? schemaPath, 'utf8')))
 await q(`insert into auth.users (id, email) values ($1, 'owner@x.com'), ($2, 'member@x.com')`, [U1, U2])
+if (!oldPath) {
+  // This version: the owner creates their workspace, the member is already on the team.
+  const ws = (await as(U1, `select create_workspace('Acme Agency', 'Acme Ltd', 'usd', '#0EA5E9', '#16A34A') id`)).rows[0].id
+  await db.exec(`select set_config('mydesk.system', 'on', false)`)
+  await q(`update profiles set workspace_id = $1 where id = $2`, [ws, U2])
+  await db.exec(`select set_config('mydesk.system', 'off', false)`)
+}
 await as(U1, `insert into clients (id, name, owner_id) values ('aaaaaaaa-0000-0000-0000-000000000001', 'Yamin Khan', $1)`, [U1])
 await as(U1, `insert into projects (id, client_id, title, amount, owner_id) values ('bbbbbbbb-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', 'Oct: CPC Vending — Google Ads', 100, $1)`, [U1])
 for (let i = 1; i <= 3; i++) {
@@ -266,6 +273,94 @@ n = await q(`select count(*)::int c from code_snippets where task_id = $1`, [sni
 ok(n.rows[0].c === 0, 'deleting a task deletes its code snippets')
 n = await q(`select count(*)::int c from code_snippets where project_id = 'bbbbbbbb-0000-0000-0000-000000000001'`)
 ok(n.rows[0].c === 1, 'project snippets are kept')
+
+// ---- 5. workspaces: anyone can sign up; workspaces never see each other ----
+const U4 = '44444444-4444-4444-4444-444444444444' // signs up on their own
+const U5 = '55555555-5555-5555-5555-555555555555' // signs up, gets invited afterwards
+const ws1 = (await q(`select workspace_id from profiles where id = $1`, [U1])).rows[0].workspace_id
+ok(Boolean(ws1), 'existing owner has a workspace')
+const team = (await q(`select count(*)::int c from profiles where workspace_id = $1`, [ws1])).rows[0].c
+ok(team === 3, `existing team members are all in it (${team})`)
+for (const t of ['clients', 'projects', 'tasks', 'payments', 'project_notes', 'invoice_settings', 'learning_items']) {
+  const stray = (await q(`select count(*)::int c from ${t} where workspace_id is distinct from $1`, [ws1])).rows[0].c
+  ok(stray === 0, `${t}: every existing row belongs to the owner's workspace`)
+}
+
+await q(`insert into auth.users (id, email) values ($1, 'solo@y.com')`, [U4])
+const p4 = (await q(`select role, workspace_id from profiles where id = $1`, [U4])).rows[0]
+ok(p4.role === 'member' && p4.workspace_id === null, 'a new sign-up starts with no workspace (never joins someone else’s)')
+
+await db.exec(`set role authenticated`)
+const seesNothing = (await as(U4, `select (select count(*) from clients) + (select count(*) from tasks) + (select count(*) from payments) as n`)).rows[0].n
+ok(Number(seesNothing) === 0, 'before setting up, a new person sees no data')
+const ws4 = (await as(U4, `select create_workspace('Solo Studio', 'Solo LLC', 'eur', '#DB2777', '#7C3AED') id`)).rows[0].id
+const me4 = (await as(U4, `select role, workspace_id from profiles where id = $1`, [U4])).rows[0]
+ok(me4.role === 'owner' && me4.workspace_id === ws4, 'creating a workspace makes you its owner')
+const brand = (await as(U4, `select name, accent_color, logo_color from workspaces`)).rows
+ok(brand.length === 1 && brand[0].name === 'Solo Studio' && brand[0].accent_color === '#7C3AED', 'you see only your own workspace and its colours')
+const inv4 = (await as(U4, `select business_name, default_currency from invoice_settings`)).rows
+ok(inv4.length === 1 && inv4[0].business_name === 'Solo LLC' && inv4[0].default_currency === 'EUR', 'business name and currency are saved')
+let twice = false
+try { await as(U4, `select create_workspace('Second')`) } catch { twice = true }
+ok(twice, 'you can’t create a second workspace')
+
+const cross = (await as(U4, `select (select count(*) from clients) + (select count(*) from projects) + (select count(*) from tasks)
+  + (select count(*) from payments) + (select count(*) from invoices) + (select count(*) from learning_items)
+  + (select count(*) from subtasks) + (select count(*) from task_comments) + (select count(*) from code_snippets) as n`)).rows[0].n
+ok(Number(cross) === 0, 'the new workspace sees none of the existing workspace’s data')
+const people4 = (await as(U4, `select count(*)::int c from profiles`)).rows[0].c
+ok(people4 === 1, `the new owner only sees themselves on the team (${people4})`)
+await as(U4, `insert into clients (id, name) values ('cccccccc-0000-0000-0000-000000000001', 'Solo client')`)
+const ownSees = (await as(U1, `select count(*)::int c from clients where id = 'cccccccc-0000-0000-0000-000000000001'`)).rows[0].c
+ok(ownSees === 0, 'the existing owner can’t see the new workspace’s client')
+const ownClients = (await as(U1, `select count(*)::int c from clients`)).rows[0].c
+ok(ownClients === 2, `the existing owner still sees all their clients (${ownClients})`)
+
+let grab = false
+try { await as(U4, `insert into client_members (client_id, user_id) values ('aaaaaaaa-0000-0000-0000-000000000001', $1)`, [U4]) } catch { grab = true }
+ok(grab, 'you can’t give yourself access to another workspace’s client')
+let hop = false
+try { await as(U4, `update profiles set workspace_id = $1 where id = $2`, [ws1, U4]) } catch { hop = true }
+ok(hop, 'you can’t move yourself into another workspace')
+const edited = (await as(U4, `update profiles set role = 'member' where id = $1 returning id`, [U1])).rows.length
+ok(edited === 0, 'an owner can’t edit people in another workspace')
+let steal = false
+try { await as(U4, `insert into tasks (project_id, title, workspace_id) values ('bbbbbbbb-0000-0000-0000-000000000001', 'x', $1)`, [ws1]) } catch { steal = true }
+ok(steal, 'you can’t write rows into another workspace')
+await db.exec(`reset role`)
+
+// Assigning a task to someone in another workspace never notifies them.
+await as(U4, `insert into projects (id, client_id, title) values ('dddddddd-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-000000000001', 'Solo project')`)
+const before4 = (await q(`select count(*)::int c from notifications where user_id = $1`, [U1])).rows[0].c
+await as(U4, `insert into tasks (project_id, title, assignee_id) values ('dddddddd-0000-0000-0000-000000000001', 'Spam', $1)`, [U1])
+const after4 = (await q(`select count(*)::int c from notifications where user_id = $1`, [U1])).rows[0].c
+ok(before4 === after4, 'no notifications across workspaces')
+
+// Overdue alerts only go to that workspace's admins.
+await as(U4, `insert into payments (client_id, amount, status, due_date) values ('cccccccc-0000-0000-0000-000000000001', 50, 'unpaid', current_date - 3)`)
+await as(null, `select run_daily()`)
+const solo = (await q(`select distinct user_id from notifications where type = 'overdue' and title like '%Solo client%'`)).rows
+ok(solo.length === 1 && solo[0].user_id === U4, 'overdue alerts go only to that workspace’s admins')
+
+// Signed up first, invited later: the invite shows up and can be accepted.
+await q(`insert into auth.users (id, email) values ($1, 'late@x.com')`, [U5])
+await as(U1, `insert into invites (email, role, client_ids) values ('late@x.com', 'admin', '{aaaaaaaa-0000-0000-0000-000000000001}')`)
+const ws1Name = (await q(`select name from workspaces where id = $1`, [ws1])).rows[0].name
+await db.exec(`set role authenticated`)
+const pend = (await as(U5, `select * from my_pending_invite()`)).rows
+ok(pend.length === 1 && pend[0].workspace === ws1Name, 'an open invite is offered to someone without a workspace')
+await as(U5, `select accept_invite($1)`, [pend[0].id])
+await db.exec(`reset role`)
+const p5 = (await q(`select role, workspace_id from profiles where id = $1`, [U5])).rows[0]
+ok(p5.role === 'admin' && p5.workspace_id === ws1, 'accepting it joins that workspace with the invite’s role')
+
+// Storage: admins can only write uploads for their own workspace.
+const canWrite = async (uid, name) => (await as(uid, `select can_write_avatar($1) ok`, [name])).rows[0].ok
+ok(await canWrite(U4, `${U4}/logo.png`), 'you can upload into your own folder')
+ok(!(await canWrite(U4, `${U1}/a.png`)), 'an admin can’t upload into another workspace member’s folder')
+ok(await canWrite(U1, `${U2}/a.png`), 'an admin can upload a teammate’s photo')
+ok(!(await canWrite(U4, `clients/aaaaaaaa-0000-0000-0000-000000000001/x.png`)), 'an admin can’t upload another workspace’s client logo')
+ok(!(await canWrite(U4, `random/x.png`)), 'unknown folders are refused, not errors')
 
 console.log(failures ? `\n${failures} check(s) failed` : '\nAll schema checks passed')
 process.exit(failures ? 1 : 0)

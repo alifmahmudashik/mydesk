@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { CurrencySelect } from '@/components/ui/currency-picker'
-import { Briefcase, CreditCard, Edit3, FileText, Plus, Trash2, X } from 'lucide-react'
+import { Briefcase, CreditCard, Edit3, FileText, Image, Palette, Plus, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
 import { Topbar, Content, PageHead, Section, SaveBar } from '@/components/ui/layout'
@@ -9,14 +9,21 @@ import { Field } from '@/components/ui/field'
 import { SUPPORTED_CURRENCIES } from '@/lib/currency'
 import { uid } from '@/lib/utils'
 import type { PaymentProfile } from '@/types'
+import { ColorPicker, WorkspaceLogo, isHex } from '@/features/workspace/brand'
+import { uploadLogo } from '@/features/workspace/CreateWorkspacePage'
 
 const COLORS = ['#4F46E5', '#0284C7', '#0D9488', '#0F0F14']
 
 export function WorkspaceSettingsPage() {
-  const { invoiceSettings, saveInvoiceSettings } = useData()
+  const { invoiceSettings, saveInvoiceSettings, workspace, saveWorkspace, me } = useData()
+  const [uploading, setUploading] = useState(false)
+  const logoRef = useRef<HTMLInputElement>(null)
   const initial = useMemo(
     () => ({
-      workspace_name: invoiceSettings?.workspace_name ?? '',
+      workspace_name: workspace?.name ?? invoiceSettings?.workspace_name ?? '',
+      logo_url: workspace?.logo_url ?? null,
+      logo_color: workspace?.logo_color ?? '',
+      accent_color: workspace?.accent_color ?? '',
       business_name: invoiceSettings?.business_name ?? '',
       email: invoiceSettings?.email ?? '',
       business_address: invoiceSettings?.business_address ?? '',
@@ -27,7 +34,7 @@ export function WorkspaceSettingsPage() {
       default_tax: String(invoiceSettings?.default_tax ?? 0),
       default_note: invoiceSettings?.default_note ?? '',
     }),
-    [invoiceSettings],
+    [invoiceSettings, workspace],
   )
   const [f, setF] = useState(initial)
   const [editing, setEditing] = useState<string | null>(null)
@@ -39,6 +46,17 @@ export function WorkspaceSettingsPage() {
   const setProfile = (id: string, patch: Partial<PaymentProfile>) => set('payment_profiles', f.payment_profiles.map((p) => (p.id === id ? { ...p, ...patch } : p)))
 
   const save = () => {
+    const name = f.workspace_name.trim()
+    if (workspace) {
+      const patch = {
+        name: name || workspace.name,
+        logo_url: f.logo_url,
+        logo_color: isHex(f.logo_color) ? f.logo_color : null,
+        accent_color: isHex(f.accent_color) ? f.accent_color : null,
+      }
+      const changed = (Object.keys(patch) as (keyof typeof patch)[]).some((k) => (patch[k] ?? null) !== (workspace[k] ?? null))
+      if (changed) void saveWorkspace(patch)
+    }
     saveInvoiceSettings({
       workspace_name: f.workspace_name.trim() || null,
       business_name: f.business_name.trim() || null,
@@ -61,6 +79,14 @@ export function WorkspaceSettingsPage() {
     setEditing(p.id)
   }
 
+  const pickLogo = async (file: File) => {
+    if (!me) return
+    setUploading(true)
+    const url = await uploadLogo(file, me.id)
+    setUploading(false)
+    if (url) set('logo_url', url)
+  }
+
   const makeDefault = (id: string) => {
     const p = f.payment_profiles.find((x) => x.id === id)
     if (p) set('payment_profiles', [p, ...f.payment_profiles.filter((x) => x.id !== id)])
@@ -72,14 +98,41 @@ export function WorkspaceSettingsPage() {
         <button type="button" className="btn btn-pri" disabled={!dirty} onClick={save}>Save changes</button>
       </Topbar>
       <Content>
-        <PageHead title="Workspace settings" sub="Your business details, used as the sender on every invoice." />
+        <PageHead title="Workspace settings" sub="Your workspace branding, and the business details used as the sender on every invoice." />
         <SettingsLayout
           nav={[
+            { id: 'brand', label: 'Workspace', icon: <Palette className="i i-sm" /> },
             { id: 'business', label: 'Business', icon: <Briefcase className="i i-sm" /> },
             { id: 'payment', label: 'Payment methods', icon: <CreditCard className="i i-sm" /> },
             { id: 'invoice', label: 'Invoice defaults', icon: <FileText className="i i-sm" /> },
           ]}
         >
+          <Section id="brand" title="Workspace" desc="Your workspace name, logo and colours, as your whole team sees them.">
+            <Field label="Workspace name" hint="Shown at the top of the sidebar."><input className="inp" maxLength={80} placeholder="e.g. analyticsbyte" value={f.workspace_name} onChange={(e) => set('workspace_name', e.target.value)} /></Field>
+            <Field label="Logo">
+              <div className="row wrap" style={{ gap: 12 }}>
+                <WorkspaceLogo workspace={{ name: f.workspace_name || 'W', logo_url: f.logo_url, logo_color: f.logo_color || null }} size={44} />
+                <button type="button" className="btn btn-sm" disabled={uploading} onClick={() => logoRef.current?.click()}>
+                  <Image className="i i-sm" />{uploading ? 'Uploading…' : f.logo_url ? 'Replace logo' : 'Upload logo'}
+                </button>
+                {f.logo_url && <button type="button" className="btn btn-ghost btn-sm" onClick={() => set('logo_url', null)}>Remove</button>}
+                <input ref={logoRef} type="file" className="sr" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(e) => { const file = e.target.files?.[0]; if (file) void pickLogo(file); e.target.value = '' }} />
+              </div>
+            </Field>
+            <Field label="Logo colour" hint={f.logo_url ? 'Shows behind your logo.' : f.logo_color ? 'Without an uploaded logo, the sidebar shows your first letter on this colour.' : 'Not set: the sidebar shows the MyDesk flame.'}>
+              <div className="row wrap" style={{ gap: 10 }}>
+                <ColorPicker label="Logo colour" value={f.logo_color} onChange={(v) => set('logo_color', v)} />
+                {f.logo_color && <button type="button" className="btn btn-ghost btn-sm" onClick={() => set('logo_color', '')}>Reset</button>}
+              </div>
+            </Field>
+            <Field label="Accent colour" hint="Buttons, links and highlights across the app, for everyone in the workspace.">
+              <div className="row wrap" style={{ gap: 10 }}>
+                <ColorPicker label="Accent colour" value={f.accent_color} onChange={(v) => set('accent_color', v)} />
+                {f.accent_color && <button type="button" className="btn btn-ghost btn-sm" onClick={() => set('accent_color', '')}>Reset</button>}
+              </div>
+            </Field>
+          </Section>
+
           <Section id="business" title="Business details">
             <div className="f2">
               <Field label="Business name" hint="Printed at the top of every invoice."><input className="inp" value={f.business_name} onChange={(e) => set('business_name', e.target.value)} /></Field>
@@ -87,9 +140,8 @@ export function WorkspaceSettingsPage() {
             </div>
             <Field label="Address"><textarea className="inp" rows={3} value={f.business_address} onChange={(e) => set('business_address', e.target.value)} /></Field>
             <div className="f2">
-              <Field label="Workspace name" hint="Shown under the MyDesk logo in the sidebar."><input className="inp" placeholder="e.g. analyticsbyte" value={f.workspace_name} onChange={(e) => set('workspace_name', e.target.value)} /></Field>
               <div className="field">
-                <span className="lbl">Brand color</span>
+                <span className="lbl">Invoice colour</span>
                 <div className="row wrap" style={{ gap: 14 }}>
                   <div className="swatches">
                     {COLORS.map((c) => <input key={c} className="swatch" type="radio" name="stc" style={{ ['--c' as string]: c }} checked={f.brand_color.toLowerCase() === c.toLowerCase()} onChange={() => set('brand_color', c)} aria-label={c} />)}
@@ -162,7 +214,7 @@ export function WorkspaceSettingsPage() {
           </Section>
         </SettingsLayout>
       </Content>
-      {dirty && <SaveBar note="Applies to new invoices" onCancel={() => setF(initial)} onSave={save} />}
+      {dirty && <SaveBar note="Invoice details apply to new invoices" onCancel={() => setF(initial)} onSave={save} />}
     </>
   )
 }

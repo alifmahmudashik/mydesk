@@ -10,7 +10,7 @@ import {
   Folder,
   ListChecks,
   Monitor,
-  Shield,
+  Palette,
   Users,
 } from 'lucide-react'
 import { BrandLogo } from '@/features/auth/AuthLayout'
@@ -49,15 +49,15 @@ export function HomePage() {
             <a
               href={WINDOWS_EXE_URL}
               className="btn btn-sm hide-sm"
-              title="Download Windows installer"
+              title="Download the Windows app"
             >
               <Download className="i i-xs" />
-              <span>Download (.exe)</span>
+              <span>Download</span>
             </a>
             <Link to="/login" className="btn btn-sm btn-ghost">
               Sign in
             </Link>
-            <Link to="/login" className="btn btn-sm home-cta-primary">
+            <Link to="/signup" className="btn btn-sm home-cta-primary">
               Get started
             </Link>
           </div>
@@ -81,19 +81,19 @@ export function HomePage() {
         </p>
 
         <div className="home-cta-row">
-          <Link to="/login" className="btn btn-lg home-cta-primary">
-            <span>Open workspace</span>
+          <Link to="/signup" className="btn btn-lg home-cta-primary">
+            <span>Create your workspace</span>
           </Link>
           <a
             href={WINDOWS_EXE_URL}
             className="btn btn-lg home-download-btn"
           >
             <Monitor className="i i-sm" />
-            <span>Download for Windows (.exe)</span>
+            <span>Download</span>
           </a>
         </div>
         <p className="home-hero-meta">
-          Windows 10 &amp; 11 · 64-bit installer · Self-hosted on Supabase &amp; Vercel
+          Works in your browser · Windows app for Windows 10 &amp; 11
         </p>
       </section>
 
@@ -325,7 +325,7 @@ export function HomePage() {
 
         <div className="home-features-grid">
           <div className="feature-card">
-            <div className="feature-icon-wrap" style={{ color: '#818CF8' }}>
+            <div className="feature-icon-wrap" style={{ color: '#4F46E5' }}>
               <Folder className="i" />
             </div>
             <h3>Tasks &amp; Milestones</h3>
@@ -336,7 +336,7 @@ export function HomePage() {
           </div>
 
           <div className="feature-card">
-            <div className="feature-icon-wrap" style={{ color: '#34D399' }}>
+            <div className="feature-icon-wrap" style={{ color: '#059669' }}>
               <FileText className="i" />
             </div>
             <h3>PDF Invoicing</h3>
@@ -347,7 +347,7 @@ export function HomePage() {
           </div>
 
           <div className="feature-card">
-            <div className="feature-icon-wrap" style={{ color: '#38BDF8' }}>
+            <div className="feature-icon-wrap" style={{ color: '#0284C7' }}>
               <Briefcase className="i" />
             </div>
             <h3>Client Records</h3>
@@ -358,7 +358,7 @@ export function HomePage() {
           </div>
 
           <div className="feature-card">
-            <div className="feature-icon-wrap" style={{ color: '#FBBF24' }}>
+            <div className="feature-icon-wrap" style={{ color: '#D97706' }}>
               <Clock className="i" />
             </div>
             <h3>Built-in Timer</h3>
@@ -369,7 +369,7 @@ export function HomePage() {
           </div>
 
           <div className="feature-card">
-            <div className="feature-icon-wrap" style={{ color: '#A78BFA' }}>
+            <div className="feature-icon-wrap" style={{ color: '#7C3AED' }}>
               <Users className="i" />
             </div>
             <h3>Team &amp; Contractor Access</h3>
@@ -380,13 +380,13 @@ export function HomePage() {
           </div>
 
           <div className="feature-card">
-            <div className="feature-icon-wrap" style={{ color: '#F472B6' }}>
-              <Shield className="i" />
+            <div className="feature-icon-wrap" style={{ color: '#DB2777' }}>
+              <Palette className="i" />
             </div>
-            <h3>Zero Monthly Fees</h3>
+            <h3>Your Brand, Your Workspace</h3>
             <p>
-              Runs on your own Supabase database. You retain complete ownership of your client records
-              and invoice data, with no per-user subscriptions.
+              Set your workspace name, logo, accent colour and business currency. Each workspace is
+              private: other businesses never see your clients, invoices or team.
             </p>
           </div>
         </div>
@@ -402,14 +402,14 @@ export function HomePage() {
               runs quietly in your taskbar, starts on boot, and keeps you signed in without browser tab clutter.
             </p>
             <ul className="desktop-feature-list">
-              <li>Frameless dark interface blending with your Windows desktop theme</li>
+              <li>Light and dark themes that follow your Windows setting</li>
               <li>Always stays up to date with the latest web deployments</li>
               <li>Runs in background with native Windows notifications</li>
             </ul>
             <div className="row wrap" style={{ gap: 12, marginTop: 24 }}>
               <a href={WINDOWS_EXE_URL} className="btn btn-lg home-cta-primary">
                 <Download className="i i-sm" />
-                <span>Download MyDesk Setup 1.2.0 (.exe)</span>
+                <span>Download</span>
               </a>
               <a
                 href={LATEST_RELEASE_URL}
@@ -455,25 +455,25 @@ export function HomePage() {
         <div className="home-section-head">
           <h2 className="home-section-title">Three steps to your own workspace</h2>
           <p className="home-section-sub">
-            Deploy in minutes using free tiers on Supabase and Vercel.
+            Sign up, make the workspace yours, and bring your team in.
           </p>
         </div>
 
         <div className="home-steps-grid">
           <div className="step-card">
             <div className="step-number">Step 1</div>
-            <h3>Run Database Script</h3>
-            <p>Paste schema.sql into your free Supabase project. One file creates all tables, policies, and indexes.</p>
+            <h3>Create your account</h3>
+            <p>Sign up with your email or Google account. It takes less than a minute.</p>
           </div>
           <div className="step-card">
             <div className="step-number">Step 2</div>
-            <h3>Deploy to Vercel</h3>
-            <p>Connect your GitHub fork to Vercel and paste your Supabase keys under environment variables.</p>
+            <h3>Set up your workspace</h3>
+            <p>Add your workspace and business name, pick your currency, upload a logo and choose your colours.</p>
           </div>
           <div className="step-card">
             <div className="step-number">Step 3</div>
-            <h3>Sign in and Work</h3>
-            <p>The first account you create becomes the workspace owner. Invite your team or download the desktop app.</p>
+            <h3>Invite your team</h3>
+            <p>You're the owner. Invite teammates to the clients they work on, and download the desktop app if you like.</p>
           </div>
         </div>
       </section>
@@ -481,14 +481,17 @@ export function HomePage() {
       {/* Bottom CTA (Always Dark Surface) */}
       <section className="home-bottom-cta">
         <h2>Start organizing your client work today</h2>
-        <p>Sign in to your existing workspace or set up a new instance.</p>
-        <div className="row wrap justify-center" style={{ gap: 14, marginTop: 24 }}>
-          <Link to="/login" className="btn btn-lg home-cta-primary">
-            <span>Sign in to MyDesk</span>
+        <p>Create a workspace for your business, or sign in to the one you already have.</p>
+        <div className="row wrap" style={{ gap: 14, marginTop: 24, justifyContent: 'center' }}>
+          <Link to="/signup" className="btn btn-lg home-cta-primary">
+            <span>Create your workspace</span>
+          </Link>
+          <Link to="/login" className="btn btn-lg home-download-btn">
+            <span>Sign in</span>
           </Link>
           <a href={WINDOWS_EXE_URL} className="btn btn-lg home-download-btn">
             <Download className="i i-sm" />
-            <span>Download for Windows (.exe)</span>
+            <span>Download</span>
           </a>
         </div>
       </section>
@@ -517,7 +520,7 @@ export function HomePage() {
             <div className="footer-col">
               <span className="footer-heading">Access</span>
               <Link to="/login">Sign in</Link>
-              <Link to="/login">Create account</Link>
+              <Link to="/signup">Create account</Link>
               <a href={WINDOWS_EXE_URL}>Windows download</a>
             </div>
 

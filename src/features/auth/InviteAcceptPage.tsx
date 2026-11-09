@@ -11,7 +11,7 @@ import { AuthLayout, GoogleIcon } from '@/features/auth/AuthLayout'
 export function InviteAcceptPage() {
   // Rendered outside <Routes>, so read the token from the path directly.
   const token = decodeURIComponent(useLocation().pathname.split('/invite/')[1] ?? '').replace(/\/$/, '')
-  const [invite, setInvite] = useState<{ email: string; role: string; inviter: string } | null | undefined>(undefined)
+  const [invite, setInvite] = useState<{ email: string; role: string; inviter: string; workspace?: string | null } | null | undefined>(undefined)
   const [name, setName] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
@@ -20,7 +20,7 @@ export function InviteAcceptPage() {
   useEffect(() => {
     if (!supabase) return
     void supabase.rpc('invite_lookup', { p_token: token }).then(({ data }) => {
-      const row = (data as { email: string; role: string; inviter: string }[] | null)?.[0]
+      const row = (data as { email: string; role: string; inviter: string; workspace?: string | null }[] | null)?.[0]
       setInvite(row ?? null)
     })
   }, [token])
@@ -58,8 +58,8 @@ export function InviteAcceptPage() {
       )}
       {invite && !sent && (
         <>
-          <h1 style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-.025em' }}>Join {invite.inviter}’s workspace</h1>
-          <p className="muted" style={{ marginTop: 6 }}>You’re invited as {invite.role === 'admin' ? 'an admin' : 'a member'}.</p>
+          <h1 style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-.025em' }}>Join {invite.workspace || `${invite.inviter}’s workspace`}</h1>
+          <p className="muted" style={{ marginTop: 6 }}>{invite.inviter} invited you as {invite.role === 'admin' ? 'an admin' : 'a member'}.</p>
           <form className="stack" style={{ marginTop: 28 }} onSubmit={submit}>
             <button type="button" className="btn btn-lg btn-block" onClick={() => void signInWithGoogle('/')}>
               <GoogleIcon />

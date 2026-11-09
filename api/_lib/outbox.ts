@@ -22,7 +22,7 @@ const money = (amount: number, currency: string) => {
 /** Monday summary: the person's open tasks, plus money in/overdue for owners and admins. */
 async function renderWeekly(userId: string) {
   const sb = adminClient()
-  const { data: me } = await sb.from('profiles').select('role, display_name, email').eq('id', userId).single()
+  const { data: me } = await sb.from('profiles').select('role, display_name, email, workspace_id').eq('id', userId).single()
   const name = me?.display_name || me?.email?.split('@')[0] || 'there'
   const today = new Date().toISOString().slice(0, 10)
   const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)
@@ -46,11 +46,17 @@ async function renderWeekly(userId: string) {
 
   let money_html = ''
   let money_text = ''
-  if (me && me.role !== 'member') {
-    const { data: paid } = await sb.from('payments').select('amount, currency').eq('status', 'paid').gte('payment_date', weekAgo)
+  if (me && me.role !== 'member' && me.workspace_id) {
+    const { data: paid } = await sb
+      .from('payments')
+      .select('amount, currency')
+      .eq('workspace_id', me.workspace_id)
+      .eq('status', 'paid')
+      .gte('payment_date', weekAgo)
     const { data: late } = await sb
       .from('payments')
       .select('amount, currency')
+      .eq('workspace_id', me.workspace_id)
       .in('status', ['unpaid', 'partial', 'overdue'])
       .lt('due_date', today)
     const fmt = (list: { amount: number; currency: string }[] | null) => {

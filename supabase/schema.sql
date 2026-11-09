@@ -12,6 +12,12 @@
 -- role-based access: owner > admin > member. Granting a member a client gives them
 -- full read/write on every project and task under it; payments/budgets/client
 -- contact details stay admin-only.
+--
+-- Workspaces: anyone can sign up and create their own workspace. Every person
+-- (profiles.workspace_id) and every row (workspace_id) belongs to one workspace,
+-- and the row-level security below only ever shows you your own workspace's data.
+-- The first run of this version moves an existing single-team database into one
+-- workspace owned by its owner. Nothing is deleted.
 
 create extension if not exists "pgcrypto";
 
@@ -171,6 +177,46 @@ create table if not exists invoices (
   created_at timestamptz not null default now()
 );
 
+-- A workspace: one business with its own team, clients and data. Branding colours
+-- are #RRGGBB only (they go straight into the page's CSS).
+create table if not exists workspaces (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  owner_id uuid references auth.users (id) on delete set null,
+  logo_url text,
+  logo_color text check (logo_color is null or logo_color ~ '^#[0-9A-Fa-f]{6}$'),
+  accent_color text check (accent_color is null or accent_color ~ '^#[0-9A-Fa-f]{6}$'),
+  created_at timestamptz not null default now()
+);
+
+-- Private config (app URL + shared secret for instant email delivery, migration flags).
+create schema if not exists app_private;
+revoke all on schema app_private from public, anon, authenticated;
+create table if not exists app_private.config (
+  key text primary key,
+  value text not null
+);
+
+alter table profiles add column if not exists workspace_id uuid references workspaces (id) on delete set null;
+create index if not exists idx_profiles_workspace on profiles (workspace_id);
+
+-- The signed-in person's workspace. New rows default to it.
+create or replace function public.my_workspace_id() returns uuid
+language sql stable security definer set search_path = public as
+$$ select workspace_id from profiles where id = auth.uid() $$;
+
+do $$
+declare t text;
+begin
+  foreach t in array array[
+    'clients','projects','tasks','access_items','payments','project_notes',
+    'activity_log','invoice_settings','invoices'
+  ] loop
+    execute format('alter table %I add column if not exists workspace_id uuid default public.my_workspace_id() references workspaces (id) on delete cascade', t);
+    execute format('create index if not exists %I on %I (workspace_id)', 'idx_' || t || '_workspace', t);
+  end loop;
+end $$;
+
 -- ============================================================================
 -- Column safety net — adds anything an older partial run might be missing.
 -- (create table if not exists above only creates NEW tables; it can't retrofit
@@ -288,28 +334,48 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
+-- Roles only count inside a workspace: someone who hasn't created or joined one
+-- yet is never an admin of anything.
 create or replace function public.is_admin() returns boolean
 language sql stable security definer set search_path = public as
-$$ select exists (select 1 from profiles where id = auth.uid() and role in ('owner','admin')) $$;
+$$ select exists (select 1 from profiles where id = auth.uid() and role in ('owner','admin') and workspace_id is not null) $$;
 
 create or replace function public.is_owner() returns boolean
 language sql stable security definer set search_path = public as
-$$ select exists (select 1 from profiles where id = auth.uid() and role = 'owner') $$;
+$$ select exists (select 1 from profiles where id = auth.uid() and role = 'owner' and workspace_id is not null) $$;
+
+-- True when that person is in the caller's workspace.
+create or replace function public.in_my_workspace(p_user uuid) returns boolean
+language sql stable security definer set search_path = public as
+$$ select exists (select 1 from profiles where id = p_user and workspace_id is not null and workspace_id = my_workspace_id()) $$;
+
+create or replace function public.client_in_my_workspace(p_client uuid) returns boolean
+language sql stable security definer set search_path = public as
+$$ select exists (select 1 from clients where id = p_client and workspace_id is not null and workspace_id = my_workspace_id()) $$;
 
 create or replace function public.my_client_ids() returns setof uuid
 language sql stable security definer set search_path = public as
-$$ select client_id from client_members where user_id = auth.uid() $$;
+$$ select cm.client_id from client_members cm join clients c on c.id = cm.client_id
+   where cm.user_id = auth.uid() and c.workspace_id = my_workspace_id() $$;
 
 create or replace function public.my_project_ids() returns setof uuid
 language sql stable security definer set search_path = public as
-$$ select id from projects where client_id in (select my_client_ids()) $$;
+$$ select id from projects where workspace_id = my_workspace_id() and client_id in (select my_client_ids()) $$;
 
 -- Anyone may promote/demote another user between admin and member. Two
 -- exceptions stay locked down: the owner role only changes hands via the
 -- owner, and nobody can change their own role (blocks self-escalation).
+-- Nobody can move themselves (or anyone) into another workspace; only the
+-- server-side workspace functions below can, by setting mydesk.system.
 create or replace function public.guard_role_change() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
+  if coalesce(current_setting('mydesk.system', true), 'off') = 'on' then
+    return new;
+  end if;
+  if new.workspace_id is distinct from old.workspace_id then
+    raise exception 'You cannot change workspace this way';
+  end if;
   if new.role is distinct from old.role then
     if new.role = 'owner' or old.role = 'owner' then
       if not is_owner() then
@@ -334,9 +400,12 @@ select u.id, coalesce(u.email, ''), split_part(coalesce(u.email, 'user'), '@', 1
 from auth.users u
 on conflict (id) do nothing;
 
+-- (Single-team databases from before workspaces only. Newer sign-ups become an
+-- owner by creating their own workspace.)
 update profiles set role = 'owner'
 where id = (select id from profiles order by created_at limit 1)
-  and not exists (select 1 from profiles where role = 'owner');
+  and not exists (select 1 from profiles where role = 'owner')
+  and not exists (select 1 from app_private.config where key = 'workspaces_migrated');
 
 -- ============================================================================
 -- Row level security
@@ -376,28 +445,38 @@ begin
   end loop;
 end $$;
 
--- profiles: any signed-in user can see the team and attempt role changes;
--- guard_role_change() decides what's actually allowed.
-create policy "profiles_select" on profiles for select using (auth.uid() is not null);
+-- Every policy below is limited to the caller's own workspace.
+
+-- profiles: you see your own workspace's team (and yourself, before you have one);
+-- guard_role_change() decides which role changes are allowed.
+create policy "profiles_select" on profiles for select
+  using (id = auth.uid() or (workspace_id is not null and workspace_id = my_workspace_id()));
 create policy "profiles_update" on profiles for update
-  using (auth.uid() is not null) with check (auth.uid() is not null);
+  using (id = auth.uid() or (is_admin() and workspace_id = my_workspace_id()))
+  with check (id = auth.uid() or (is_admin() and workspace_id = my_workspace_id()));
 
 -- client_members: admins manage any; members grant/revoke access to clients
 -- they themselves can already see (inviting teammates onto their own accounts).
+-- Both the client and the person must be in your workspace.
 create policy "cm_all" on client_members for all
-  using (is_admin() or client_id in (select my_client_ids()))
-  with check (is_admin() or client_id in (select my_client_ids()));
+  using (client_in_my_workspace(client_id) and (is_admin() or client_id in (select my_client_ids())))
+  with check (client_in_my_workspace(client_id) and in_my_workspace(user_id)
+              and (is_admin() or client_id in (select my_client_ids())));
 
 -- clients: admins everything; members read clients they've been granted.
-create policy "clients_admin_all" on clients for all using (is_admin()) with check (is_admin());
+create policy "clients_admin_all" on clients for all
+  using (workspace_id = my_workspace_id() and is_admin())
+  with check (workspace_id = my_workspace_id() and is_admin());
 create policy "clients_member_select" on clients for select
   using (id in (select my_client_ids()));
 
 -- projects: admins everything; members full CRUD within clients they can see.
-create policy "projects_admin_all" on projects for all using (is_admin()) with check (is_admin());
+create policy "projects_admin_all" on projects for all
+  using (workspace_id = my_workspace_id() and is_admin())
+  with check (workspace_id = my_workspace_id() and is_admin());
 create policy "projects_member_all" on projects for all
-  using (client_id in (select my_client_ids()))
-  with check (client_id in (select my_client_ids()));
+  using (workspace_id = my_workspace_id() and client_id in (select my_client_ids()))
+  with check (workspace_id = my_workspace_id() and client_id in (select my_client_ids()));
 
 -- tasks / access_items / project_notes: admins everything; members full CRUD
 -- within projects under their granted clients.
@@ -405,21 +484,28 @@ do $$
 declare t text;
 begin
   foreach t in array array['tasks','access_items','project_notes'] loop
-    execute format('create policy "%s_admin_all" on %I for all using (is_admin()) with check (is_admin())', t, t);
-    execute format('create policy "%s_member_all" on %I for all using (project_id in (select my_project_ids())) with check (project_id in (select my_project_ids()))', t, t);
+    execute format('create policy "%s_admin_all" on %I for all using (workspace_id = my_workspace_id() and is_admin()) with check (workspace_id = my_workspace_id() and is_admin())', t, t);
+    execute format('create policy "%s_member_all" on %I for all using (workspace_id = my_workspace_id() and project_id in (select my_project_ids())) with check (workspace_id = my_workspace_id() and project_id in (select my_project_ids()))', t, t);
   end loop;
 end $$;
 
 -- payments / invoice_settings / invoices: strictly admin-only (never granted to members).
-create policy "payments_admin_all" on payments for all using (is_admin()) with check (is_admin());
-create policy "invoice_settings_admin_all" on invoice_settings for all using (is_admin()) with check (is_admin());
-create policy "invoices_admin_all" on invoices for all using (is_admin()) with check (is_admin());
+do $$
+declare t text;
+begin
+  foreach t in array array['payments','invoice_settings','invoices'] loop
+    execute format('create policy "%s_admin_all" on %I for all using (workspace_id = my_workspace_id() and is_admin()) with check (workspace_id = my_workspace_id() and is_admin())', t, t);
+  end loop;
+end $$;
 
 -- activity_log: admins see all; members write their own entries and read them back.
-create policy "activity_admin_all" on activity_log for all using (is_admin()) with check (is_admin());
+create policy "activity_admin_all" on activity_log for all
+  using (workspace_id = my_workspace_id() and is_admin())
+  with check (workspace_id = my_workspace_id() and is_admin());
 create policy "activity_member_insert" on activity_log for insert
-  with check (actor_id = auth.uid());
-create policy "activity_member_select" on activity_log for select using (actor_id = auth.uid());
+  with check (actor_id = auth.uid() and workspace_id = my_workspace_id());
+create policy "activity_member_select" on activity_log for select
+  using (actor_id = auth.uid() and workspace_id = my_workspace_id());
 
 -- ############################################################################
 -- MyDesk v3: new layout, comments/@mentions, subtasks, attachments, time
@@ -607,6 +693,9 @@ create table if not exists payment_reminders (
   created_at timestamptz not null default now()
 );
 
+-- An invite brings the person into the inviter's workspace.
+alter table invites add column if not exists workspace_id uuid default public.my_workspace_id() references workspaces (id) on delete cascade;
+
 create index if not exists idx_subtasks_task on subtasks (task_id);
 create index if not exists idx_comments_task on task_comments (task_id, created_at);
 create index if not exists idx_attachments_task on task_attachments (task_id);
@@ -646,15 +735,9 @@ where numbered.id = t.id;
 update tasks set completed_at = created_at where status = 'done' and completed_at is null;
 
 -- ---------------------------------------------------------------------------
--- Private config (app URL + shared secret for instant email delivery)
+-- Private config (app URL + shared secret for instant email delivery).
+-- The app_private.config table itself is created near the top of this file.
 -- ---------------------------------------------------------------------------
-
-create schema if not exists app_private;
-revoke all on schema app_private from public, anon, authenticated;
-create table if not exists app_private.config (
-  key text primary key,
-  value text not null
-);
 
 -- Run once in the SQL editor after deploying to Vercel:
 --   select app_private.configure('https://your-app.vercel.app', '<same value as CRON_SECRET>');
@@ -670,7 +753,7 @@ $$;
 
 create or replace function public.my_task_ids() returns setof uuid
 language sql stable security definer set search_path = public as
-$$ select id from tasks where is_admin() or project_id in (select my_project_ids()) $$;
+$$ select id from tasks where workspace_id = my_workspace_id() and (is_admin() or project_id in (select my_project_ids())) $$;
 
 create or replace function public.person_name(p_id uuid) returns text
 language sql stable security definer set search_path = public as
@@ -735,6 +818,11 @@ language plpgsql security definer set search_path = public as $$
 declare v_emailed boolean := false; v_email text;
 begin
   if p_user is null then return; end if;
+  -- Never notify across workspaces (e.g. a task assigned to someone else's user id).
+  if p_actor is not null and p_actor is distinct from p_user and not exists (
+    select 1 from profiles a join profiles b on b.workspace_id = a.workspace_id
+    where a.id = p_user and b.id = p_actor and a.workspace_id is not null
+  ) then return; end if;
   if exists (select 1 from notifications where dedupe_key = p_key) then return; end if;
   if p_email_kind is not null and wants_email(p_user, p_email_kind) and not online_on_desktop(p_user) then
     select email into v_email from profiles where id = p_user;
@@ -919,7 +1007,8 @@ declare v_admin uuid; v_client text;
 begin
   if new.status = 'paid' and old.status is distinct from 'paid' then
     select coalesce(case when use_company_name then company_name end, name) into v_client from clients where id = new.client_id;
-    for v_admin in select id from profiles where role in ('owner','admin') and id is distinct from auth.uid() loop
+    for v_admin in select id from profiles
+                   where role in ('owner','admin') and workspace_id = new.workspace_id and id is distinct from auth.uid() loop
       perform notify(v_admin, 'paid', auth.uid(), 'payment', new.id, null,
         coalesce(v_client, 'Client') || ' paid', new.currency || ' ' || new.amount || ' received',
         '/payments?p=' || new.id, 'paid:' || new.id || ':' || v_admin || ':' || extract(epoch from now())::bigint, null, null);
@@ -958,9 +1047,12 @@ begin
 end $$;
 
 -- The invite page shows who invited you before sign-up (the token is the secret).
-create or replace function public.invite_lookup(p_token text) returns table (email text, role text, inviter text)
+-- (Dropped first because the returned columns grew a workspace name.)
+drop function if exists public.invite_lookup(text);
+create or replace function public.invite_lookup(p_token text) returns table (email text, role text, inviter text, workspace text)
 language sql stable security definer set search_path = public as $$
-  select i.email, i.role, person_name(i.invited_by) from invites i
+  select i.email, i.role, person_name(i.invited_by), w.name from invites i
+  left join workspaces w on w.id = i.workspace_id
   where i.token = p_token and i.accepted_at is null and i.revoked_at is null
 $$;
 grant execute on function public.invite_lookup(text) to anon, authenticated;
@@ -1020,7 +1112,7 @@ begin
   loop
     select coalesce(case when use_company_name then company_name end, name) into v_client from clients where id = r.client_id;
     v_days := current_date - r.due_date;
-    for v_admin in select id from profiles where role in ('owner','admin') loop
+    for v_admin in select id from profiles where role in ('owner','admin') and workspace_id = r.workspace_id loop
       perform notify(v_admin, 'overdue', null, 'payment', r.id, null,
         'Payment overdue · ' || coalesce(v_client, 'Client') || ' · ' || r.currency || ' ' || r.amount,
         'Was due ' || to_char(r.due_date, 'Mon DD') || ' (' || v_days || ' days ago)',
@@ -1047,7 +1139,7 @@ begin
 
   -- Due soon: open projects due tomorrow -> owner/admins + members with access to the client.
   for r in
-    select p.id, p.title, p.due_date, p.client_id,
+    select p.id, p.title, p.due_date, p.client_id, p.workspace_id,
       (select coalesce(case when c.use_company_name then c.company_name end, c.name) from clients c where c.id = p.client_id) as client_name,
       (select count(*) from tasks t where t.project_id = p.id and t.status not in ('done','cancelled')) as open_tasks
     from projects p
@@ -1055,7 +1147,7 @@ begin
       and p.status not in ('completed','finished','cancelled')
   loop
     for v_uid in
-      select id from profiles where role in ('owner','admin')
+      select id from profiles where role in ('owner','admin') and workspace_id = r.workspace_id
       union
       select user_id from client_members where client_id = r.client_id
     loop
@@ -1082,14 +1174,44 @@ begin
 end $$;
 revoke execute on function public.run_daily() from public, anon, authenticated;
 
--- Signup: the first user is owner; invited users get the invite's role + client access.
-create or replace function public.handle_new_user() returns trigger
+-- Puts a person into an invite's workspace with its role and client access, marks
+-- the invite used and tells the inviter. Used at sign-up and by accept_invite().
+create or replace function public.apply_invite(p_user uuid, p_invite uuid) returns void
 language plpgsql security definer set search_path = public as $$
 declare v_inv invites; v_name text;
 begin
+  select * into v_inv from invites where id = p_invite and accepted_at is null and revoked_at is null;
+  if not found then return; end if;
+  perform set_config('mydesk.system', 'on', true);
+  update profiles set workspace_id = v_inv.workspace_id, role = v_inv.role where id = p_user;
+  perform set_config('mydesk.system', 'off', true);
+  perform set_config('mydesk.skip_access_email', 'on', true);
+  insert into client_members (client_id, user_id)
+  select c, p_user from unnest(v_inv.client_ids) c
+  where exists (select 1 from clients where id = c and workspace_id is not distinct from v_inv.workspace_id)
+  on conflict (client_id, user_id) do nothing;
+  update invites set accepted_at = now() where id = v_inv.id;
+  perform set_config('mydesk.skip_access_email', 'off', true);
+  if v_inv.invited_by is not null then
+    select coalesce(nullif(full_name, ''), email) into v_name from profiles where id = p_user;
+    perform notify(v_inv.invited_by, 'invite_accepted', p_user, 'member', p_user, null,
+      coalesce(v_name, 'Someone') || ' accepted your invite', null, '/team/' || p_user,
+      'invite_accepted:' || v_inv.id, null, null);
+  end if;
+end $$;
+revoke execute on function public.apply_invite(uuid, uuid) from public, anon, authenticated;
+
+-- Signup: invited people join the inviter's workspace with the invite's role and
+-- client access. Everyone else starts with no workspace and creates their own
+-- (create_workspace below), which makes them its owner.
+create or replace function public.handle_new_user() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare v_inv_id uuid; v_name text;
+begin
   v_name := coalesce(new.raw_user_meta_data ->> 'full_name', new.raw_user_meta_data ->> 'name');
-  select * into v_inv from invites
+  select id into v_inv_id from invites
   where lower(email) = lower(coalesce(new.email, '')) and accepted_at is null and revoked_at is null
+    and workspace_id is not null
   order by created_at desc limit 1;
 
   insert into profiles (id, email, display_name, full_name, avatar_url, role)
@@ -1099,27 +1221,12 @@ begin
     coalesce(nullif(split_part(coalesce(v_name, ''), ' ', 1), ''), split_part(coalesce(new.email, 'user'), '@', 1)),
     v_name,
     new.raw_user_meta_data ->> 'avatar_url',
-    case
-      when not exists (select 1 from profiles) then 'owner'
-      when v_inv.id is not null then v_inv.role
-      else 'member'
-    end
+    'member'
   )
   on conflict (id) do nothing;
 
-  if v_inv.id is not null then
-    perform set_config('mydesk.skip_access_email', 'on', true);
-    insert into client_members (client_id, user_id)
-    select c, new.id from unnest(v_inv.client_ids) c
-    where exists (select 1 from clients where id = c)
-    on conflict (client_id, user_id) do nothing;
-    update invites set accepted_at = now() where id = v_inv.id;
-    perform set_config('mydesk.skip_access_email', 'off', true);
-    if v_inv.invited_by is not null then
-      perform notify(v_inv.invited_by, 'invite_accepted', new.id, 'member', new.id, null,
-        coalesce(v_name, new.email) || ' accepted your invite', null, '/team/' || new.id,
-        'invite_accepted:' || v_inv.id, null, null);
-    end if;
+  if v_inv_id is not null then
+    perform apply_invite(new.id, v_inv_id);
   end if;
   return new;
 end $$;
@@ -1205,20 +1312,27 @@ create policy "comments_insert" on task_comments for insert
   with check (task_id in (select my_task_ids()) and author_id = auth.uid());
 create policy "comments_update" on task_comments for update
   using (author_id = auth.uid()) with check (author_id = auth.uid());
-create policy "comments_delete" on task_comments for delete using (author_id = auth.uid() or is_admin());
+create policy "comments_delete" on task_comments for delete
+  using (author_id = auth.uid() or (is_admin() and task_id in (select my_task_ids())));
 
 create policy "notifications_own" on notifications for all
   using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 -- email_outbox: intentionally no policies, so only the service role can touch it.
 
-create policy "invites_admin" on invites for all using (is_admin()) with check (is_admin());
-create policy "reminders_admin" on payment_reminders for all using (is_admin()) with check (is_admin());
+create policy "invites_admin" on invites for all
+  using (workspace_id = my_workspace_id() and is_admin())
+  with check (workspace_id = my_workspace_id() and is_admin());
+create policy "reminders_admin" on payment_reminders for all
+  using (is_admin() and payment_id in (select id from payments where workspace_id = my_workspace_id()))
+  with check (is_admin() and payment_id in (select id from payments where workspace_id = my_workspace_id()));
 
--- Profiles: you edit yourself; admins edit anyone (role changes still pass guard_role_change).
+-- Profiles: you edit yourself; admins edit anyone in their workspace (role changes
+-- still pass guard_role_change).
 drop policy if exists "profiles_update" on profiles;
 create policy "profiles_update" on profiles for update
-  using (id = auth.uid() or is_admin()) with check (id = auth.uid() or is_admin());
+  using (id = auth.uid() or (is_admin() and workspace_id = my_workspace_id()))
+  with check (id = auth.uid() or (is_admin() and workspace_id = my_workspace_id()));
 
 -- ---------------------------------------------------------------------------
 -- Storage: task attachments (private) + avatars (public)
@@ -1234,17 +1348,37 @@ create policy "mydesk_attachments_rw" on storage.objects for all
   using (bucket_id = 'attachments' and (storage.foldername(name))[1] in (select id::text from my_task_ids() id))
   with check (bucket_id = 'attachments' and (storage.foldername(name))[1] in (select id::text from my_task_ids() id));
 
+-- Avatars bucket paths: <user id>/… (photos, workspace logos) and clients/<client id>/…
+-- You write your own folder; admins also write their teammates' and their clients'.
+create or replace function public.can_write_avatar(p_name text) returns boolean
+language sql stable security definer set search_path = public as $$
+  with f as (
+    select (storage.foldername(p_name))[1] as a, (storage.foldername(p_name))[2] as b
+  ), ids as (
+    select a, b,
+      case when a ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then a::uuid end as a_id,
+      case when b ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then b::uuid end as b_id
+    from f
+  )
+  select coalesce(a = auth.uid()::text, false)
+    or (is_admin() and (
+      (a_id is not null and in_my_workspace(a_id))
+      or (a = 'clients' and b_id is not null and client_in_my_workspace(b_id))
+    ))
+  from ids
+$$;
+
 drop policy if exists "mydesk_avatars_read" on storage.objects;
 create policy "mydesk_avatars_read" on storage.objects for select using (bucket_id = 'avatars');
 drop policy if exists "mydesk_avatars_write" on storage.objects;
 create policy "mydesk_avatars_write" on storage.objects for insert
-  with check (bucket_id = 'avatars' and ((storage.foldername(name))[1] = auth.uid()::text or is_admin()));
+  with check (bucket_id = 'avatars' and can_write_avatar(name));
 drop policy if exists "mydesk_avatars_update" on storage.objects;
 create policy "mydesk_avatars_update" on storage.objects for update
-  using (bucket_id = 'avatars' and ((storage.foldername(name))[1] = auth.uid()::text or is_admin()));
+  using (bucket_id = 'avatars' and can_write_avatar(name));
 drop policy if exists "mydesk_avatars_delete" on storage.objects;
 create policy "mydesk_avatars_delete" on storage.objects for delete
-  using (bucket_id = 'avatars' and ((storage.foldername(name))[1] = auth.uid()::text or is_admin()));
+  using (bucket_id = 'avatars' and can_write_avatar(name));
 
 -- ---------------------------------------------------------------------------
 -- Improvement: team learning (shared resources, takeaways, personal goals)
@@ -1281,30 +1415,33 @@ create table if not exists learning_items (
 );
 create index if not exists learning_items_assignee_idx on learning_items (assignee_id, status);
 
+alter table learning_goals add column if not exists workspace_id uuid default public.my_workspace_id() references workspaces (id) on delete cascade;
+alter table learning_items add column if not exists workspace_id uuid default public.my_workspace_id() references workspaces (id) on delete cascade;
+
 alter table learning_goals enable row level security;
 alter table learning_items enable row level security;
 
 -- Everyone on the team can see everyone's learning (that's the point: sharing).
 drop policy if exists "learning_goals_select" on learning_goals;
-create policy "learning_goals_select" on learning_goals for select using (auth.uid() is not null);
+create policy "learning_goals_select" on learning_goals for select using (workspace_id = my_workspace_id());
 drop policy if exists "learning_goals_write" on learning_goals;
 create policy "learning_goals_write" on learning_goals for all
-  using (user_id = auth.uid() or is_admin())
-  with check (user_id = auth.uid() or is_admin());
+  using (workspace_id = my_workspace_id() and (user_id = auth.uid() or is_admin()))
+  with check (workspace_id = my_workspace_id() and (user_id = auth.uid() or is_admin()));
 
 drop policy if exists "learning_items_select" on learning_items;
-create policy "learning_items_select" on learning_items for select using (auth.uid() is not null);
--- Anyone can share something with anyone (including themselves).
+create policy "learning_items_select" on learning_items for select using (workspace_id = my_workspace_id());
+-- Anyone can share something with anyone on the team (including themselves).
 drop policy if exists "learning_items_insert" on learning_items;
 create policy "learning_items_insert" on learning_items for insert
-  with check (created_by = auth.uid());
+  with check (created_by = auth.uid() and workspace_id = my_workspace_id());
 -- The learner, the person who shared it, or an admin can update / remove it.
 drop policy if exists "learning_items_update" on learning_items;
 create policy "learning_items_update" on learning_items for update
-  using (assignee_id = auth.uid() or created_by = auth.uid() or is_admin());
+  using (workspace_id = my_workspace_id() and (assignee_id = auth.uid() or created_by = auth.uid() or is_admin()));
 drop policy if exists "learning_items_delete" on learning_items;
 create policy "learning_items_delete" on learning_items for delete
-  using (assignee_id = auth.uid() or created_by = auth.uid() or is_admin());
+  using (workspace_id = my_workspace_id() and (assignee_id = auth.uid() or created_by = auth.uid() or is_admin()));
 
 -- Inbox: "Alif shared something for you to learn" and "Mahedi finished what you shared".
 create or replace function public.learning_items_after_write() returns trigger
@@ -1391,6 +1528,14 @@ create table if not exists learning_progress (
   unique (lesson_id, user_id)
 );
 
+do $$
+declare t text;
+begin
+  foreach t in array array['learning_topics','learning_lessons','learning_resources','learning_topic_members','learning_progress'] loop
+    execute format('alter table %I add column if not exists workspace_id uuid default public.my_workspace_id() references workspaces (id) on delete cascade', t);
+  end loop;
+end $$;
+
 alter table learning_topics enable row level security;
 alter table learning_lessons enable row level security;
 alter table learning_resources enable row level security;
@@ -1402,58 +1547,70 @@ create or replace function public.learning_topic_owner(p_topic uuid) returns uui
 language sql stable security definer set search_path = public as
 $$ select created_by from learning_topics where id = p_topic $$;
 
--- Topics: everyone sees them; anyone can start one; creator or admin edits/deletes.
+-- All learning policies are limited to your own workspace.
+
+-- Topics: everyone on the team sees them; anyone can start one; creator or admin edits/deletes.
 drop policy if exists "learning_topics_select" on learning_topics;
-create policy "learning_topics_select" on learning_topics for select using (auth.uid() is not null);
+create policy "learning_topics_select" on learning_topics for select using (workspace_id = my_workspace_id());
 drop policy if exists "learning_topics_insert" on learning_topics;
-create policy "learning_topics_insert" on learning_topics for insert with check (created_by = auth.uid());
+create policy "learning_topics_insert" on learning_topics for insert
+  with check (created_by = auth.uid() and workspace_id = my_workspace_id());
 drop policy if exists "learning_topics_update" on learning_topics;
-create policy "learning_topics_update" on learning_topics for update using (created_by = auth.uid() or is_admin());
+create policy "learning_topics_update" on learning_topics for update
+  using (workspace_id = my_workspace_id() and (created_by = auth.uid() or is_admin()));
 drop policy if exists "learning_topics_delete" on learning_topics;
-create policy "learning_topics_delete" on learning_topics for delete using (created_by = auth.uid() or is_admin());
+create policy "learning_topics_delete" on learning_topics for delete
+  using (workspace_id = my_workspace_id() and (created_by = auth.uid() or is_admin()));
 
 -- Lessons and resources: anyone can add (learning together); the author, the topic
 -- creator or an admin can edit/remove.
 drop policy if exists "learning_lessons_select" on learning_lessons;
-create policy "learning_lessons_select" on learning_lessons for select using (auth.uid() is not null);
+create policy "learning_lessons_select" on learning_lessons for select using (workspace_id = my_workspace_id());
 drop policy if exists "learning_lessons_insert" on learning_lessons;
-create policy "learning_lessons_insert" on learning_lessons for insert with check (created_by = auth.uid());
+create policy "learning_lessons_insert" on learning_lessons for insert
+  with check (created_by = auth.uid() and workspace_id = my_workspace_id());
 drop policy if exists "learning_lessons_update" on learning_lessons;
 create policy "learning_lessons_update" on learning_lessons for update
-  using (created_by = auth.uid() or learning_topic_owner(topic_id) = auth.uid() or is_admin());
+  using (workspace_id = my_workspace_id()
+         and (created_by = auth.uid() or learning_topic_owner(topic_id) = auth.uid() or is_admin()));
 drop policy if exists "learning_lessons_delete" on learning_lessons;
 create policy "learning_lessons_delete" on learning_lessons for delete
-  using (created_by = auth.uid() or learning_topic_owner(topic_id) = auth.uid() or is_admin());
+  using (workspace_id = my_workspace_id()
+         and (created_by = auth.uid() or learning_topic_owner(topic_id) = auth.uid() or is_admin()));
 
 drop policy if exists "learning_resources_select" on learning_resources;
-create policy "learning_resources_select" on learning_resources for select using (auth.uid() is not null);
+create policy "learning_resources_select" on learning_resources for select using (workspace_id = my_workspace_id());
 drop policy if exists "learning_resources_insert" on learning_resources;
-create policy "learning_resources_insert" on learning_resources for insert with check (created_by = auth.uid());
+create policy "learning_resources_insert" on learning_resources for insert
+  with check (created_by = auth.uid() and workspace_id = my_workspace_id());
 drop policy if exists "learning_resources_update" on learning_resources;
 create policy "learning_resources_update" on learning_resources for update
-  using (created_by = auth.uid() or is_admin()
-         or learning_topic_owner((select topic_id from learning_lessons where id = lesson_id)) = auth.uid());
+  using (workspace_id = my_workspace_id() and (created_by = auth.uid() or is_admin()
+         or learning_topic_owner((select topic_id from learning_lessons where id = lesson_id)) = auth.uid()));
 drop policy if exists "learning_resources_delete" on learning_resources;
 create policy "learning_resources_delete" on learning_resources for delete
-  using (created_by = auth.uid() or is_admin()
-         or learning_topic_owner((select topic_id from learning_lessons where id = lesson_id)) = auth.uid());
+  using (workspace_id = my_workspace_id() and (created_by = auth.uid() or is_admin()
+         or learning_topic_owner((select topic_id from learning_lessons where id = lesson_id)) = auth.uid()));
 
 -- Members: join yourself or add a teammate; leave yourself, or be removed by whoever
 -- added you, the topic creator or an admin.
 drop policy if exists "learning_members_select" on learning_topic_members;
-create policy "learning_members_select" on learning_topic_members for select using (auth.uid() is not null);
+create policy "learning_members_select" on learning_topic_members for select using (workspace_id = my_workspace_id());
 drop policy if exists "learning_members_insert" on learning_topic_members;
-create policy "learning_members_insert" on learning_topic_members for insert with check (added_by = auth.uid());
+create policy "learning_members_insert" on learning_topic_members for insert
+  with check (added_by = auth.uid() and workspace_id = my_workspace_id() and in_my_workspace(user_id));
 drop policy if exists "learning_members_delete" on learning_topic_members;
 create policy "learning_members_delete" on learning_topic_members for delete
-  using (user_id = auth.uid() or added_by = auth.uid() or learning_topic_owner(topic_id) = auth.uid() or is_admin());
+  using (workspace_id = my_workspace_id() and (user_id = auth.uid() or added_by = auth.uid()
+         or learning_topic_owner(topic_id) = auth.uid() or is_admin()));
 
--- Progress: everyone sees it; you only change your own.
+-- Progress: everyone on the team sees it; you only change your own.
 drop policy if exists "learning_progress_select" on learning_progress;
-create policy "learning_progress_select" on learning_progress for select using (auth.uid() is not null);
+create policy "learning_progress_select" on learning_progress for select using (workspace_id = my_workspace_id());
 drop policy if exists "learning_progress_own" on learning_progress;
 create policy "learning_progress_own" on learning_progress for all
-  using (user_id = auth.uid()) with check (user_id = auth.uid());
+  using (user_id = auth.uid() and workspace_id = my_workspace_id())
+  with check (user_id = auth.uid() and workspace_id = my_workspace_id());
 
 -- Inbox: "Alif added you to Google Tag Manager".
 create or replace function public.learning_members_after_insert() returns trigger
@@ -1488,11 +1645,15 @@ create table if not exists team_links (
   created_at timestamptz not null default now()
 );
 
+alter table team_links add column if not exists workspace_id uuid default public.my_workspace_id() references workspaces (id) on delete cascade;
+
 alter table team_links enable row level security;
 drop policy if exists "team_links_select" on team_links;
-create policy "team_links_select" on team_links for select using (auth.uid() is not null);
+create policy "team_links_select" on team_links for select using (workspace_id = my_workspace_id());
 drop policy if exists "team_links_admin" on team_links;
-create policy "team_links_admin" on team_links for all using (is_admin()) with check (is_admin());
+create policy "team_links_admin" on team_links for all
+  using (workspace_id = my_workspace_id() and is_admin())
+  with check (workspace_id = my_workspace_id() and is_admin());
 
 -- ---------------------------------------------------------------------------
 -- Code snippets: saved code on a task or a project (a dataLayer push, a GTM
@@ -1531,6 +1692,117 @@ end $$;
 drop trigger if exists code_snippets_touch on code_snippets;
 create trigger code_snippets_touch before update on code_snippets
   for each row execute function public.code_snippets_touch();
+
+-- ---------------------------------------------------------------------------
+-- Workspaces: sign-up, branding, invites. Safe to re-run.
+-- ---------------------------------------------------------------------------
+
+alter table workspaces enable row level security;
+drop policy if exists "workspaces_select" on workspaces;
+create policy "workspaces_select" on workspaces for select using (id = my_workspace_id());
+drop policy if exists "workspaces_admin_update" on workspaces;
+create policy "workspaces_admin_update" on workspaces for update
+  using (id = my_workspace_id() and is_admin())
+  with check (id = my_workspace_id() and is_admin());
+-- No insert/delete policies: workspaces are only created through create_workspace().
+
+-- Sign-up step 2: a new person creates their workspace and becomes its owner.
+create or replace function public.create_workspace(
+  p_name text,
+  p_business_name text default null,
+  p_currency text default 'USD',
+  p_logo_color text default null,
+  p_accent_color text default null,
+  p_logo_url text default null
+) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare v_uid uuid := auth.uid(); v_ws uuid; v_email text;
+begin
+  if v_uid is null then raise exception 'Sign in first'; end if;
+  if coalesce(trim(p_name), '') = '' then raise exception 'Give your workspace a name'; end if;
+  -- Profiles are made at sign-up; this covers anyone whose sign-up predates the trigger.
+  insert into profiles (id, email, display_name, role)
+  select u.id, coalesce(u.email, ''), split_part(coalesce(u.email, 'user'), '@', 1), 'member'
+  from auth.users u where u.id = v_uid
+  on conflict (id) do nothing;
+  if exists (select 1 from profiles where id = v_uid and workspace_id is not null) then
+    raise exception 'You already belong to a workspace';
+  end if;
+
+  insert into workspaces (name, owner_id, logo_color, accent_color, logo_url)
+  values (left(trim(p_name), 80), v_uid, nullif(p_logo_color, ''), nullif(p_accent_color, ''), nullif(p_logo_url, ''))
+  returning id into v_ws;
+
+  perform set_config('mydesk.system', 'on', true);
+  update profiles set workspace_id = v_ws, role = 'owner' where id = v_uid;
+  perform set_config('mydesk.system', 'off', true);
+
+  select email into v_email from profiles where id = v_uid;
+  insert into invoice_settings (owner_id, workspace_id, workspace_name, business_name, email, default_currency, brand_color)
+  values (v_uid, v_ws, left(trim(p_name), 80), nullif(trim(coalesce(p_business_name, '')), ''), nullif(v_email, ''),
+          coalesce(nullif(upper(trim(coalesce(p_currency, ''))), ''), 'USD'), nullif(p_accent_color, ''));
+  return v_ws;
+end $$;
+revoke execute on function public.create_workspace(text, text, text, text, text, text) from public, anon;
+grant execute on function public.create_workspace(text, text, text, text, text, text) to authenticated;
+
+-- Someone who signed up before being invited: show the open invite for their email
+-- on the "set up your workspace" screen so they can join instead.
+create or replace function public.my_pending_invite() returns table (id uuid, workspace text, inviter text, role text)
+language sql stable security definer set search_path = public as $$
+  select i.id, w.name, person_name(i.invited_by), i.role
+  from invites i
+  join workspaces w on w.id = i.workspace_id
+  join profiles p on p.id = auth.uid()
+  where lower(i.email) = lower(p.email) and p.workspace_id is null
+    and i.accepted_at is null and i.revoked_at is null
+  order by i.created_at desc
+  limit 1
+$$;
+revoke execute on function public.my_pending_invite() from public, anon;
+grant execute on function public.my_pending_invite() to authenticated;
+
+create or replace function public.accept_invite(p_invite uuid) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not exists (select 1 from my_pending_invite() where id = p_invite) then
+    raise exception 'This invite isn’t valid for your account';
+  end if;
+  perform apply_invite(auth.uid(), p_invite);
+end $$;
+revoke execute on function public.accept_invite(uuid) from public, anon;
+grant execute on function public.accept_invite(uuid) to authenticated;
+
+-- One-time move from the single-team version: the existing owner gets a workspace
+-- (named after the old workspace name), and every existing person and row joins it.
+-- Runs once (flagged in app_private.config), so later sign-ups who haven't set up
+-- a workspace yet are never swept into someone else's.
+do $$
+declare v_owner uuid; v_ws uuid; v_name text; t text;
+begin
+  if exists (select 1 from app_private.config where key = 'workspaces_migrated') then return; end if;
+  select id into v_owner from profiles where role = 'owner' order by created_at limit 1;
+  if v_owner is not null then
+    select coalesce(nullif(trim(workspace_name), ''), nullif(trim(business_name), '')) into v_name
+    from invoice_settings order by created_at limit 1;
+    insert into workspaces (name, owner_id) values (coalesce(v_name, 'My workspace'), v_owner)
+    returning id into v_ws;
+
+    perform set_config('mydesk.system', 'on', true);
+    update profiles set workspace_id = v_ws where workspace_id is null;
+    perform set_config('mydesk.system', 'off', true);
+
+    foreach t in array array[
+      'clients','projects','tasks','access_items','payments','project_notes','activity_log',
+      'invoice_settings','invoices','invites','learning_goals','learning_items','learning_topics',
+      'learning_lessons','learning_resources','learning_topic_members','learning_progress','team_links'
+    ] loop
+      execute format('update %I set workspace_id = $1 where workspace_id is null', t) using v_ws;
+    end loop;
+  end if;
+  insert into app_private.config (key, value) values ('workspaces_migrated', now()::text)
+  on conflict (key) do nothing;
+end $$;
 
 -- ---------------------------------------------------------------------------
 -- Realtime (live inbox, comments, activity)
