@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
 import { deriveProjectKey } from '@/lib/derive'
 import type {
-  AccessItem, ActivityAction, ActivityEntity, ActivityEvent, AppNotification, Client, ClientMember, Invite, Invoice, InvoiceSettings, Payment, PaymentReminder, Profile, Project, ProjectNote, Subtask, Task, TaskAttachment, TaskComment, TaskWatcher, TimeEntry, LearningGoal, LearningItem, LearningTopic, LearningLesson, LearningResource, LearningTopicMember, LearningProgress, TeamLink,
+  AccessItem, ActivityAction, ActivityEntity, ActivityEvent, AppNotification, Client, ClientMember, Invite, Invoice, InvoiceSettings, Payment, PaymentReminder, Profile, Project, ProjectNote, Subtask, Task, TaskAttachment, TaskComment, TaskWatcher, TimeEntry, LearningGoal, LearningItem, LearningTopic, LearningLesson, LearningResource, LearningTopicMember, LearningProgress, TeamLink, CodeSnippet,
 } from '@/types'
 
 const LOCAL_KEY = 'mydesk-data-v3'
@@ -18,13 +18,13 @@ export type Table =
   | 'subtasks' | 'task_comments' | 'task_attachments' | 'time_entries' | 'task_watchers'
   | 'notifications' | 'invites' | 'payment_reminders' | 'learning_items' | 'learning_goals'
   | 'learning_topics' | 'learning_lessons' | 'learning_resources' | 'learning_topic_members' | 'learning_progress'
-  | 'team_links'
+  | 'team_links' | 'code_snippets'
 
 type StateKey =
   | 'clients' | 'projects' | 'tasks' | 'accessItems' | 'payments' | 'notes' | 'profiles'
   | 'clientMembers' | 'invoices' | 'subtasks' | 'comments' | 'attachments' | 'timeEntries'
   | 'watchers' | 'notifications' | 'invites' | 'reminders' | 'learning' | 'goals'
-  | 'topics' | 'lessons' | 'resources' | 'topicMembers' | 'progress' | 'teamLinks'
+  | 'topics' | 'lessons' | 'resources' | 'topicMembers' | 'progress' | 'teamLinks' | 'snippets'
 
 const tableToKey: Record<Table, StateKey> = {
   clients: 'clients',
@@ -52,6 +52,7 @@ const tableToKey: Record<Table, StateKey> = {
   learning_topic_members: 'topicMembers',
   learning_progress: 'progress',
   team_links: 'teamLinks',
+  code_snippets: 'snippets',
 }
 
 type AnyRow = { id: string; created_at: string }
@@ -73,6 +74,8 @@ interface DataState extends DemoData {
   topicsReady: boolean
   /** False until schema.sql has been run. */
   teamLinksReady: boolean
+  /** False until schema.sql has been run (code snippets table). */
+  snippetsReady: boolean
   demoMode: boolean
   me: Profile | null
   /** Ids of teammates with the app open right now (realtime presence). */
@@ -99,7 +102,7 @@ function snapshot(s: DataState): DemoData {
     subtasks: s.subtasks, comments: s.comments, attachments: s.attachments, timeEntries: s.timeEntries,
     watchers: s.watchers, notifications: s.notifications, invites: s.invites, reminders: s.reminders,
     learning: s.learning, goals: s.goals, topics: s.topics, lessons: s.lessons, resources: s.resources,
-    topicMembers: s.topicMembers, progress: s.progress, teamLinks: s.teamLinks,
+    topicMembers: s.topicMembers, progress: s.progress, teamLinks: s.teamLinks, snippets: s.snippets,
   }
 }
 
@@ -124,6 +127,7 @@ function scopedToMember(data: DemoData, me: Profile): DemoData {
     attachments: byTask(data.attachments),
     timeEntries: byTask(data.timeEntries),
     watchers: byTask(data.watchers),
+    snippets: data.snippets.filter((s) => (s.task_id ? taskIds.has(s.task_id) : projectIds.has(s.project_id ?? ''))),
     notifications: data.notifications.filter((n) => n.user_id === me.id),
     payments: [],
     activity: [],
@@ -255,6 +259,7 @@ export const useData = create<DataState>((set, get) => {
     if (table === 'project_notes') row.author_id ??= get().me?.id ?? null
     if (table === 'time_entries') row.user_id ??= get().me?.id ?? null
     if (table === 'task_attachments') row.uploaded_by ??= get().me?.id ?? null
+    if (table === 'code_snippets') row.created_by ??= get().me?.id ?? null
     return row
   }
 
@@ -306,6 +311,7 @@ export const useData = create<DataState>((set, get) => {
     learningReady: true,
     topicsReady: true,
     teamLinksReady: true,
+    snippetsReady: true,
     inboxSeenAt: '',
     markInboxSeen: () => {
       const id = get().me?.id
@@ -373,6 +379,7 @@ export const useData = create<DataState>((set, get) => {
           all<LearningTopicMember>('learning_topic_members', 'created_at', true),
           all<LearningProgress>('learning_progress', 'created_at', true),
           all<TeamLink>('team_links', 'position', true),
+          all<CodeSnippet>('code_snippets', 'position', true),
         ] as const)
 
       let res = await fetchAll()
@@ -388,7 +395,7 @@ export const useData = create<DataState>((set, get) => {
       const [
         clients, projects, tasks, accessItems, payments, notes, activity, profiles, members, invoices,
         invoiceSettings, subtasks, comments, attachments, timeEntries, watchers, notifications, invites,
-        reminders, user, learning, goals, topics, lessons, resources, topicMembers, progress, teamLinks,
+        reminders, user, learning, goals, topics, lessons, resources, topicMembers, progress, teamLinks, snippets,
       ] = res
       const profileRows = profiles.data ?? []
       const meId = user.data.user?.id
@@ -425,6 +432,8 @@ export const useData = create<DataState>((set, get) => {
         topicsReady: !topics.error,
         teamLinks: teamLinks.data ?? [],
         teamLinksReady: !teamLinks.error,
+        snippets: snippets.data ?? [],
+        snippetsReady: !snippets.error,
         me: profileRows.find((p) => p.id === meId) ?? null,
         inboxSeenAt: readSeen(meId),
         ready: true,

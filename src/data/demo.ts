@@ -1,5 +1,5 @@
 import { addDays, formatISO, subDays, subHours, subMinutes } from 'date-fns'
-import type { AccessItem, ActivityEvent, AppNotification, Client, ClientMember, Invite, Invoice, InvoiceSettings, Payment, PaymentReminder, Profile, Project, ProjectNote, Subtask, Task, TaskAttachment, TaskComment, TaskWatcher, TimeEntry, LearningGoal, LearningItem, LearningTopic, LearningLesson, LearningResource, LearningTopicMember, LearningProgress, TeamLink } from '@/types'
+import type { AccessItem, ActivityEvent, AppNotification, Client, ClientMember, Invite, Invoice, InvoiceSettings, Payment, PaymentReminder, Profile, Project, ProjectNote, Subtask, Task, TaskAttachment, TaskComment, TaskWatcher, TimeEntry, LearningGoal, LearningItem, LearningTopic, LearningLesson, LearningResource, LearningTopicMember, LearningProgress, TeamLink, CodeSnippet } from '@/types'
 
 // Dates are relative to "today" so demo mode always shows live overdue/upcoming states.
 const day = (offset: number) => formatISO(addDays(new Date(), offset), { representation: 'date' })
@@ -35,6 +35,7 @@ export interface DemoData {
   topicMembers: LearningTopicMember[]
   progress: LearningProgress[]
   teamLinks: TeamLink[]
+  snippets: CodeSnippet[]
 }
 
 export function emptyData(): DemoData {
@@ -42,7 +43,7 @@ export function emptyData(): DemoData {
     clients: [], projects: [], tasks: [], accessItems: [], payments: [], notes: [], activity: [],
     profiles: [], clientMembers: [], invoices: [], invoiceSettings: null, subtasks: [], comments: [],
     attachments: [], timeEntries: [], watchers: [], notifications: [], invites: [], reminders: [],
-    learning: [], goals: [], topics: [], lessons: [], resources: [], topicMembers: [], progress: [], teamLinks: [],
+    learning: [], goals: [], topics: [], lessons: [], resources: [], topicMembers: [], progress: [], teamLinks: [], snippets: [],
   }
 }
 
@@ -235,6 +236,16 @@ export function demoData(empty = false): DemoData {
     invoices, invoiceSettings, subtasks, comments, attachments, timeEntries, watchers, notifications,
     invites, reminders, learning: demoLearning(), goals: demoGoals(), ...demoTopics(),
     teamLinks: [],
+    snippets: [
+      {
+        id: 'sn1', task_id: 't1', project_id: null, title: 'Form lead dataLayer push', language: 'javascript', position: 1, created_by: 'u1', created_at: daysAgo(2),
+        code: `window.dataLayer = window.dataLayer || [];\nwindow.dataLayer.push({\n  event: 'generate_lead',\n  form_id: 'quote-request',\n  lead: {\n    service: 'Vending machines',\n    state: 'Utah'\n  }\n});`,
+      },
+      {
+        id: 'sn2', task_id: null, project_id: 'p1', title: 'Call tracking number swap', language: 'html', position: 1, created_by: 'u1', created_at: daysAgo(10),
+        code: `<script>\n  document.querySelectorAll('a[href^="tel:"]').forEach(function (a) {\n    a.addEventListener('click', function () {\n      dataLayer.push({ event: 'phone_click' });\n    });\n  });\n</script>`,
+      },
+    ],
   }
 }
 

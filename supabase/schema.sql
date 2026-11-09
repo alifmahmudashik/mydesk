@@ -1495,6 +1495,44 @@ drop policy if exists "team_links_admin" on team_links;
 create policy "team_links_admin" on team_links for all using (is_admin()) with check (is_admin());
 
 -- ---------------------------------------------------------------------------
+-- Code snippets: saved code on a task or a project (a dataLayer push, a GTM
+-- tag, a script…). Each belongs to exactly one task or one project; anyone who
+-- can see that task/project can read, add, edit and delete its snippets.
+-- ---------------------------------------------------------------------------
+
+create table if not exists code_snippets (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid references tasks (id) on delete cascade,
+  project_id uuid references projects (id) on delete cascade,
+  title text not null default '',
+  language text not null default 'javascript',
+  code text not null default '',
+  position int not null default 0,
+  created_by uuid default auth.uid() references auth.users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint code_snippets_one_parent check (num_nonnulls(task_id, project_id) = 1)
+);
+create index if not exists idx_snippets_task on code_snippets (task_id);
+create index if not exists idx_snippets_project on code_snippets (project_id);
+
+alter table code_snippets enable row level security;
+drop policy if exists "code_snippets_access" on code_snippets;
+create policy "code_snippets_access" on code_snippets for all
+  using (task_id in (select my_task_ids()) or project_id in (select my_project_ids()))
+  with check (task_id in (select my_task_ids()) or project_id in (select my_project_ids()));
+
+create or replace function public.code_snippets_touch() returns trigger
+language plpgsql as $$
+begin
+  new.updated_at := now();
+  return new;
+end $$;
+drop trigger if exists code_snippets_touch on code_snippets;
+create trigger code_snippets_touch before update on code_snippets
+  for each row execute function public.code_snippets_touch();
+
+-- ---------------------------------------------------------------------------
 -- Realtime (live inbox, comments, activity)
 -- ---------------------------------------------------------------------------
 

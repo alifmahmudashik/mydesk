@@ -707,3 +707,25 @@ html.desktop .side::-webkit-scrollbar { width: 0; } /* still scrolls with the wh
 /* Status rings: Blocked is red, Waiting for client is a dashed amber ring (tasks and projects). */
 .st.block { border-color: var(--bad-dot); background: radial-gradient(circle, #fff 0 22%, var(--bad-dot) 26%); }
 .st.wait { border-color: var(--warn-dot); border-style: dashed; background: none; }
+
+/* ---- code snippets (tasks and projects) ---- */
+.snippet { border: 1px solid var(--line-s); border-radius: 12px; background: var(--panel); overflow: hidden; }
+.snippet-h { display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 14px; border-bottom: 1px solid var(--line-xs); min-height: 46px; }
+.snippet-h b { font-size: 13.5px; font-weight: 600; }
+.snippet-title-inp { flex: 1; min-width: 0; border: 0; background: none; font: inherit; font-size: 13.5px; font-weight: 600; color: var(--ink); outline: none; }
+.snippet-lang { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border: 1px solid var(--line-s); border-radius: 6px; background: var(--soft2); font: inherit; font-size: 11.5px; font-weight: 500; color: var(--ink3); cursor: pointer; }
+.snippet-lang:hover { background: var(--soft); }
+.snippet-pre, .snippet-code { margin: 0; padding: 14px 16px; background: #16161B; color: #E6E6EE; font-family: 'Geist Mono', ui-monospace, 'Cascadia Code', Consolas, monospace; font-size: 12.5px; line-height: 1.6; tab-size: 2; }
+.snippet-pre { overflow-x: auto; white-space: pre; }
+.snippet-code { display: block; width: 100%; border: 0; outline: none; resize: vertical; white-space: pre; overflow-x: auto; }
+.snippet-code::placeholder { color: #7A7A88; }
+.snippet-edit { background: #16161B; }
+.snippet-edit .row { background: var(--panel); border-top: 1px solid var(--line-xs); }
+.snippet-more, .snippet-empty { display: flex; align-items: center; gap: 4px; width: 100%; padding: 8px 14px; border: 0; background: var(--soft2); font: inherit; font-size: 12px; color: var(--mute); cursor: pointer; text-align: left; }
+.snippet-more:hover, .snippet-empty:hover { color: var(--ink); }
+.snippet-empty { padding: 16px; justify-content: center; }
+
+/* Code blocks inside task descriptions and notes */
+.rich pre, .ProseMirror pre { margin: 8px 0; padding: 12px 14px; border-radius: 10px; background: #16161B; color: #E6E6EE; font-family: 'Geist Mono', ui-monospace, 'Cascadia Code', Consolas, monospace; font-size: 12.5px; line-height: 1.6; overflow-x: auto; white-space: pre; }
+.rich pre code, .ProseMirror pre code { background: none; padding: 0; color: inherit; font: inherit; }
+.rich :not(pre) > code, .ProseMirror :not(pre) > code { padding: 1px 5px; border-radius: 5px; background: var(--soft); font-family: 'Geist Mono', ui-monospace, Consolas, monospace; font-size: .92em; }

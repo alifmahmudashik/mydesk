@@ -110,8 +110,12 @@ cd desktop
 npm install
 # bump "version" in desktop/package.json first
 npm run build        # creates desktop/release/MyDesk-Setup-x.y.z.exe
-gh release create vX.Y.Z release/MyDesk-Setup-X.Y.Z.exe --title "MyDesk for Windows X.Y.Z"
+gh release create vX.Y.Z release/MyDesk-Setup-X.Y.Z.exe release/MyDesk-Setup-X.Y.Z.exe.blockmap release/latest.yml --title "MyDesk for Windows X.Y.Z"
 ```
+
+Always upload `latest.yml` with the installer: installed apps (1.2.0 and later) read it to spot the new version, then show a **Download and install** pop-up that updates and restarts MyDesk by itself.
+
+In the app, **Profile & preferences → Desktop app** has: open MyDesk when Windows starts, show desktop notifications (off = emails instead), and check for updates.
 
 More in [`desktop/README.md`](desktop/README.md).
 
@@ -158,8 +162,8 @@ npm run build          # production build
 
 - **Dashboard:** outstanding, overdue and earned money; 6-month revenue chart; payments to chase with one-click reminders; up next; next 7 days; live activity. The eye button hides all amounts and counts for screen sharing.
 - **Inbox:** mentions, assignments, finished tasks, overdue payments, accepted invites. Reply to comments from here.
-- **Tasks:** list and drag-and-drop board, refs like `CPS-12`, several assignees, rich-text descriptions, subtasks, files and links, labels, estimates, time logging, watchers, comments with @mentions.
-- **Projects:** grouped by client, with tasks, overview, pinned notes, access checklist and activity. "Duplicate for next month". A budget creates a payment automatically; marking a project **Finished** settles its payments.
+- **Tasks:** list and drag-and-drop board, refs like `CPS-12`, several assignees, statuses including Waiting for client and Blocked, change priority/status/date/people right from the list, rich-text descriptions with code blocks, subtasks, files and links, saved code snippets, labels, estimates, time logging, watchers, comments with @mentions.
+- **Projects:** grouped by client, with tasks, overview, pinned notes, saved code snippets, access checklist and activity. "Duplicate for next month". A budget creates a payment automatically; marking a project **Finished** settles its payments.
 - **Clients:** list or cards with billed and open money. Each client page shows a compact stat row, active and completed projects with progress, invoices, payments, notes, and an export of selected projects as a ready-to-send message.
 - **Payments & invoices:** one page. Open, overdue and paid payments, each with its invoice (or a **Create** button that pre-fills one from the payment), plus an Invoices tab with every invoice. Mark paid, email reminders with the invoice PDF attached, set due dates in bulk. The invoice editor has a live preview, lines from projects, payment methods and PDF export.
 - **Analytics:** three tabs. *Payments*: collected vs outstanding, month by month, open payments by age. *Clients*: projects, revenue (range and all time), average project value, days to pay, last work, quiet clients, best client, revenue concentration. *Team*: your own numbers, plus who did what (projects, tasks done, on-time rate, hours, share of project value) and who worked on each project. CSV export.

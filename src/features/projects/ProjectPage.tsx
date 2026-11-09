@@ -16,6 +16,7 @@ import { RichText, RichView } from '@/components/ui/rich-text'
 import { Composer, MentionText } from '@/components/ui/mentions'
 import { ConfirmDialog } from '@/components/ui/modal'
 import { DoneRow, TaskGroup, TaskListRow } from '@/components/domain/TaskViews'
+import { CodeSnippets } from '@/components/domain/CodeSnippets'
 import { ProjectFormModal } from '@/features/create/ProjectFormModal'
 import { Popover } from '@/components/ui/popover'
 import { DateInput } from '@/components/ui/date-picker'
@@ -28,7 +29,7 @@ import { formatDate, formatFeedAgo, formatMoney } from '@/lib/format'
 import { accessStatus, billingLabel, paymentStatus, priorityMeta, projectStatus, taskRing, taskStatus } from '@/lib/status'
 import type { AccessItem, AccessStatus, Priority, ProjectNote, ProjectStatus, Task, TaskStatus, BillingType, Project } from '@/types'
 
-type Tab = 'tasks' | 'overview' | 'notes' | 'access' | 'activity'
+type Tab = 'tasks' | 'overview' | 'notes' | 'code' | 'access' | 'activity'
 const RING: Record<ProjectStatus, string> = { not_started: '', in_progress: 'prog', waiting_for_client: 'wait', blocked: 'block', completed: 'done', finished: 'done', cancelled: 'cancel' }
 
 export function ProjectPage() {
@@ -36,7 +37,7 @@ export function ProjectPage() {
   const navigate = useNavigate()
   const isAdmin = useIsAdmin()
   const { openCreate } = useUI()
-  const { projects, clients, tasks, profiles, clientMembers, notes, accessItems, activity, payments, invoices, me } = useData()
+  const { projects, clients, tasks, profiles, clientMembers, notes, accessItems, activity, payments, invoices, snippets, me } = useData()
   const [params, setParams] = useSearchParams()
   const tab = (params.get('tab') as Tab) || 'tasks'
   const setTab = (t: Tab) => setParams(t === 'tasks' ? {} : { tab: t }, { replace: true })
@@ -198,6 +199,7 @@ export function ProjectPage() {
             { id: 'tasks', label: 'Tasks', count: projectTasks.filter((t) => t.status !== 'done').length },
             { id: 'overview', label: 'Overview' },
             { id: 'notes', label: 'Notes', count: projectNotes.length || undefined },
+            { id: 'code', label: 'Code', count: snippets.filter((s) => s.project_id === project.id).length || undefined },
             { id: 'access', label: 'Access checklist', count: access.length || undefined },
             { id: 'activity', label: 'Activity' },
           ]}
@@ -327,6 +329,11 @@ export function ProjectPage() {
           )}
 
           {tab === 'notes' && <NotesPanel projectId={project.id} notes={projectNotes} people={people} />}
+          {tab === 'code' && (
+            <div className="content" style={{ maxWidth: 980, paddingTop: 20 }}>
+              <CodeSnippets projectId={project.id} />
+            </div>
+          )}
           {tab === 'access' && <AccessPanel projectId={project.id} items={access} />}
 
           {tab === 'activity' && (

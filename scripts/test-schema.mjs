@@ -250,5 +250,22 @@ await as(U1, `delete from learning_topics where id = $1`, [topic.rows[0].id])
 const left = (await q(`select (select count(*) from learning_lessons) + (select count(*) from learning_resources) + (select count(*) from learning_progress) + (select count(*) from learning_topic_members) as n`)).rows[0].n
 ok(Number(left) === 0, 'deleting a topic removes its lessons, resources, members and progress')
 
+// Code snippets: one parent each, and they go when their task goes.
+const snipTask = (await as(U1, `insert into tasks (project_id, title) values ('bbbbbbbb-0000-0000-0000-000000000001', 'Snippet task') returning id`)).rows[0].id
+await as(U1, `insert into code_snippets (task_id, title, language, code) values ($1, 'dataLayer push', 'javascript', 'dataLayer.push({ event: "x" })')`, [snipTask])
+await as(U1, `insert into code_snippets (project_id, title, code) values ('bbbbbbbb-0000-0000-0000-000000000001', 'Project script', '<script></script>')`)
+let bothFailed = false
+try {
+  await as(U1, `insert into code_snippets (task_id, project_id, code) values ($1, 'bbbbbbbb-0000-0000-0000-000000000001', 'x')`, [snipTask])
+} catch {
+  bothFailed = true
+}
+ok(bothFailed, 'a snippet belongs to exactly one task or one project')
+await q(`delete from tasks where id = $1`, [snipTask])
+n = await q(`select count(*)::int c from code_snippets where task_id = $1`, [snipTask])
+ok(n.rows[0].c === 0, 'deleting a task deletes its code snippets')
+n = await q(`select count(*)::int c from code_snippets where project_id = 'bbbbbbbb-0000-0000-0000-000000000001'`)
+ok(n.rows[0].c === 1, 'project snippets are kept')
+
 console.log(failures ? `\n${failures} check(s) failed` : '\nAll schema checks passed')
 process.exit(failures ? 1 : 0)

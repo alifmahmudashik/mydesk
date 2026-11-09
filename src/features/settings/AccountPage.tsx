@@ -1,3 +1,4 @@
+import { DesktopAppSettings, desktopBridge } from '@/features/settings/DesktopAppSettings'
 import { DesktopNotifSetting } from '@/features/notifications/desktop'
 import { useEffect, useState } from 'react'
 import { Bell, Lock, Monitor, Moon, Palette, Settings, Sun, User } from 'lucide-react'
@@ -86,6 +87,7 @@ export function AccountPage() {
           nav={[
             { id: 'info', label: 'Personal info', icon: <User className="i i-sm" /> },
             { id: 'notifications', label: 'Notifications', icon: <Bell className="i i-sm" /> },
+            ...(desktopBridge ? [{ id: 'desktop', label: 'Desktop app', icon: <Monitor className="i i-sm" /> }] : []),
             { id: 'appearance', label: 'Appearance', icon: <Palette className="i i-sm" /> },
             { id: 'security', label: 'Password', icon: <Lock className="i i-sm" /> },
           ]}
@@ -106,6 +108,7 @@ export function AccountPage() {
               <ToggleRow title="Weekly summary" desc="Monday 9:00. Open tasks, money in, what's overdue." checked={prefs.weekly} onChange={togglePref('weekly')} />
             </div>
           </section>
+          <DesktopAppSettings />
           <Section id="appearance" title="Appearance">
             <div className="grid-3">
               {themes.map((t) => (

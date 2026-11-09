@@ -419,6 +419,20 @@ export interface LearningProgress {
   created_at: string
 }
 
+/** A saved piece of code on a task or a project (exactly one of the two). */
+export interface CodeSnippet {
+  id: string
+  task_id?: string | null
+  project_id?: string | null
+  title: string
+  language: string
+  code: string
+  position: number
+  created_by?: string | null
+  created_at: string
+  updated_at?: string | null
+}
+
 /** A meeting room or shared link for the whole team (Team page). */
 export interface TeamLink {
   id: string

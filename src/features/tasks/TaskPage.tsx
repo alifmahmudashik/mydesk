@@ -25,6 +25,7 @@ import { copyText } from '@/lib/utils'
 import type { Priority, Subtask, TaskAttachment, TaskStatus, TaskWatcher, TimeEntry } from '@/types'
 import { format, parseISO } from 'date-fns'
 import { DateInput } from '@/components/ui/date-picker'
+import { CodeSnippets } from '@/components/domain/CodeSnippets'
 
 const STATUSES: TaskStatus[] = ['todo', 'in_progress', 'waiting_for_client', 'blocked', 'review', 'done']
 
@@ -93,6 +94,7 @@ export function TaskPage() {
   }
 
   const people = eligibleAssignees(project?.client_id, profiles, clientMembers)
+  const taskSnippets = data.snippets.filter((s) => s.task_id === task.id).length
   const assigneeIds = taskAssigneeIds(task)
   const assignee = profiles.find((p) => p.id === assigneeIds[0])
   const others = assigneeIds.slice(1).map((id) => profiles.find((p) => p.id === id)).filter(Boolean)
@@ -340,6 +342,11 @@ export function TaskPage() {
               </div>
               <button type="button" className="btn btn-sm btn-ghost" onClick={() => setLinkOpen(true)}><Link2 className="i i-sm" />Add link</button>
             </div>
+          </section>
+
+          <section style={{ animation: 'in .5s var(--ease) .18s both' }}>
+            <h2 className="h3" style={{ marginBottom: 10 }}>Code {taskSnippets > 0 && <span className="muted m">{taskSnippets}</span>}</h2>
+            <CodeSnippets taskId={task.id} compact />
           </section>
 
           <section className="tabs" style={{ animation: 'in .5s var(--ease) .2s both', gap: 14 }}>

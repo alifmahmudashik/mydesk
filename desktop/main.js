@@ -3,7 +3,8 @@
 // appears here automatically. The desktop app itself only needs rebuilding
 // if this folder changes.
 
-const { app, BrowserWindow, ipcMain, shell } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, session, shell } = require('electron')
+const { autoUpdater } = require('electron-updater')
 const fs = require('node:fs')
 const path = require('node:path')
 
@@ -77,6 +78,114 @@ function cssToHex(color) {
   return '#' + m.slice(0, 3).map((n) => Math.round(Number(n)).toString(16).padStart(2, '0')).join('').toUpperCase()
 }
 
+// ---- app settings (Account → Desktop app in MyDesk) ---------------------------
+// autoStart: open MyDesk when you sign in to Windows.
+// notifications: allow Windows pop-ups. Off = the site falls back to emails.
+const DEFAULTS = { autoStart: true, notifications: true }
+const settingsFile = () => path.join(app.getPath('userData'), 'settings.json')
+let settings = { ...DEFAULTS }
+const loadSettings = () => {
+  try {
+    settings = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) }
+  } catch {
+    settings = { ...DEFAULTS }
+  }
+}
+const saveSettings = () => {
+  try {
+    fs.writeFileSync(settingsFile(), JSON.stringify(settings))
+  } catch {
+    /* not important */
+  }
+}
+// Only the installed app registers itself; running from source would register electron.exe.
+const applyAutoStart = () => {
+  if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: settings.autoStart })
+}
+
+ipcMain.handle('settings:get', (e) => (fromApp(e) ? { ...settings } : null))
+ipcMain.handle('settings:set', (e, key, value) => {
+  if (!fromApp(e) || !(key in DEFAULTS) || typeof value !== 'boolean') return { ...settings }
+  settings[key] = value
+  saveSettings()
+  if (key === 'autoStart') applyAutoStart()
+  // The site reads notification permission when it loads; reload so it switches
+  // between pop-ups and emails straight away.
+  if (key === 'notifications') setTimeout(() => win?.webContents.reload(), 300)
+  return { ...settings }
+})
+ipcMain.handle('app:version', (e) => (fromApp(e) ? app.getVersion() : null))
+
+const fromApp = (e) => Boolean(win) && e.sender === win.webContents
+
+// ---- updates (from GitHub releases) ------------------------------------------
+// Checks on start and every 6 hours. A new version asks first; "Download and
+// install" downloads it (progress on the taskbar icon), then reinstalls and restarts.
+autoUpdater.autoDownload = false
+autoUpdater.autoInstallOnAppQuit = true
+let update = { state: 'idle' }
+let installing = false
+const prompted = new Set()
+
+const sendUpdate = (patch) => {
+  update = { ...update, ...patch }
+  win?.webContents.send('update', update)
+}
+
+autoUpdater.on('checking-for-update', () => sendUpdate({ state: 'checking', message: undefined }))
+autoUpdater.on('update-not-available', () => sendUpdate({ state: 'none' }))
+autoUpdater.on('update-available', (info) => {
+  sendUpdate({ state: 'available', version: info.version })
+  if (!prompted.has(info.version)) {
+    prompted.add(info.version)
+    void askToUpdate(info.version)
+  }
+})
+autoUpdater.on('download-progress', (p) => {
+  sendUpdate({ state: 'downloading', percent: Math.round(p.percent) })
+  win?.setProgressBar(p.percent / 100)
+})
+autoUpdater.on('update-downloaded', (info) => {
+  win?.setProgressBar(-1)
+  sendUpdate({ state: 'ready', version: info.version })
+  installing = true
+  // Silent reinstall, then open MyDesk again.
+  setTimeout(() => autoUpdater.quitAndInstall(true, true), 800)
+})
+autoUpdater.on('error', (err) => {
+  win?.setProgressBar(-1)
+  sendUpdate({ state: 'error', message: String(err?.message || err).split('\n')[0].slice(0, 200) })
+})
+
+async function askToUpdate(version) {
+  if (!win) return
+  const { response } = await dialog.showMessageBox(win, {
+    type: 'info',
+    title: 'Update available',
+    message: `MyDesk ${version} is available`,
+    detail: `You have ${app.getVersion()}. Download it now? MyDesk restarts by itself to finish installing.`,
+    buttons: ['Download and install', 'Later'],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true,
+  })
+  if (response === 0) void downloadUpdate()
+}
+
+function checkForUpdates() {
+  if (!app.isPackaged) return sendUpdate({ state: 'none', message: 'Updates only work in the installed app.' })
+  autoUpdater.checkForUpdates().catch(() => {})
+}
+function downloadUpdate() {
+  if (update.state !== 'available') return
+  sendUpdate({ state: 'downloading', percent: 0 })
+  autoUpdater.downloadUpdate().catch(() => {})
+}
+
+ipcMain.handle('update:get', (e) => (fromApp(e) ? update : null))
+ipcMain.handle('update:check', (e) => fromApp(e) && checkForUpdates())
+ipcMain.handle('update:download', (e) => fromApp(e) && downloadUpdate())
+
 // ---- one window only ---------------------------------------------------------
 if (!app.requestSingleInstanceLock()) app.quit()
 
@@ -131,7 +240,7 @@ function createWindow() {
   // (then emails resume right away), then close for real.
   win.on('close', (e) => {
     saveState(win)
-    if (closing) return
+    if (closing || installing) return // the updater is closing us to reinstall
     closing = true
     e.preventDefault()
     win.hide()
@@ -151,5 +260,15 @@ app.on('second-instance', () => {
   win.focus()
 })
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  loadSettings()
+  applyAutoStart()
+  // Desktop notifications follow the "Show desktop notifications" setting.
+  const allowed = (permission) => permission !== 'notifications' || settings.notifications
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => callback(allowed(permission)))
+  session.defaultSession.setPermissionCheckHandler((_wc, permission) => allowed(permission))
+  createWindow()
+  setTimeout(checkForUpdates, 8000)
+  setInterval(checkForUpdates, 6 * 60 * 60 * 1000)
+})
 app.on('window-all-closed', () => app.quit())

@@ -83,7 +83,7 @@ export function playChime(force = false) {
 
 /** A desktop pop-up with MyDesk's chime instead of the system sound. */
 function popUp(title: string, opts: { body?: string; tag?: string; onClick?: () => void }) {
-  const pop = new Notification(title, { body: opts.body, icon: '/mydesk-fire.png', tag: opts.tag, silent: soundOn() })
+  const pop = new Notification(title, { body: opts.body, icon: '/mydesk-icon.png', tag: opts.tag, silent: soundOn() })
   playChime()
   pop.onclick = () => {
     window.focus()

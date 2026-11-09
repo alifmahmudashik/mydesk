@@ -2,7 +2,7 @@ import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import LinkExtension from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
-import { Bold, Heading, Italic, Link2, List, ListOrdered } from 'lucide-react'
+import { Bold, Code2, Heading, Italic, Link2, List, ListOrdered } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
@@ -51,7 +51,7 @@ export function RichText({ defaultValue, onSave, placeholder = 'Write somethingâ
   const lastSaved = useRef(defaultValue ?? '')
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ heading: { levels: [3] }, codeBlock: false, blockquote: false, horizontalRule: false }),
+      StarterKit.configure({ heading: { levels: [3] }, blockquote: false, horizontalRule: false }),
       LinkExtension.configure({ openOnClick: false, autolink: true, defaultProtocol: 'https' }),
       Placeholder.configure({ placeholder }),
     ],
@@ -96,6 +96,9 @@ export function RichText({ defaultValue, onSave, placeholder = 'Write somethingâ
         </ToolButton>
         <ToolButton label="Numbered list" active={editor.isActive('orderedList')} onClick={() => run((c) => c.toggleOrderedList())}>
           <ListOrdered className="i i-sm" />
+        </ToolButton>
+        <ToolButton label="Code block" active={editor.isActive('codeBlock')} onClick={() => run((c) => c.toggleCodeBlock())}>
+          <Code2 className="i i-sm" />
         </ToolButton>
         <ToolButton label="Link" active={editor.isActive('link')} onClick={() => promptForLink(editor)}>
           <Link2 className="i i-sm" />
