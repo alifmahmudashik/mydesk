@@ -105,10 +105,9 @@ function Routed() {
 
 export default function App() {
   usePrefs()
-  const { session, loading, authRequired, recovery, clearRecovery } = useAuth()
+  const { session, loading, authRequired, recovery, clearRecovery, authed } = useAuth()
   const init = useData((s) => s.init)
   const location = useLocation()
-  const authed = !authRequired || Boolean(session)
   const isDesktop =
     typeof window !== 'undefined' &&
     Boolean(

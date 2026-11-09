@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
-import { signInWithGoogle } from '@/hooks/useAuth'
+import { demoSignIn, signInWithGoogle } from '@/hooks/useAuth'
 import { Field } from '@/components/ui/field'
 import { AuthLayout, GoogleIcon } from '@/features/auth/AuthLayout'
 
@@ -14,7 +14,10 @@ export function LoginPage({ initialMode = 'signin' }: { initialMode?: 'signin' |
 
   async function submit(e: FormEvent) {
     e.preventDefault()
-    if (!supabase) return
+    if (!supabase) {
+      demoSignIn()
+      return
+    }
     setBusy(true)
     try {
       if (mode === 'forgot') {
