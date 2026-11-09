@@ -3,12 +3,6 @@
   "productName": "MyDesk",
   "version": "1.2.0",
   "description": "MyDesk for Windows",
-  "author": {
-    "name": "Alif Mahmud",
-    "email": "info@alifmahmud.com",
-    "url": "https://alifmahmud.com"
-  },
-  "homepage": "https://alifmahmud.com",
   "private": true,
   "main": "main.js",
   "scripts": {
@@ -22,7 +16,6 @@
   "build": {
     "appId": "com.alifmahmud.mydesk",
     "productName": "MyDesk",
-    "copyright": "Copyright © 2026 Alif Mahmud (alifmahmud.com)",
     "directories": {
       "output": "release",
       "buildResources": "build"
