@@ -1,15 +1,16 @@
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { signInWithGoogle } from '@/hooks/useAuth'
 import { Field } from '@/components/ui/field'
 import { AuthLayout, GoogleIcon } from '@/features/auth/AuthLayout'
 
-export function LoginPage() {
+export function LoginPage({ initialMode = 'signin' }: { initialMode?: 'signin' | 'forgot' | 'setup' } = {}) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
-  const [mode, setMode] = useState<'signin' | 'forgot' | 'setup'>('signin')
+  const [mode, setMode] = useState<'signin' | 'forgot' | 'setup'>(initialMode)
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -39,6 +40,11 @@ export function LoginPage() {
 
   return (
     <AuthLayout>
+      <div style={{ marginBottom: 14 }}>
+        <Link to="/" className="link-btn small">
+          &larr; Back to home
+        </Link>
+      </div>
       <h1 style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-.025em' }}>
         {mode === 'forgot' ? 'Reset your password' : mode === 'setup' ? 'Create the owner account' : 'Welcome back'}
       </h1>

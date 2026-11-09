@@ -10,6 +10,7 @@ import { LoginPage } from '@/features/auth/LoginPage'
 import { InviteAcceptPage } from '@/features/auth/InviteAcceptPage'
 import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
+import { HomePage } from '@/features/home/HomePage'
 
 const loadInboxPage = () => import('@/features/inbox/InboxPage')
 const InboxPage = lazy(() => loadInboxPage().then((m) => ({ default: m.InboxPage })))
@@ -93,6 +94,7 @@ function Routed() {
           <Route path="/analytics" element={<AdminOnly><AnalyticsPage /></AdminOnly>} />
           <Route path="/account" element={<AccountPage />} />
           <Route path="/settings" element={<AdminOnly><WorkspaceSettingsPage /></AdminOnly>} />
+          <Route path="/home" element={<HomePage />} />
           <Route path="/invite/:token" element={<Navigate to="/" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
@@ -107,6 +109,12 @@ export default function App() {
   const init = useData((s) => s.init)
   const location = useLocation()
   const authed = !authRequired || Boolean(session)
+  const isDesktop =
+    typeof window !== 'undefined' &&
+    Boolean(
+      (window as unknown as { mydeskDesktop?: unknown }).mydeskDesktop ||
+        document.documentElement.classList.contains('desktop')
+    )
 
   useEffect(() => {
     if (authed) {
@@ -118,7 +126,18 @@ export default function App() {
   if (loading) return <div style={{ minHeight: '100vh', background: 'var(--bg)' }} />
   if (recovery) return <ResetPasswordPage onDone={clearRecovery} />
   if (location.pathname.startsWith('/invite/') && authRequired && !session) return <InviteAcceptPage />
-  if (!authed) return <LoginPage />
+
+  if (!authed) {
+    if (
+      isDesktop ||
+      location.pathname === '/login' ||
+      location.pathname === '/signin' ||
+      location.pathname === '/signup'
+    ) {
+      return <LoginPage initialMode={location.pathname === '/signup' ? 'setup' : 'signin'} />
+    }
+    return <HomePage />
+  }
 
   return (
     <AppShell>
