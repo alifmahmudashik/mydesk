@@ -25,11 +25,11 @@ import { SUPPORTED_CURRENCIES } from '@/lib/currency'
 import { monthLabel } from '@/components/ui/month-picker'
 import { clientDisplayName, effectivePaymentStatus, hasWorkMonthColumn, projectWorkDate, eligibleAssignees, profileDisplayName, profileFullName, shortProjectTitle, isAssignedTo } from '@/lib/derive'
 import { formatDate, formatFeedAgo, formatMoney } from '@/lib/format'
-import { accessStatus, billingLabel, paymentStatus, priorityMeta, projectStatus } from '@/lib/status'
+import { accessStatus, billingLabel, paymentStatus, priorityMeta, projectStatus, taskRing, taskStatus } from '@/lib/status'
 import type { AccessItem, AccessStatus, Priority, ProjectNote, ProjectStatus, Task, TaskStatus, BillingType, Project } from '@/types'
 
 type Tab = 'tasks' | 'overview' | 'notes' | 'access' | 'activity'
-const RING: Record<ProjectStatus, string> = { not_started: '', in_progress: 'prog', waiting_for_client: 'rev', blocked: 'rev', completed: 'done', finished: 'done', cancelled: 'cancel' }
+const RING: Record<ProjectStatus, string> = { not_started: '', in_progress: 'prog', waiting_for_client: 'wait', blocked: 'block', completed: 'done', finished: 'done', cancelled: 'cancel' }
 
 export function ProjectPage() {
   const { id = '' } = useParams()
@@ -216,8 +216,8 @@ export function ProjectPage() {
                   <span className="spacer" />
                   <button type="button" className="btn btn-dark btn-sm" onClick={() => openCreate('task', { project_id: project.id })}><Plus className="i" />New task</button>
                 </div>
-                {(['review', 'in_progress'] as TaskStatus[]).map((s) => (
-                  <TaskGroup key={s} icon={<span className={`st ${s === 'review' ? 'rev' : 'prog'}`} />} title={s === 'review' ? 'In review' : 'In progress'} tasks={byStatus(s)} render={(t) => <TaskListRow key={t.id} task={t} showProject={false} />} />
+                {(['blocked', 'waiting_for_client', 'review', 'in_progress'] as TaskStatus[]).map((s) => (
+                  <TaskGroup key={s} icon={<span className={`st ${taskRing[s]}`} />} title={taskStatus[s].label} tasks={byStatus(s)} render={(t) => <TaskListRow key={t.id} task={t} showProject={false} />} />
                 ))}
                 <div>
                   <div className="grp-h"><span className="st" />To do <span className="n">{byStatus('todo').length}</span></div>

@@ -693,3 +693,17 @@ html.desktop ::-webkit-scrollbar-track, html.desktop ::-webkit-scrollbar-corner 
 html.desktop ::-webkit-scrollbar-thumb { background-color: color-mix(in srgb, var(--ink) 16%, transparent); border: 3px solid transparent; border-radius: 99px; background-clip: padding-box; }
 html.desktop ::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--ink) 30%, transparent); }
 html.desktop .side::-webkit-scrollbar { width: 0; } /* still scrolls with the wheel; no gutter squeezing the sidebar */
+
+/* ---- inline task edits on list rows (priority, status, date, people) ---- */
+.inline-edit { display: inline-flex; align-items: center; flex: none; padding: 3px; margin: -3px; border: 0; border-radius: 8px; background: none; font: inherit; color: inherit; cursor: pointer; transition: background .15s, box-shadow .15s; }
+.inline-edit:hover, .inline-edit.open { background: var(--soft); box-shadow: 0 0 0 1px var(--line-s); }
+.inline-edit:focus-visible { outline: 2px solid var(--pri); outline-offset: 1px; }
+/* Empty date / nobody assigned: only shows when you hover the row, to keep lists calm. */
+.inline-edit.inline-empty { opacity: 0; color: var(--faint); }
+.li:hover .inline-edit.inline-empty, .inline-edit.inline-empty:focus-visible, .inline-edit.inline-empty.open { opacity: 1; }
+.inline-avatar-add { width: 26px; height: 26px; border-radius: 99px; border: 1.5px dashed var(--line3); display: grid; place-items: center; color: var(--faint); }
+@media (hover: none) { .inline-edit.inline-empty { opacity: 1; } }
+
+/* Status rings: Blocked is red, Waiting for client is a dashed amber ring (tasks and projects). */
+.st.block { border-color: var(--bad-dot); background: radial-gradient(circle, #fff 0 22%, var(--bad-dot) 26%); }
+.st.wait { border-color: var(--warn-dot); border-style: dashed; background: none; }

@@ -32,6 +32,8 @@ export const projectStatus: Record<ProjectStatus, StatusMeta> = {
 export const taskStatus: Record<TaskStatus, StatusMeta> = {
   todo: { label: 'To do', tone: 'gray' },
   in_progress: { label: 'In progress', tone: 'pri' },
+  waiting_for_client: { label: 'Waiting for client', tone: 'warn' },
+  blocked: { label: 'Blocked', tone: 'bad' },
   review: { label: 'In review', tone: 'warn' },
   done: { label: 'Done', tone: 'ok' },
   cancelled: { label: 'Cancelled', tone: 'gray' },
@@ -41,6 +43,8 @@ export const taskStatus: Record<TaskStatus, StatusMeta> = {
 export const taskRing: Record<TaskStatus, string> = {
   todo: '',
   in_progress: 'prog',
+  waiting_for_client: 'wait',
+  blocked: 'block',
   review: 'rev',
   done: 'done',
   cancelled: 'cancel',

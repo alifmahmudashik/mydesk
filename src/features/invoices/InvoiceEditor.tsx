@@ -14,6 +14,7 @@ import { Modal } from '@/components/ui/modal'
 import { A4_WIDTH, InvoicePaper, ScaledInvoice } from '@/features/invoices/InvoicePaper'
 import { SUPPORTED_CURRENCIES } from '@/lib/currency'
 import { exportElementToPdf, invoiceFilename } from '@/lib/pdf'
+import { paymentTitle } from '@/data/actions'
 import { clientColor, clientDisplayName, effectivePaymentStatus, invoiceStatus, isInvoiceable, withWorkMonthNote } from '@/lib/derive'
 import { formatDate, formatMoney, todayISO } from '@/lib/format'
 import { paymentStatus, paymentTerms } from '@/lib/status'
@@ -41,6 +42,8 @@ export function InvoiceEditor() {
   const exportRef = useRef<HTMLDivElement>(null)
   const [exporting, setExporting] = useState(false)
   const [pickOpen, setPickOpen] = useState(false)
+  // "Create invoice" on a payment row passes ?payment=<id>; that payment gets linked on save.
+  const fromPayment = isNew ? payments.find((p) => p.id === params.get('payment') && !p.invoice_id) : undefined
 
   const initial = useMemo(() => {
     const profiles = invoiceSettings?.payment_profiles ?? []
@@ -63,12 +66,14 @@ export function InvoiceEditor() {
     const client = clients.find((c) => c.id === params.get('client')) ?? clients.find((c) => c.status !== 'archived')
     const terms = paymentTerms.find((t) => t.value === client?.payment_terms)?.days ?? invoiceSettings?.default_due_days ?? 7
     const fromProjects = (params.get('projects') ?? '').split(',').filter(Boolean)
-    const items: InvoiceLineItem[] = projects.filter((p) => fromProjects.includes(p.id)).map((p) => ({ description: p.title, price: Number(p.amount) || 0, qty: 1 }))
+    let items: InvoiceLineItem[] = projects.filter((p) => fromProjects.includes(p.id)).map((p) => ({ description: p.title, price: Number(p.amount) || 0, qty: 1 }))
+    // Made from a payment that has no project (recorded by hand): bill that payment.
+    if (!items.length && fromPayment) items = [{ description: paymentTitle(fromPayment), price: Number(fromPayment.amount) || 0, qty: 1 }]
     const defaultProfile = profiles[0]
     return {
       client_id: client?.id ?? '',
       number: suggestNumber(client, invoices),
-      currency: (fromProjects.length && projects.find((p) => p.id === fromProjects[0])?.currency) || client?.default_currency || invoiceSettings?.default_currency || 'USD',
+      currency: (fromProjects.length && projects.find((p) => p.id === fromProjects[0])?.currency) || fromPayment?.currency || client?.default_currency || invoiceSettings?.default_currency || 'USD',
       issue_date: todayISO(),
       due_date: format(addDays(new Date(), terms), 'yyyy-MM-dd'),
       line_items: items.length ? items : [{ description: '', price: 0, qty: 1 }],
@@ -94,7 +99,7 @@ export function InvoiceEditor() {
   const projectPayments = payments.filter(
     (p) =>
       p.client_id === f.client_id &&
-      p.project_ids?.some((id) => projectIdsOnInvoice.includes(id)) &&
+      (p.project_ids?.some((id) => projectIdsOnInvoice.includes(id)) || p.id === fromPayment?.id) &&
       // Never take over a payment that already belongs to a different invoice.
       (!p.invoice_id || p.invoice_id === existing?.id),
   )
@@ -235,7 +240,7 @@ export function InvoiceEditor() {
   if (!isNew && !existing) {
     return (
       <>
-        <Topbar crumbs={[{ label: 'Invoices', to: '/invoices' }, { label: 'Not found' }]} />
+        <Topbar crumbs={[{ label: 'Payments & invoices', to: '/payments?tab=invoices' }, { label: 'Not found' }]} />
         <div className="content"><div className="card"><Empty title="Invoice not found" /></div></div>
       </>
     )
@@ -247,7 +252,7 @@ export function InvoiceEditor() {
     <>
       <Topbar
         crumbs={[
-          { label: 'Invoices', to: '/invoices' },
+          { label: 'Payments & invoices', to: '/payments?tab=invoices' },
           { label: <span className="row-sm"><span className="mono" style={{ fontSize: 12.5 }}>{f.number || 'New invoice'}</span>{linkedStatus && <StatusPill meta={paymentStatus[linkedStatus]} />}</span> },
         ]}
       >

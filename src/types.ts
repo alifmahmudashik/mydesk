@@ -7,7 +7,7 @@ export type ProjectStatus =
   | 'completed'
   | 'finished'
   | 'cancelled'
-export type TaskStatus = 'todo' | 'in_progress' | 'review' | 'done' | 'cancelled'
+export type TaskStatus = 'todo' | 'in_progress' | 'waiting_for_client' | 'blocked' | 'review' | 'done' | 'cancelled'
 export type AccessStatus = 'needed' | 'requested' | 'received' | 'not_needed'
 export type PaymentStatus = 'unpaid' | 'partial' | 'paid' | 'refunded' | 'overdue'
 export type Priority = 'low' | 'medium' | 'high' | 'urgent'

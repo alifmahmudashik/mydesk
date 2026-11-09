@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Check, UserMinus, Users } from 'lucide-react'
 import { Menu, MenuItem, MenuSep, MenuTitle } from '@/components/ui/menu'
 import { Avatar, AvatarStack } from '@/components/ui/avatar'
@@ -29,22 +30,24 @@ interface Props {
   /** "prop" = compact text button (task side panel); "field" = looks like a form input. */
   variant?: 'prop' | 'field'
   align?: 'left' | 'right'
+  /** Custom trigger (e.g. just the avatars on a list row). */
+  trigger?: (p: { open: boolean; toggle: () => void }) => ReactNode
 }
 
 /** Pick one or more people. Stays open while you tick names. */
-export function AssigneePicker({ people, value, onChange, meId, variant = 'prop', align = 'left' }: Props) {
+export function AssigneePicker({ people, value, onChange, meId, variant = 'prop', align = 'left', trigger }: Props) {
   const toggle = (id: string) => onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id])
   return (
     <Menu
       align={align}
       matchWidth={variant === 'field'}
       className={variant === 'field' ? 'conv-pick' : undefined}
-      trigger={({ open, toggle: t }) => (
+      trigger={trigger ?? (({ open, toggle: t }) => (
         <button type="button" className={cn(variant === 'field' ? 'inp cur-inp' : 'prop', open && 'focus')} onClick={t} aria-haspopup="menu" aria-expanded={open}>
           <Assignees ids={value} profiles={people} size="xs" />
           <span className={cn('grow trunc', !value.length && variant === 'field' && 'faint')} style={{ textAlign: 'left' }}>{assigneesLabel(value, people, meId)}</span>
         </button>
-      )}
+      ))}
     >
       <MenuTitle>Assign to · pick one or more</MenuTitle>
       {people.map((p) => (

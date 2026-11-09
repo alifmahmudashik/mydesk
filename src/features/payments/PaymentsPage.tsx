@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { addDays, format, parseISO } from 'date-fns'
-import { ChartColumn, Check, CreditCard, Plus, Search, Send } from 'lucide-react'
+import { ChartColumn, Check, CreditCard, Download, FileText, Plus, Search, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
 import { useUI } from '@/data/ui'
@@ -22,13 +22,15 @@ import { paymentStatus, paymentTerms } from '@/lib/status'
 import type { Payment } from '@/types'
 import { DateInput } from '@/components/ui/date-picker'
 import { MonthFilter } from '@/components/ui/month-picker'
+import { InvoicesList } from '@/features/invoices/InvoicesPage'
 
-type Tab = 'open' | 'overdue' | 'paid'
+type Tab = 'open' | 'overdue' | 'paid' | 'invoices'
 
 export function PaymentsPage() {
   const { payments, clients, invoices, projects } = useData()
   const { openCreate } = useUI()
   const rates = useUsdRates()
+  const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const tab = (params.get('tab') as Tab) || 'open'
   const [q, setQ] = useState('')
@@ -154,6 +156,24 @@ export function PaymentsPage() {
     </span>
   )
 
+  // Every payment links to its invoice, or offers to make one (pre-filled with its projects).
+  const invoiceCell = (p: Payment) => {
+    const inv = invoices.find((i) => i.id === p.invoice_id)
+    if (inv) {
+      return (
+        <td>
+          <span className="row-sm above">
+            <Link className="mono small m" to={`/invoices/${inv.id}`} title="Open invoice">{inv.number}</Link>
+            <button type="button" className="btn btn-sm btn-ghost btn-icon" aria-label={`Download invoice ${inv.number}`} title="Download PDF" onClick={() => navigate(`/invoices/${inv.id}?export=1`)}><Download className="i i-sm" /></button>
+          </span>
+        </td>
+      )
+    }
+    const qs = new URLSearchParams({ client: p.client_id, payment: p.id })
+    if (p.project_ids?.length) qs.set('projects', p.project_ids.join(','))
+    return <td><Link className="btn btn-sm btn-ghost above" to={`/invoices/new?${qs}`} title="Create an invoice for this payment"><FileText className="i i-sm" />Create</Link></td>
+  }
+
   const dueCell = (p: Payment) => {
     if (!p.due_date) return <td className="faint"><button type="button" className="link-btn above faint" style={{ color: 'var(--faint)', fontWeight: 400 }} onClick={() => setEdit(p)}>Add date</button></td>
     const late = lateLabel(p.due_date)
@@ -167,12 +187,13 @@ export function PaymentsPage() {
 
   return (
     <>
-      <Topbar crumbs={[{ label: 'Payments' }]}>
+      <Topbar crumbs={[{ label: 'Payments & invoices' }]}>
         <Link className="btn hide-sm" to="/analytics"><ChartColumn className="i" />Analytics</Link>
+        <Link className="btn" to="/invoices/new"><FileText className="i" />New invoice</Link>
         <button type="button" className="btn btn-pri" onClick={() => openCreate('payment')}><Plus className="i" />Record payment</button>
       </Topbar>
       <Content>
-        <PageHead title="Payments" sub="Grouped by the month the work was done, so each month shows what that work earned.">
+        <PageHead title="Payments & invoices" sub="What each month’s work earned, what’s still owed, and the invoice behind every payment.">
           <MonthFilter value={month} onChange={setMonth} />
         </PageHead>
         <div className="kstrip">
@@ -221,16 +242,17 @@ export function PaymentsPage() {
               { id: 'open', label: 'Open', count: open.length },
               { id: 'overdue', label: <>Overdue {overdue.length > 0 && <span className="n" style={{ background: 'var(--bad-bg)', color: 'var(--bad)' }}>{overdue.length}</span>}</> },
               { id: 'paid', label: 'Paid', count: paid.length },
+              { id: 'invoices', label: 'Invoices', count: invoices.length },
             ]}
             after={
               <label className="inp-wrap" style={{ width: 240, maxWidth: '45vw', height: 32, marginBottom: 6 }}>
                 <Search className="i i-sm" />
-                <input placeholder="Search client or project…" aria-label="Search payments" value={q} onChange={(e) => setQ(e.target.value)} />
+                <input placeholder="Search client, project or invoice…" aria-label="Search payments and invoices" value={q} onChange={(e) => setQ(e.target.value)} />
               </label>
             }
           />
           <div className="panel-in" key={tab}>
-            {tab !== 'paid' && otherOpen.length > 0 && (
+            {(tab === 'open' || tab === 'overdue') && otherOpen.length > 0 && (
               <div className="card card-f" style={{ marginBottom: 12 }}>
                 <span className="muted">{formatMoney(Math.round(sumUSD(otherOpen, rates)))} is still open for work in other months ({otherOpen.length} payment{otherOpen.length === 1 ? '' : 's'}).</span>
                 <button type="button" className="btn btn-sm" onClick={() => setMonth('all')}>Show all months</button>
@@ -255,8 +277,8 @@ export function PaymentsPage() {
                         right={<span className={`group-total ${g.late ? 't-bad' : 't-warn'}`}>{sumByCurrency(g.rows)}</span>}
                       >
                         <div className="tbl-wrap">
-                          <table className="tbl" style={{ minWidth: 760 }}>
-                            <thead><tr><th>Project</th><th style={{ width: 130 }}>Work month</th><th className="r" style={{ width: 120 }}>Amount</th><th style={{ width: 150 }}>Status</th><th style={{ width: 110 }}>Due</th><th className="r" style={{ width: 220 }} /></tr></thead>
+                          <table className="tbl" style={{ minWidth: 900 }}>
+                            <thead><tr><th>Project</th><th style={{ width: 120 }}>Work month</th><th className="r" style={{ width: 110 }}>Amount</th><th style={{ width: 130 }}>Status</th><th style={{ width: 110 }}>Due</th><th style={{ width: 130 }}>Invoice</th><th className="r" style={{ width: 210 }} /></tr></thead>
                             <tbody>
                               {g.rows.map((p) => {
                                 const st = effectivePaymentStatus(p)
@@ -267,6 +289,7 @@ export function PaymentsPage() {
                                     <td className="r num b">{formatMoney(p.amount, p.currency)}</td>
                                     <td><StatusPill meta={st === 'unpaid' ? { ...paymentStatus.unpaid, tone: 'warn' } : paymentStatus[st]} /></td>
                                     {dueCell(p)}
+                                    {invoiceCell(p)}
                                     <td className="r">{actions(p, st === 'overdue' || Boolean(p.due_date && (daysUntil(p.due_date) ?? 99) <= 3))}</td>
                                   </tr>
                                 )
@@ -296,8 +319,8 @@ export function PaymentsPage() {
                   {groupByClient(overdueRows.filter(matchQ), (p) => p.client_id, clients).map((g) => (
                     <ClientGroup key={g.id} client={g.client} meta={`${g.rows.length} overdue \u00b7 oldest ${lateLabel(g.rows[0].due_date)}`} right={<span className="group-total t-bad">{sumByCurrency(g.rows)}</span>}>
                       <div className="tbl-wrap">
-                        <table className="tbl" style={{ minWidth: 700 }}>
-                          <thead><tr><th>Project</th><th style={{ width: 130 }}>Work month</th><th className="r" style={{ width: 120 }}>Amount</th><th style={{ width: 110 }}>Due</th><th style={{ width: 140 }}>Last reminder</th><th className="r" style={{ width: 220 }} /></tr></thead>
+                        <table className="tbl" style={{ minWidth: 880 }}>
+                          <thead><tr><th>Project</th><th style={{ width: 120 }}>Work month</th><th className="r" style={{ width: 110 }}>Amount</th><th style={{ width: 110 }}>Due</th><th style={{ width: 120 }}>Last reminder</th><th style={{ width: 130 }}>Invoice</th><th className="r" style={{ width: 210 }} /></tr></thead>
                           <tbody>
                             {g.rows.map((p) => (
                               <tr key={p.id} className={`hov${kept(p) ? ' just-paid' : ''}`}>
@@ -306,6 +329,7 @@ export function PaymentsPage() {
                                 <td className="r num b">{formatMoney(p.amount, p.currency)}</td>
                                 <td><div>{formatDate(p.due_date)}</div><div className="xs t-bad">{lateLabel(p.due_date)}</div></td>
                                 <td className="small muted">{p.last_reminded_at ? formatDate(p.last_reminded_at.slice(0, 10)) : 'Never'}</td>
+                                {invoiceCell(p)}
                                 <td className="r">{actions(p, true)}</td>
                               </tr>
                             ))}
@@ -331,21 +355,20 @@ export function PaymentsPage() {
                       right={<span className="group-total t-ok">{sumByCurrency(g.rows)}</span>}
                     >
                       <div className="tbl-wrap">
-                        <table className="tbl" style={{ minWidth: 640 }}>
-                          <thead><tr><th>Project</th><th style={{ width: 130 }}>Work month</th><th className="r" style={{ width: 120 }}>Amount</th><th style={{ width: 120 }}>Paid on</th><th style={{ width: 150 }}>Method</th></tr></thead>
+                        <table className="tbl" style={{ minWidth: 780 }}>
+                          <thead><tr><th>Project</th><th style={{ width: 120 }}>Work month</th><th className="r" style={{ width: 120 }}>Amount</th><th style={{ width: 120 }}>Paid on</th><th style={{ width: 140 }}>Method</th><th style={{ width: 130 }}>Invoice</th></tr></thead>
                           <tbody>
                             {g.rows.map((p) => {
-                              const inv = invoices.find((i) => i.id === p.invoice_id)
                               return (
                                 <tr key={p.id} className="hov">
                                   <td>
                                     <button type="button" className="m cover trunc" style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', color: 'inherit', maxWidth: 360 }} onClick={() => setEdit(p)}>{paymentTitle(p)}</button>
-                                    {inv && <div className="xs"><Link className="mono faint above" to={`/invoices/${inv.id}`}>Invoice {inv.number}</Link></div>}
                                   </td>
                                   <td className="wm-cell">{wmLabel(p)}</td>
                                   <td className="r num b">{formatMoney(p.amount, p.currency, { cents: true })}</td>
                                   <td>{formatDate(p.payment_date)}{p.payment_date && p.payment_date.slice(0, 7) !== wm(p) && <div className="xs faint">{p.payment_date.slice(0, 7) > wm(p) ? 'paid later' : 'paid in advance'}</div>}</td>
                                   <td className="muted">{p.payment_method ?? '\u2014'}</td>
+                                  {invoiceCell(p)}
                                 </tr>
                               )
                             })}
@@ -359,6 +382,7 @@ export function PaymentsPage() {
                   )}
                 </div>
               ))}
+            {tab === 'invoices' && <InvoicesList q={q} />}
           </div>
         </div>
       </Content>

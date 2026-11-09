@@ -39,8 +39,6 @@ const loadMemberPage = () => import('@/features/team/MemberPage')
 const MemberPage = lazy(() => loadMemberPage().then((m) => ({ default: m.MemberPage })))
 const loadPaymentsPage = () => import('@/features/payments/PaymentsPage')
 const PaymentsPage = lazy(() => loadPaymentsPage().then((m) => ({ default: m.PaymentsPage })))
-const loadInvoicesPage = () => import('@/features/invoices/InvoicesPage')
-const InvoicesPage = lazy(() => loadInvoicesPage().then((m) => ({ default: m.InvoicesPage })))
 const loadInvoiceEditor = () => import('@/features/invoices/InvoiceEditor')
 const InvoiceEditor = lazy(() => loadInvoiceEditor().then((m) => ({ default: m.InvoiceEditor })))
 const loadAnalyticsPage = () => import('@/features/analytics/AnalyticsPage')
@@ -53,7 +51,7 @@ const WorkspaceSettingsPage = lazy(() => loadWorkspaceSettingsPage().then((m) =>
 /** Download every page's code in the background once the app is idle, so
  *  switching pages never waits on the network. */
 function prefetchPages() {
-  const all = [loadImprovementPage, loadTopicsModule, loadInboxPage, loadTasksPage, loadTaskPage, loadProjectsPage, loadProjectPage, loadClientsPage, loadClientPage, loadClientSettingsPage, loadClockPage, loadTeamPage, loadMemberPage, loadPaymentsPage, loadInvoicesPage, loadInvoiceEditor, loadAnalyticsPage, loadAccountPage, loadWorkspaceSettingsPage]
+  const all = [loadImprovementPage, loadTopicsModule, loadInboxPage, loadTasksPage, loadTaskPage, loadProjectsPage, loadProjectPage, loadClientsPage, loadClientPage, loadClientSettingsPage, loadClockPage, loadTeamPage, loadMemberPage, loadPaymentsPage, loadInvoiceEditor, loadAnalyticsPage, loadAccountPage, loadWorkspaceSettingsPage]
   const run = () => all.forEach((load) => void load().catch(() => {}))
   const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }
   if (w.requestIdleCallback) w.requestIdleCallback(run, { timeout: 3000 })
@@ -89,7 +87,8 @@ function Routed() {
           <Route path="/team" element={<TeamPage />} />
           <Route path="/team/:id" element={<MemberPage />} />
           <Route path="/payments" element={<AdminOnly><PaymentsPage /></AdminOnly>} />
-          <Route path="/invoices" element={<AdminOnly><InvoicesPage /></AdminOnly>} />
+          {/* Invoices live on the Payments & invoices page now. */}
+          <Route path="/invoices" element={<Navigate to="/payments?tab=invoices" replace />} />
           <Route path="/invoices/:id" element={<AdminOnly><InvoiceEditor /></AdminOnly>} />
           <Route path="/analytics" element={<AdminOnly><AnalyticsPage /></AdminOnly>} />
           <Route path="/account" element={<AccountPage />} />

@@ -26,7 +26,7 @@ import type { Priority, Subtask, TaskAttachment, TaskStatus, TaskWatcher, TimeEn
 import { format, parseISO } from 'date-fns'
 import { DateInput } from '@/components/ui/date-picker'
 
-const STATUSES: TaskStatus[] = ['todo', 'in_progress', 'review', 'done']
+const STATUSES: TaskStatus[] = ['todo', 'in_progress', 'waiting_for_client', 'blocked', 'review', 'done']
 
 function fileExt(name: string) {
   return (name.split('.').pop() ?? 'FILE').toUpperCase().slice(0, 4)

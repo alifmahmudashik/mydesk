@@ -96,7 +96,7 @@ export function TasksPage() {
       })
     }
     if (group === 'status') {
-      return (['todo', 'in_progress', 'review'] as TaskStatus[]).map((s) => ({ key: s, title: taskStatus[s].label, icon: <StatusRing status={s} />, tasks: sorted.filter((t) => t.status === s) }))
+      return (['blocked', 'waiting_for_client', 'todo', 'in_progress', 'review'] as TaskStatus[]).map((s) => ({ key: s, title: taskStatus[s].label, icon: <StatusRing status={s} />, tasks: sorted.filter((t) => t.status === s) }))
     }
     const ids = [...new Set(sorted.flatMap((t) => (taskAssigneeIds(t).length ? taskAssigneeIds(t) : [''])))]
     return ids.map((id) => {

@@ -63,7 +63,7 @@ create table if not exists tasks (
   project_id uuid not null references projects (id) on delete cascade,
   title text not null,
   description text,
-  status text not null default 'todo' check (status in ('todo','in_progress','review','done','cancelled')),
+  status text not null default 'todo' check (status in ('todo','in_progress','waiting_for_client','blocked','review','done','cancelled')),
   priority text not null default 'medium' check (priority in ('low','medium','high','urgent')),
   due_date date,
   assignee_id uuid references auth.users (id),
@@ -217,6 +217,10 @@ end $$;
 alter table projects drop constraint if exists projects_status_check;
 alter table projects add constraint projects_status_check
   check (status in ('not_started','in_progress','waiting_for_client','blocked','completed','finished','cancelled'));
+-- Tasks can also be "Waiting for client" or "Blocked".
+alter table tasks drop constraint if exists tasks_status_check;
+alter table tasks add constraint tasks_status_check
+  check (status in ('todo','in_progress','waiting_for_client','blocked','review','done','cancelled'));
 
 -- Old single-project payments column: migrate any data over, then drop it.
 do $$

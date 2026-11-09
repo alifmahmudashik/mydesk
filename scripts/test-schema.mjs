@@ -128,6 +128,10 @@ n = await q(`select count(*)::int c from notifications where user_id = $1 and ty
 ok(n.rows[0].c === 0, 'mentioned person is not double-notified as a plain comment')
 n = await q(`select excerpt from notifications where user_id = $1 and type = 'mentioned'`, [U1])
 ok(n.rows[0].excerpt === 'hey @Owner', 'mention codes become @Name in the notification text')
+await q(`update tasks set status = 'blocked' where id = $1`, [t4.rows[0].id])
+await q(`update tasks set status = 'waiting_for_client' where id = $1`, [t4.rows[0].id])
+n = await q(`select status from tasks where id = $1`, [t4.rows[0].id])
+ok(n.rows[0].status === 'waiting_for_client', 'tasks can be Blocked or Waiting for client')
 
 // RLS: member can read their own notifications only, can't read the outbox.
 await db.exec(`grant usage on schema public to authenticated; grant all on all tables in schema public to authenticated;`)

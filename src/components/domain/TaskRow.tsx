@@ -1,11 +1,11 @@
-import { Assignees } from '@/components/domain/AssigneePicker'
 import { Link } from 'react-router-dom'
+import { InlineAssignees, InlineDate, InlinePriority } from '@/components/domain/TaskInline'
 import { MessageSquare } from 'lucide-react'
 import { useData } from '@/data/store'
 import { toggleTaskDone } from '@/data/actions'
 import { ClientChip } from '@/components/domain/ClientGroup'
-import { DateChip, PrioBars, StatusRing } from '@/components/ui/pill'
-import { isOpenPayment, shortProjectTitle, taskRef, taskAssigneeIds } from '@/lib/derive'
+import { StatusRing } from '@/components/ui/pill'
+import { isOpenPayment, shortProjectTitle, taskRef } from '@/lib/derive'
 import { isOverdue } from '@/lib/format'
 import type { Task } from '@/types'
 import { cn } from '@/lib/utils'
@@ -28,7 +28,7 @@ interface Props {
 }
 
 export function TaskRow({ task, context = true, ring, showRef, showPrio }: Props) {
-  const { projects, clients, profiles, comments, subtasks } = useData()
+  const { projects, clients, comments, subtasks } = useData()
   const project = projects.find((p) => p.id === task.project_id)
   const client = clients.find((c) => c.id === project?.client_id)
   const nComments = comments.filter((c) => c.task_id === task.id).length
@@ -57,15 +57,15 @@ export function TaskRow({ task, context = true, ring, showRef, showPrio }: Props
           </div>
         )}
       </Link>
-      {showPrio && <PrioBars priority={task.priority} />}
+      {showPrio && <InlinePriority task={task} />}
       {nComments > 0 && (
         <span className="row-sm small muted hide-sm">
           <MessageSquare className="i i-sm" />
           {nComments}
         </span>
       )}
-      {projectLate ? <span className="date bad hide-sm">Project overdue</span> : <DateChip date={task.due_date} done={done} empty="" />}
-      <Assignees ids={taskAssigneeIds(task)} profiles={profiles} />
+      {projectLate ? <span className="date bad hide-sm">Project overdue</span> : <InlineDate task={task} />}
+      <InlineAssignees task={task} />
     </div>
   )
 }

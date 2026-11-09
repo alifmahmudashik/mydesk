@@ -5,8 +5,9 @@ import { ChevronDown, ChevronRight, ListChecks, MessageSquare, Plus } from 'luci
 import { useData } from '@/data/store'
 import { useUI } from '@/data/ui'
 import { setTaskStatus, toggleTaskDone } from '@/data/actions'
-import { DateChip, PrioBars, StatusRing } from '@/components/ui/pill'
+import { DateChip, StatusRing } from '@/components/ui/pill'
 import { labelTone } from '@/components/domain/TaskRow'
+import { InlineAssignees, InlineDate, InlinePriority, InlineStatus } from '@/components/domain/TaskInline'
 import { ClientChip } from '@/components/domain/ClientGroup'
 import { shortProjectTitle, taskRef, taskAssigneeIds } from '@/lib/derive'
 import { formatDate } from '@/lib/format'
@@ -16,7 +17,7 @@ import { cn } from '@/lib/utils'
 
 /** Full task row (My tasks / project Tasks tab): ref, title, meta, status pill, date, assignee. */
 export function TaskListRow({ task, showProject = true, showClient = true }: { task: Task; showProject?: boolean; showClient?: boolean }) {
-  const { projects, clients, profiles, comments, subtasks } = useData()
+  const { projects, clients, comments, subtasks } = useData()
   const project = projects.find((p) => p.id === task.project_id)
   const client = clients.find((c) => c.id === project?.client_id)
   const nComments = comments.filter((c) => c.task_id === task.id).length
@@ -37,13 +38,11 @@ export function TaskListRow({ task, showProject = true, showClient = true }: { t
           {task.labels?.slice(0, 3).map((l) => <span key={l} className={`tag ${labelTone(l)}`}>{l}</span>)}
         </div>
       </Link>
-      <PrioBars priority={task.priority} />
-      <span className={cn('pill hide-sm', taskStatus[task.status].tone)}>
-        <span className={cn('st', taskRing[task.status])} style={{ width: 11, height: 11 }} />
-        {taskStatus[task.status].label}
-      </span>
-      <DateChip date={task.due_date} done={done} empty="" />
-      <Assignees ids={taskAssigneeIds(task)} profiles={profiles} />
+      {/* Click any of these to change it without opening the task. */}
+      <InlinePriority task={task} />
+      <InlineStatus task={task} className="hide-sm" />
+      <InlineDate task={task} />
+      <InlineAssignees task={task} />
     </div>
   )
 }
@@ -85,7 +84,7 @@ export function TaskGroup({ icon, title, tasks, collapsible, defaultOpen = true,
   )
 }
 
-const LANES: TaskStatus[] = ['todo', 'in_progress', 'review', 'done']
+const LANES: TaskStatus[] = ['todo', 'in_progress', 'waiting_for_client', 'blocked', 'review', 'done']
 
 /** Kanban board with drag-and-drop between status lanes. */
 export function TaskBoard({ tasks, projectId }: { tasks: Task[]; projectId?: string }) {

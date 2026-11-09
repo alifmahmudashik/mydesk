@@ -161,9 +161,8 @@ npm run build          # production build
 - **Tasks:** list and drag-and-drop board, refs like `CPS-12`, several assignees, rich-text descriptions, subtasks, files and links, labels, estimates, time logging, watchers, comments with @mentions.
 - **Projects:** grouped by client, with tasks, overview, pinned notes, access checklist and activity. "Duplicate for next month". A budget creates a payment automatically; marking a project **Finished** settles its payments.
 - **Clients:** list or cards with billed and open money. Each client page shows a compact stat row, active and completed projects with progress, invoices, payments, notes, and an export of selected projects as a ready-to-send message.
-- **Payments:** open, overdue and paid; mark paid; email reminders with the invoice PDF attached; set due dates in bulk.
-- **Invoices:** live-preview editor, lines from projects, payment methods, PDF export, linked to a payment for paid/unpaid status.
-- **Analytics:** collected vs outstanding, top clients, open payments by age, revenue by client, new clients, revenue concentration, CSV export.
+- **Payments & invoices:** one page. Open, overdue and paid payments, each with its invoice (or a **Create** button that pre-fills one from the payment), plus an Invoices tab with every invoice. Mark paid, email reminders with the invoice PDF attached, set due dates in bulk. The invoice editor has a live preview, lines from projects, payment methods and PDF export.
+- **Analytics:** three tabs. *Payments*: collected vs outstanding, month by month, open payments by age. *Clients*: projects, revenue (range and all time), average project value, days to pay, last work, quiet clients, best client, revenue concentration. *Team*: your own numbers, plus who did what (projects, tasks done, on-time rate, hours, share of project value) and who worked on each project. CSV export.
 - **Improvement:** share videos and articles with teammates, track what each person is learning, save takeaways, set personal goals, and build topics with lessons and resources.
 - **Team:** invite by email with a role and client access, resend or revoke invites, client-access matrix, member pages, shared team links (meeting rooms and more).
 - **Clock:** what time it is for every client, now or at a time you're planning, with a my-time/their-time converter.

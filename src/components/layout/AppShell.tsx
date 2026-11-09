@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
-  Bell, Briefcase, ChartColumn, ChevronsUpDown, Clock, CreditCard, FileText, Folder, Home, Inbox, ListChecks,
+  Bell, Briefcase, ChartColumn, ChevronsUpDown, Clock, CreditCard, Folder, Home, Inbox, ListChecks,
   LogOut, Moon, Search, Settings, Sprout, Sun, User, Users,
 } from 'lucide-react'
 import { useData } from '@/data/store'
@@ -18,9 +18,10 @@ import { clientColor, clientDisplayName, effectivePaymentStatus, OPEN_PROJECT, O
 
 const roleLabel = { owner: 'Owner', admin: 'Admin', member: 'Member' } as const
 
-function NavItem({ to, icon, children, end, extra }: { to: string; icon: ReactNode; children: ReactNode; end?: boolean; extra?: ReactNode }) {
+function NavItem({ to, icon, children, end, extra, alsoActive }: { to: string; icon: ReactNode; children: ReactNode; end?: boolean; extra?: ReactNode; alsoActive?: string }) {
+  const { pathname } = useLocation()
   return (
-    <NavLink to={to} end={end} className={({ isActive }) => (isActive ? 'active' : undefined)}>
+    <NavLink to={to} end={end} className={({ isActive }) => (isActive || (alsoActive && pathname.startsWith(alsoActive)) ? 'active' : undefined)}>
       {icon}
       {children}
       {extra}
@@ -145,8 +146,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {isAdmin && (
           <nav className="nav" aria-label="Money">
               <div className="nav-label">MONEY</div>
-              <NavItem to="/payments" icon={<CreditCard className="i" />} extra={overdue ? <span className="badge red">{overdue}</span> : null}>Payments</NavItem>
-              <NavItem to="/invoices" icon={<FileText className="i" />}>Invoices</NavItem>
+              <NavItem to="/payments" alsoActive="/invoices" icon={<CreditCard className="i" />} extra={overdue ? <span className="badge red">{overdue}</span> : null}>Payments & invoices</NavItem>
               <NavItem to="/analytics" icon={<ChartColumn className="i" />}>Analytics</NavItem>
           </nav>
         )}

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { addMonths, differenceInCalendarDays, differenceInCalendarMonths, format, parseISO, startOfMonth, startOfYear } from 'date-fns'
-import { Briefcase, Calendar, ChevronDown, CreditCard, Download } from 'lucide-react'
+import { Briefcase, Calendar, ChevronDown, CreditCard, Download, Users } from 'lucide-react'
 import { useData } from '@/data/store'
 import { paymentTitle } from '@/data/actions'
 import { Topbar, Content, PageHead } from '@/components/ui/layout'
@@ -11,7 +11,8 @@ import { ClientMark } from '@/components/ui/avatar'
 import { RevenueChart, monthlyBuckets } from '@/components/domain/RevenueChart'
 import { sumUSD, toUSD, useUsdRates } from '@/lib/currency'
 import { clientDisplayName, effectivePaymentStatus, isOpenPayment, OPEN_PROJECT, projectWorkDate, workDate } from '@/lib/derive'
-import { daysUntil, formatMoney } from '@/lib/format'
+import { daysUntil, formatDate, formatMoney } from '@/lib/format'
+import { TeamAnalytics } from '@/features/analytics/TeamAnalytics'
 
 type Range = 'month' | '3m' | '6m' | 'year' | 'all'
 const rangeLabel: Record<Range, string> = { month: 'This month', '3m': 'Last 3 months', '6m': 'Last 6 months', year: 'This year', all: 'All time' }
@@ -20,7 +21,7 @@ export function AnalyticsPage() {
   const { payments, clients, projects, invoices } = useData()
   const rates = useUsdRates()
   const [params, setParams] = useSearchParams()
-  const tab = (params.get('tab') as 'payments' | 'clients') || 'payments'
+  const tab = (params.get('tab') as 'payments' | 'clients' | 'team') || 'payments'
   const [range, setRange] = useState<Range>('6m')
 
   const first = payments.reduce((m, p) => (p.created_at < m ? p.created_at : m), new Date().toISOString())
@@ -66,18 +67,27 @@ export function AnalyticsPage() {
     return clients
       .map((c) => {
         const paid = paidIn.filter((p) => p.client_id === c.id)
+        const cp = projects.filter((p) => p.client_id === c.id)
+        const allPaid = payments.filter((p) => p.client_id === c.id && p.status === 'paid')
+        const valued = cp.filter((p) => p.amount > 0)
+        const days = allPaid.filter((p) => p.payment_date).map((p) => Math.max(0, differenceInCalendarDays(parseISO(p.payment_date!), parseISO(p.created_at))))
         return {
           client: c,
           revenue: sumUSD(paid, rates),
           paid,
-          projects: projects.filter((p) => p.client_id === c.id).length,
+          projects: cp.length,
+          completed: cp.filter((p) => p.status === 'completed' || p.status === 'finished').length,
+          lifetime: sumUSD(allPaid, rates),
+          avgValue: valued.length ? valued.reduce((s, p) => s + usd(p), 0) / valued.length : 0,
+          daysToPay: days.length ? Math.round(days.reduce((a, b) => a + b, 0) / days.length) : null,
+          lastWork: cp.reduce((m, p) => (projectWorkDate(p) > m ? projectWorkDate(p) : m), ''),
           open: open.filter((p) => p.client_id === c.id),
         }
       })
       .filter((r) => r.revenue > 0 || r.projects > 0 || r.open.length > 0)
       .sort((a, b) => b.revenue - a.revenue)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clients, paidIn, projects, open, rates])
+  }, [clients, paidIn, projects, open, rates, payments])
   const topRevenue = Math.max(...byClient.map((r) => r.revenue), 1)
   const topProjects = Math.max(...byClient.map((r) => r.projects), 1)
 
@@ -113,6 +123,12 @@ export function AnalyticsPage() {
   const totalRev = byClient.reduce((s, r) => s + r.revenue, 0)
   const top3 = byClient.slice(0, 3)
   const top3Share = totalRev ? Math.round((top3.reduce((s, r) => s + r.revenue, 0) / totalRev) * 100) : 0
+  const earningClients = byClient.filter((r) => r.revenue > 0).length
+  const allDays = payments.filter((p) => p.status === 'paid' && p.payment_date).map((p) => Math.max(0, differenceInCalendarDays(parseISO(p.payment_date!), parseISO(p.created_at))))
+  const avgDaysToPay = allDays.length ? Math.round(allDays.reduce((a, b) => a + b, 0) / allDays.length) : null
+  const quietCutoff = format(addMonths(new Date(), -2), 'yyyy-MM-dd')
+  const quiet = byClient.filter((r) => r.client.status !== 'archived' && r.open.length === 0 && (!r.lastWork || r.lastWork < quietCutoff))
+  const best = [...byClient].sort((a, b) => b.lifetime - a.lifetime)[0]
 
   const exportCsv = () => {
     const rows = [['Client', 'Item', 'Amount', 'Currency', 'Amount (USD)', 'Status', 'Due date', 'Paid on', 'Method', 'Invoice']]
@@ -148,9 +164,12 @@ export function AnalyticsPage() {
             tabs={[
               { id: 'payments', label: <><CreditCard className="i i-sm" />Payments</> },
               { id: 'clients', label: <><Briefcase className="i i-sm" />Clients</> },
+              { id: 'team', label: <><Users className="i i-sm" />Team</> },
             ]}
           />
-          {tab === 'payments' ? (
+          {tab === 'team' ? (
+            <TeamAnalytics since={since} rangeText={label} rates={rates} />
+          ) : tab === 'payments' ? (
             <div className="stack-lg panel-in">
               <div className="kpis">
                 <div className="kpi"><span className="lbl">Earned &amp; paid</span><span className="val">{formatMoney(Math.round(collected))}</span><span className="sub t-ok">{formatMoney(Math.round(thisMonth))} for work in {format(new Date(), 'MMMM')}</span></div>
@@ -240,14 +259,20 @@ export function AnalyticsPage() {
                 <div className="kpi"><span className="lbl">Avg. project value</span><span className="val">{formatMoney(Math.round(avgValue))}</span><span className="sub">median {formatMoney(Math.round(median))}</span></div>
                 <div className="kpi"><span className="lbl">Repeat clients</span><span className="val">{clients.length ? Math.round((repeat / clients.length) * 100) : 0}%</span><span className="sub">{repeat} of {clients.length} came back</span></div>
               </div>
+              <div className="kpis">
+                <div className="kpi"><span className="lbl">Avg. earned per client</span><span className="val">{formatMoney(Math.round(earningClients ? totalRev / earningClients : 0))}</span><span className="sub">{earningClients} paying client{earningClients === 1 ? '' : 's'} · {rangeLabel[range].toLowerCase()}</span></div>
+                <div className="kpi"><span className="lbl">Avg. days to get paid</span><span className="val">{avgDaysToPay ?? '—'}</span><span className="sub">from payment created to paid, all clients</span></div>
+                <div className={`kpi${quiet.length ? ' alert' : ''}`}><span className="lbl">Quiet clients</span><span className="val">{quiet.length}</span><span className="sub trunc">{quiet.length ? `No new work in 2+ months: ${quiet.slice(0, 2).map((r) => clientDisplayName(r.client)).join(', ')}${quiet.length > 2 ? ` +${quiet.length - 2}` : ''}` : 'Every active client has recent work'}</span></div>
+                <div className="kpi"><span className="lbl">Best client, all time</span><span className="val trunc">{best && best.lifetime > 0 ? clientDisplayName(best.client) : '—'}</span><span className="sub">{best && best.lifetime > 0 ? `${formatMoney(Math.round(best.lifetime))} paid${best.projects ? ` over ${best.projects} project${best.projects === 1 ? '' : 's'}` : ''}` : 'No paid work yet'}</span></div>
+              </div>
               <section className="card">
                 <div className="card-h">
                   <h2 className="h2">Work and revenue by client</h2>
                   <div className="legend"><span><i style={{ background: '#0EA5E9' }} />Projects</span><span><i className="c-col" />Revenue</span></div>
                 </div>
                 <div className="tbl-wrap">
-                  <table className="tbl" style={{ minWidth: 760 }}>
-                    <thead><tr><th>Client</th><th style={{ width: '30%' }}>Projects</th><th style={{ width: '30%' }}>Revenue · {rangeLabel[range].toLowerCase()}</th><th className="r">Outstanding</th></tr></thead>
+                  <table className="tbl" style={{ minWidth: 1080 }}>
+                    <thead><tr><th>Client</th><th style={{ width: '16%' }}>Projects</th><th className="r" style={{ width: 70 }}>Done</th><th style={{ width: '20%' }}>Revenue · {rangeLabel[range].toLowerCase()}</th><th className="r" style={{ width: 100 }}>All time</th><th className="r" style={{ width: 100 }}>Avg. project</th><th className="r" style={{ width: 100 }}>Days to pay</th><th style={{ width: 100 }}>Last work</th><th className="r" style={{ width: 110 }}>Outstanding</th></tr></thead>
                     <tbody>
                       {byClient.map((r) => {
                         const late = r.open.some((p) => effectivePaymentStatus(p) === 'overdue')
@@ -255,7 +280,12 @@ export function AnalyticsPage() {
                           <tr key={r.client.id} className="hov">
                             <td><Link className="row-sm m cover" to={`/clients/${r.client.id}`}><ClientMark client={r.client} size="sm" />{clientDisplayName(r.client)}</Link></td>
                             <td><div className="row"><div className="bar lg grow"><i className="sky" style={{ width: `${Math.max(3, (r.projects / topProjects) * 100)}%` }} /></div><span className="num small" style={{ width: 22 }}>{r.projects}</span></div></td>
-                            <td><div className="row"><div className="bar lg grow"><i style={{ width: `${Math.max(r.revenue ? 3 : 0, (r.revenue / topRevenue) * 100)}%` }} /></div><span className="num small" style={{ width: 60 }}>{formatMoney(Math.round(r.revenue))}</span></div></td>
+                            <td className="r small muted">{r.completed}</td>
+                            <td><div className="row"><div className="bar lg grow"><i style={{ width: `${Math.max(r.revenue ? 3 : 0, (r.revenue / topRevenue) * 100)}%` }} /></div><span className="num small priv" style={{ width: 60 }}>{formatMoney(Math.round(r.revenue))}</span></div></td>
+                            <td className="r num">{r.lifetime ? formatMoney(Math.round(r.lifetime)) : '—'}</td>
+                            <td className="r num">{r.avgValue ? formatMoney(Math.round(r.avgValue)) : '—'}</td>
+                            <td className="r small muted">{r.daysToPay === null ? '—' : `${r.daysToPay} day${r.daysToPay === 1 ? '' : 's'}`}</td>
+                            <td className="small muted">{r.lastWork ? formatDate(r.lastWork) : '—'}</td>
                             <td className={`r ${r.open.length ? (late ? 't-bad m' : 't-warn m') : 'muted'}`}>{r.open.length ? formatMoney(Math.round(sumUSD(r.open, rates))) : '—'}</td>
                           </tr>
                         )

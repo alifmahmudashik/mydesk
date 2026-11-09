@@ -22,7 +22,7 @@ interface PopoverProps {
 }
 
 /** Calendar popover with quick picks, rendered in a portal and kept on screen. */
-function CalendarPopover({ anchor, value, onChange, onClose, clearable }: PopoverProps) {
+export function CalendarPopover({ anchor, value, onChange, onClose, clearable }: PopoverProps) {
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
   // Bumped on page scroll so the popover follows its field instead of closing.

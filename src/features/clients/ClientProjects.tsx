@@ -15,7 +15,7 @@ import { projectStatus } from '@/lib/status'
 import { copyText } from '@/lib/utils'
 import type { Client, Project, ProjectStatus } from '@/types'
 
-const RING: Record<ProjectStatus, string> = { not_started: '', in_progress: 'prog', waiting_for_client: 'rev', blocked: 'rev', completed: 'done', finished: 'done', cancelled: 'cancel' }
+const RING: Record<ProjectStatus, string> = { not_started: '', in_progress: 'prog', waiting_for_client: 'wait', blocked: 'block', completed: 'done', finished: 'done', cancelled: 'cancel' }
 
 /** "1. Title — $30" lines plus a per-currency total, ready to paste to the client. */
 function buildChatSummary(firstName: string, selected: Project[]) {
