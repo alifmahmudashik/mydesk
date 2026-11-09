@@ -3,7 +3,7 @@ import StarterKit from '@tiptap/starter-kit'
 import CodeBlock from '@tiptap/extension-code-block'
 import LinkExtension from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
-import { Bold, Check, Code2, Copy, Heading, Italic, Link2, List, ListOrdered, Sparkles } from 'lucide-react'
+import { Bold, Check, Code2, Copy, Heading, Italic, Link2, List, ListOrdered } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { beautifyCode, detectLanguage } from '@/lib/codeBeautifier'
@@ -36,14 +36,31 @@ function promptForLink(editor: Editor) {
   editor.chain().focus().extendMarkRange('link').setLink({ href: url.trim() }).run()
 }
 
-/** Custom CodeBlock node view with auto language detection, Beautify button, and Quick Copy button. */
+/** Custom CodeBlock node view with auto language detection, auto-beautification, and Quick Copy button. */
 function CodeBlockView({ node, editor, getPos, updateAttributes }: ReactNodeViewProps) {
   const [copied, setCopied] = useState(false)
-  const [beautified, setBeautified] = useState(false)
 
   const text = node.textContent
   const detected = detectLanguage(text)
   const lang = (node.attrs.language as string) || (detected !== 'text' ? detected : 'code')
+
+  // Automatically beautify on mount if the code has irregular spacing or un-indented blocks
+  useEffect(() => {
+    if (!text || !text.trim()) return
+    const res = beautifyCode(text, node.attrs.language as string)
+    if (res.code !== text) {
+      const pos = typeof getPos === 'function' ? getPos() : null
+      if (pos !== null) {
+        const from = pos + 1
+        const to = pos + node.nodeSize - 1
+        const tr = editor.state.tr.replaceWith(from, to, editor.schema.text(res.code))
+        if (res.language && res.language !== 'text') {
+          updateAttributes({ language: res.language })
+        }
+        editor.view.dispatch(tr)
+      }
+    }
+  }, []) // run once on mount
 
   const handleCopy = () => {
     if (!text) return
@@ -52,37 +69,11 @@ function CodeBlockView({ node, editor, getPos, updateAttributes }: ReactNodeView
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const handleBeautify = () => {
-    if (!text.trim()) return
-    const res = beautifyCode(text, node.attrs.language as string)
-    const pos = typeof getPos === 'function' ? getPos() : null
-    if (pos !== null) {
-      const from = pos + 1
-      const to = pos + node.nodeSize - 1
-      const tr = editor.state.tr.replaceWith(from, to, editor.schema.text(res.code))
-      editor.view.dispatch(tr)
-      if (res.language && res.language !== 'text') {
-        updateAttributes({ language: res.language })
-      }
-      setBeautified(true)
-      setTimeout(() => setBeautified(false), 1500)
-    }
-  }
-
   return (
     <NodeViewWrapper className="code-block-wrapper">
       <div className="code-block-header" contentEditable={false}>
         <span className="code-block-lang">{lang.toUpperCase()}</span>
         <div className="code-block-actions">
-          <button
-            type="button"
-            className="code-action-btn"
-            onClick={handleBeautify}
-            title="Auto-detect & beautify code (proper spacing & line breaks)"
-          >
-            <Sparkles className="i i-xs" />
-            <span>{beautified ? 'Beautified!' : 'Beautify'}</span>
-          </button>
           <button
             type="button"
             className="code-action-btn"
@@ -151,6 +142,24 @@ export function RichText({ defaultValue, onSave, placeholder = 'Write somethingâ
       },
     },
     onBlur: ({ editor }) => {
+      // Auto-beautify any code blocks in the document before saving
+      let tr = editor.state.tr
+      let modified = false
+      editor.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'codeBlock') {
+          const codeText = node.textContent
+          if (codeText.trim()) {
+            const res = beautifyCode(codeText, node.attrs.language as string)
+            if (res.code !== codeText) {
+              tr = tr.replaceWith(pos + 1, pos + node.nodeSize - 1, editor.schema.text(res.code))
+              modified = true
+            }
+          }
+        }
+      })
+      if (modified) {
+        editor.view.dispatch(tr)
+      }
       const html = editor.isEmpty ? '' : editor.getHTML()
       if (html === lastSaved.current) return
       lastSaved.current = html
