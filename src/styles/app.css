@@ -851,3 +851,6 @@ html.desktop .side::-webkit-scrollbar { width: 0; } /* still scrolls with the wh
 /* Client access grid: project rows under each client */
 .tbl tr.proj-row td:first-child { padding-left: 44px; }
 .tbl tr.proj-row td { background: var(--soft2); }
+
+/* Small chip (quick time log on task rows) */
+.chip.chip-sm { height: 24px; padding: 0 8px; font-size: 12px; gap: 4px; flex: none; white-space: nowrap; }

@@ -9,6 +9,7 @@ import { DateChip, StatusRing } from '@/components/ui/pill'
 import { labelTone } from '@/components/domain/TaskRow'
 import { InlineAssignees, InlineDate, InlinePriority, InlineStatus } from '@/components/domain/TaskInline'
 import { ClientChip } from '@/components/domain/ClientGroup'
+import { QuickLogTime } from '@/components/domain/TimeTracking'
 import { shortProjectTitle, taskRef, taskAssigneeIds } from '@/lib/derive'
 import { formatDate } from '@/lib/format'
 import { taskRing, taskStatus } from '@/lib/status'
@@ -39,6 +40,7 @@ export function TaskListRow({ task, showProject = true, showClient = true }: { t
         </div>
       </Link>
       {/* Click any of these to change it without opening the task. */}
+      {project?.billing_type === 'hourly' && <QuickLogTime task={task} />}
       <InlinePriority task={task} />
       <InlineStatus task={task} className="hide-sm" />
       <InlineDate task={task} />
@@ -58,6 +60,7 @@ export function DoneRow({ task }: { task: Task }) {
       <Link className="grow cover" to={`/tasks/${task.id}`} style={{ minWidth: 0 }}>
         <div className="t muted trunc">{task.title}</div>
       </Link>
+      {project?.billing_type === 'hourly' && <QuickLogTime task={task} />}
       <span className="xs muted">{formatDate((task.completed_at ?? task.created_at).slice(0, 10))}</span>
       <Assignees ids={taskAssigneeIds(task)} profiles={profiles} />
     </div>

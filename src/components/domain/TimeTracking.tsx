@@ -9,6 +9,7 @@ import { Field, Select } from '@/components/ui/field'
 import { DateInput } from '@/components/ui/date-picker'
 import { Avatar } from '@/components/ui/avatar'
 import { Empty } from '@/components/ui/layout'
+import { Popover } from '@/components/ui/popover'
 import { profileDisplayName, shortProjectTitle, taskRef } from '@/lib/derive'
 import { formatDate, formatMinutes, formatMoney, parseDuration, todayISO } from '@/lib/format'
 import type { Project, TimeEntry, TimeTimer } from '@/types'
@@ -209,5 +210,57 @@ export function ProjectTimePanel({ project }: { project: Project }) {
       </div>
       <LogTimeModal open={logOpen} onClose={() => setLogOpen(false)} projectId={project.id} />
     </div>
+  )
+}
+
+/**
+ * Log time on a task straight from a task list (hourly projects), without opening it.
+ * The button shows what's logged so far.
+ */
+export function QuickLogTime({ task }: { task: { id: string; project_id: string; title: string } }) {
+  const logged = useData((s) => s.timeEntries.filter((e) => e.task_id === task.id).reduce((n, e) => n + (Number(e.minutes) || 0), 0))
+  return (
+    <Popover
+      title={<span className="trunc" style={{ display: 'block', maxWidth: 240 }}>Log time · {task.title}</span>}
+      width={290}
+      trigger={({ open, toggle }) => (
+        <button type="button" className={`chip chip-sm above${open ? ' on' : ''}${logged ? '' : ' dashed'}`} title="Log time on this task" onClick={toggle}>
+          <Clock className="i i-xs" />
+          {logged ? formatMinutes(logged) : 'Log'}
+        </button>
+      )}
+    >
+      {(close) => <QuickLogForm task={task} onDone={close} />}
+    </Popover>
+  )
+}
+
+const QUICK = [15, 30, 60, 120]
+
+function QuickLogForm({ task, onDone }: { task: { id: string; project_id: string }; onDone: () => void }) {
+  const [duration, setDuration] = useState('')
+  const [note, setNote] = useState('')
+  const log = (minutes: number | null) => {
+    if (!minutes) return toast.error('Enter time like “1h 30m”, “45m” or “1.5”')
+    logTime({ projectId: task.project_id, taskId: task.id, minutes, note })
+    toast.success(`Logged ${formatMinutes(minutes)}`)
+    onDone()
+  }
+  return (
+    <form className="pop-form" onSubmit={(e) => { e.preventDefault(); log(parseDuration(duration)) }}>
+      <div className="row-sm wrap">
+        {QUICK.map((m) => (
+          <button key={m} type="button" className="btn btn-sm" onClick={() => log(m)}>{m < 60 ? `${m}m` : `${m / 60}h`}</button>
+        ))}
+      </div>
+      <input className="inp" autoFocus placeholder="Or type: 1h 30m, 45m, 1.5" value={duration} onChange={(e) => setDuration(e.target.value)} />
+      <input className="inp" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+      <div className="pop-actions">
+        <TimerButton projectId={task.project_id} taskId={task.id} />
+        <span className="spacer" />
+        <button type="button" className="btn btn-sm" onClick={onDone}>Cancel</button>
+        <button type="submit" className="btn btn-sm btn-pri" disabled={!duration.trim()}>Log</button>
+      </div>
+    </form>
   )
 }
