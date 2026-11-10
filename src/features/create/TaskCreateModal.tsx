@@ -20,7 +20,7 @@ interface Props {
 }
 
 export function TaskCreateModal({ open, onClose, defaults = {} }: Props) {
-  const { projects, profiles, clientMembers, me, clients } = useData()
+  const { projects, profiles, clientMembers, projectMembers, me, clients } = useData()
   const navigate = useNavigate()
   const openProjects = useMemo(() => projects.filter(OPEN_PROJECT), [projects])
 
@@ -46,7 +46,7 @@ export function TaskCreateModal({ open, onClose, defaults = {} }: Props) {
 
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((s) => ({ ...s, [k]: v }))
   const project = projects.find((p) => p.id === f.project_id)
-  const people = eligibleAssignees(project?.client_id, profiles, clientMembers)
+  const people = eligibleAssignees(project?.client_id, profiles, clientMembers, project?.id, projectMembers)
   const emailed = f.assignee_ids.map((id) => profiles.find((p) => p.id === id)).filter((p) => p && p.id !== me?.id && p.notification_prefs?.assigned !== false)
   const emailsAssignee = emailed.length > 0
 

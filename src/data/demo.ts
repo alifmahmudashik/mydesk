@@ -1,5 +1,5 @@
 import { addDays, formatISO, subDays, subHours, subMinutes } from 'date-fns'
-import type { AccessItem, ActivityEvent, AppNotification, Client, ClientMember, Invite, Invoice, InvoiceSettings, Payment, PaymentReminder, Profile, Project, ProjectNote, Subtask, Task, TaskAttachment, TaskComment, TaskWatcher, TimeEntry, LearningGoal, LearningItem, LearningTopic, LearningLesson, LearningResource, LearningTopicMember, LearningProgress, TeamLink, CodeSnippet } from '@/types'
+import type { AccessItem, ActivityEvent, AppNotification, Client, ClientMember, ClientNote, ProjectMember, TimeTimer, Invite, Invoice, InvoiceSettings, Payment, PaymentReminder, Profile, Project, ProjectNote, Subtask, Task, TaskAttachment, TaskComment, TaskWatcher, TimeEntry, LearningGoal, LearningItem, LearningTopic, LearningLesson, LearningResource, LearningTopicMember, LearningProgress, TeamLink, CodeSnippet } from '@/types'
 
 // Dates are relative to "today" so demo mode always shows live overdue/upcoming states.
 const day = (offset: number) => formatISO(addDays(new Date(), offset), { representation: 'date' })
@@ -17,6 +17,9 @@ export interface DemoData {
   activity: ActivityEvent[]
   profiles: Profile[]
   clientMembers: ClientMember[]
+  projectMembers: ProjectMember[]
+  clientNotes: ClientNote[]
+  timers: TimeTimer[]
   invoices: Invoice[]
   invoiceSettings: InvoiceSettings | null
   subtasks: Subtask[]
@@ -41,7 +44,7 @@ export interface DemoData {
 export function emptyData(): DemoData {
   return {
     clients: [], projects: [], tasks: [], accessItems: [], payments: [], notes: [], activity: [],
-    profiles: [], clientMembers: [], invoices: [], invoiceSettings: null, subtasks: [], comments: [],
+    profiles: [], clientMembers: [], projectMembers: [], clientNotes: [], timers: [], invoices: [], invoiceSettings: null, subtasks: [], comments: [],
     attachments: [], timeEntries: [], watchers: [], notifications: [], invites: [], reminders: [],
     learning: [], goals: [], topics: [], lessons: [], resources: [], topicMembers: [], progress: [], teamLinks: [], snippets: [],
   }
@@ -127,8 +130,9 @@ export function demoData(empty = false): DemoData {
   ]
 
   const timeEntries: TimeEntry[] = [
-    { id: 'te1', task_id: 't1', user_id: 'u2', minutes: 70, logged_on: day(-1), created_at: daysAgo(1) },
-    { id: 'te2', task_id: 't1', user_id: 'u2', minutes: 30, logged_on: day(0), created_at: hoursAgo(3) },
+    { id: 'te1', task_id: 't1', project_id: 'p1', user_id: 'u2', minutes: 70, logged_on: day(-1), created_at: daysAgo(1) },
+    { id: 'te2', task_id: 't1', project_id: 'p1', user_id: 'u2', minutes: 30, logged_on: day(0), created_at: hoursAgo(3) },
+    { id: 'te3', task_id: null, project_id: 'p1', user_id: 'u1', minutes: 45, note: 'Client call', logged_on: day(-2), created_at: daysAgo(2) },
   ]
 
   const watchers: TaskWatcher[] = [
@@ -233,6 +237,12 @@ export function demoData(empty = false): DemoData {
 
   return {
     clients, projects, tasks, accessItems, payments, notes, activity, profiles, clientMembers,
+    projectMembers: [{ id: 'pm-1', project_id: 'p4', user_id: 'u3', added_by: 'u1', created_at: daysAgo(5) }],
+    clientNotes: [
+      { id: 'cn-1', client_id: 'c1', body: 'Invoice on the 1st of each month. Prefers WhatsApp for quick questions.', shared: true, created_at: daysAgo(100) },
+      { id: 'cn-2', client_id: 'c2', body: 'Server-side tracking.', shared: false, created_at: daysAgo(60) },
+    ],
+    timers: [],
     invoices, invoiceSettings, subtasks, comments, attachments, timeEntries, watchers, notifications,
     invites, reminders, learning: demoLearning(), goals: demoGoals(), ...demoTopics(),
     teamLinks: [],

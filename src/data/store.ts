@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
 import { deriveProjectKey } from '@/lib/derive'
 import type {
-  AccessItem, ActivityAction, ActivityEntity, ActivityEvent, AppNotification, Client, ClientMember, Invite, Invoice, InvoiceSettings, Payment, PaymentReminder, Profile, Project, ProjectNote, Subtask, Task, TaskAttachment, TaskComment, TaskWatcher, TimeEntry, LearningGoal, LearningItem, LearningTopic, LearningLesson, LearningResource, LearningTopicMember, LearningProgress, TeamLink, CodeSnippet, Workspace,
+  AccessItem, ActivityAction, ActivityEntity, ActivityEvent, AppNotification, Client, ClientMember, Invite, Invoice, InvoiceSettings, Payment, PaymentReminder, Profile, Project, ProjectNote, Subtask, Task, TaskAttachment, TaskComment, TaskWatcher, TimeEntry, LearningGoal, LearningItem, LearningTopic, LearningLesson, LearningResource, LearningTopicMember, LearningProgress, TeamLink, CodeSnippet, Workspace, ProjectMember, ClientNote, TimeTimer,
 } from '@/types'
 
 const LOCAL_KEY = 'mydesk-data-v3'
@@ -18,13 +18,14 @@ export type Table =
   | 'subtasks' | 'task_comments' | 'task_attachments' | 'time_entries' | 'task_watchers'
   | 'notifications' | 'invites' | 'payment_reminders' | 'learning_items' | 'learning_goals'
   | 'learning_topics' | 'learning_lessons' | 'learning_resources' | 'learning_topic_members' | 'learning_progress'
-  | 'team_links' | 'code_snippets'
+  | 'team_links' | 'code_snippets' | 'project_members' | 'client_notes' | 'time_timers'
 
 type StateKey =
   | 'clients' | 'projects' | 'tasks' | 'accessItems' | 'payments' | 'notes' | 'profiles'
   | 'clientMembers' | 'invoices' | 'subtasks' | 'comments' | 'attachments' | 'timeEntries'
   | 'watchers' | 'notifications' | 'invites' | 'reminders' | 'learning' | 'goals'
   | 'topics' | 'lessons' | 'resources' | 'topicMembers' | 'progress' | 'teamLinks' | 'snippets'
+  | 'projectMembers' | 'clientNotes' | 'timers'
 
 const tableToKey: Record<Table, StateKey> = {
   clients: 'clients',
@@ -53,6 +54,9 @@ const tableToKey: Record<Table, StateKey> = {
   learning_progress: 'progress',
   team_links: 'teamLinks',
   code_snippets: 'snippets',
+  project_members: 'projectMembers',
+  client_notes: 'clientNotes',
+  time_timers: 'timers',
 }
 
 type AnyRow = { id: string; created_at: string }
@@ -76,6 +80,8 @@ interface DataState extends DemoData {
   teamLinksReady: boolean
   /** False until schema.sql has been run (code snippets table). */
   snippetsReady: boolean
+  /** False until schema.sql has been run (project access, client notes table, timers). */
+  accessV2Ready: boolean
   demoMode: boolean
   me: Profile | null
   /** The signed-in person's workspace (null until they create or join one). */
@@ -123,7 +129,7 @@ function snapshot(s: DataState): DemoData {
   return {
     clients: s.clients, projects: s.projects, tasks: s.tasks, accessItems: s.accessItems,
     payments: s.payments, notes: s.notes, activity: s.activity, profiles: s.profiles,
-    clientMembers: s.clientMembers, invoices: s.invoices, invoiceSettings: s.invoiceSettings,
+    clientMembers: s.clientMembers, projectMembers: s.projectMembers, clientNotes: s.clientNotes, timers: s.timers, invoices: s.invoices, invoiceSettings: s.invoiceSettings,
     subtasks: s.subtasks, comments: s.comments, attachments: s.attachments, timeEntries: s.timeEntries,
     watchers: s.watchers, notifications: s.notifications, invites: s.invites, reminders: s.reminders,
     learning: s.learning, goals: s.goals, topics: s.topics, lessons: s.lessons, resources: s.resources,
@@ -134,23 +140,28 @@ function snapshot(s: DataState): DemoData {
 /** Demo mode has no row-level security, so previewing a member (?as=) mimics what Postgres would return. */
 function scopedToMember(data: DemoData, me: Profile): DemoData {
   const clientIds = new Set(data.clientMembers.filter((m) => m.user_id === me.id).map((m) => m.client_id))
-  const projects = data.projects.filter((p) => clientIds.has(p.client_id))
+  const sharedIds = new Set(data.projectMembers.filter((m) => m.user_id === me.id).map((m) => m.project_id))
+  const projects = data.projects.filter((p) => clientIds.has(p.client_id) || sharedIds.has(p.id))
   const projectIds = new Set(projects.map((p) => p.id))
+  const visibleClients = new Set(projects.map((p) => p.client_id).concat([...clientIds]))
   const tasks = data.tasks.filter((t) => projectIds.has(t.project_id))
   const taskIds = new Set(tasks.map((t) => t.id))
   const byTask = <T extends { task_id: string }>(rows: T[]) => rows.filter((r) => taskIds.has(r.task_id))
   return {
     ...data,
-    clients: data.clients.filter((c) => clientIds.has(c.id)),
+    clients: data.clients.filter((c) => visibleClients.has(c.id)),
     projects,
     tasks,
     accessItems: data.accessItems.filter((a) => projectIds.has(a.project_id)),
     notes: data.notes.filter((n) => projectIds.has(n.project_id)),
     clientMembers: data.clientMembers.filter((m) => clientIds.has(m.client_id)),
+    projectMembers: data.projectMembers.filter((m) => projectIds.has(m.project_id)),
+    clientNotes: data.clientNotes.filter((n) => n.shared && visibleClients.has(n.client_id)),
+    timers: data.timers.filter((t) => t.user_id === me.id),
     subtasks: byTask(data.subtasks),
     comments: byTask(data.comments),
     attachments: byTask(data.attachments),
-    timeEntries: byTask(data.timeEntries),
+    timeEntries: data.timeEntries.filter((e) => projectIds.has(e.project_id ?? '') && (!e.task_id || taskIds.has(e.task_id))),
     watchers: byTask(data.watchers),
     snippets: data.snippets.filter((s) => (s.task_id ? taskIds.has(s.task_id) : projectIds.has(s.project_id ?? ''))),
     notifications: data.notifications.filter((n) => n.user_id === me.id),
@@ -282,7 +293,12 @@ export const useData = create<DataState>((set, get) => {
     if (table === 'projects' && !row.key) row.key = deriveProjectKey(String(row.title ?? ''))
     if (table === 'task_comments') row.author_id ??= get().me?.id ?? null
     if (table === 'project_notes') row.author_id ??= get().me?.id ?? null
-    if (table === 'time_entries') row.user_id ??= get().me?.id ?? null
+    if (table === 'time_entries') {
+      row.user_id ??= get().me?.id ?? null
+      // The database sets this from the task too; mirror it so totals add up instantly.
+      if (row.task_id) row.project_id = get().tasks.find((t) => t.id === row.task_id)?.project_id ?? row.project_id ?? null
+    }
+    if (table === 'time_timers') row.user_id ??= get().me?.id ?? null
     if (table === 'task_attachments') row.uploaded_by ??= get().me?.id ?? null
     if (table === 'code_snippets') row.created_by ??= get().me?.id ?? null
     return row
@@ -337,6 +353,7 @@ export const useData = create<DataState>((set, get) => {
     topicsReady: true,
     teamLinksReady: true,
     snippetsReady: true,
+    accessV2Ready: true,
     inboxSeenAt: '',
     markInboxSeen: () => {
       const id = get().me?.id
@@ -407,6 +424,9 @@ export const useData = create<DataState>((set, get) => {
           all<TeamLink>('team_links', 'position', true),
           all<CodeSnippet>('code_snippets', 'position', true),
           sb.from('workspaces').select('*').limit(1).maybeSingle(),
+          all<ProjectMember>('project_members', 'created_at', true),
+          all<ClientNote>('client_notes'),
+          all<TimeTimer>('time_timers'),
         ] as const)
 
       let res = await fetchAll()
@@ -423,7 +443,7 @@ export const useData = create<DataState>((set, get) => {
         clients, projects, tasks, accessItems, payments, notes, activity, profiles, members, invoices,
         invoiceSettings, subtasks, comments, attachments, timeEntries, watchers, notifications, invites,
         reminders, user, learning, goals, topics, lessons, resources, topicMembers, progress, teamLinks, snippets,
-        workspace,
+        workspace, projectMembers, clientNotes, timers,
       ] = res
       const profileRows = profiles.data ?? []
       const meId = user.data.user?.id
@@ -462,6 +482,10 @@ export const useData = create<DataState>((set, get) => {
         teamLinksReady: !teamLinks.error,
         snippets: snippets.data ?? [],
         snippetsReady: !snippets.error,
+        projectMembers: projectMembers.data ?? [],
+        clientNotes: clientNotes.data ?? [],
+        timers: timers.data ?? [],
+        accessV2Ready: !timers.error && !clientNotes.error,
         me: profileRows.find((p) => p.id === meId) ?? null,
         workspace: (workspace.data as Workspace | null) ?? null,
         inboxSeenAt: readSeen(meId),

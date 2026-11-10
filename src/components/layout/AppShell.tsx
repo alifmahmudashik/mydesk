@@ -15,6 +15,7 @@ import { CommandPalette } from '@/components/layout/CommandPalette'
 import { CreateHost } from '@/features/create/CreateHost'
 import { DesktopNotifPrompt, useDesktopNotifications } from '@/features/notifications/desktop'
 import { WorkspaceLogo } from '@/features/workspace/brand'
+import { RunningTimer } from '@/components/domain/TimeTracking'
 import { clientColor, clientDisplayName, effectivePaymentStatus, OPEN_PROJECT, OPEN_TASK, profileFullName, isAssignedTo } from '@/lib/derive'
 
 const roleLabel = { owner: 'Owner', admin: 'Admin', member: 'Member' } as const
@@ -152,6 +153,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
         )}
         <div className="side-foot">
+          <RunningTimer />
           <Menu
             align="up"
             trigger={({ toggle }) => (

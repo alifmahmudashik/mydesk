@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { AlertTriangle, Archive, Edit3, FileText, Image, Mail, Plus, Trash2, User, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
+import { clientNoteFor, saveClientNote } from '@/data/actions'
 import { supabase } from '@/lib/supabase'
 import { Topbar, Content, Empty, Section, SaveBar } from '@/components/ui/layout'
 import { SettingsLayout, useUnsavedGuard } from '@/components/ui/settings-layout'
@@ -50,7 +51,8 @@ export function ClientSettingsPage() {
         brand_color: clientColor(client),
         logo_url: client.logo_url ?? null,
         invoice_fields: client.invoice_fields ?? [],
-        notes: client.notes ?? '',
+        notes: clientNoteFor(client.id).body,
+        notes_shared: clientNoteFor(client.id).shared,
       },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [client?.id],
@@ -97,12 +99,13 @@ export function ClientSettingsPage() {
         payment_terms: f.payment_terms,
         brand_color: /^#[0-9a-f]{6}$/i.test(f.brand_color) ? f.brand_color : client.brand_color,
         invoice_fields: f.invoice_fields.filter((x) => x.label.trim() || x.value.trim()),
-        notes: f.notes.trim() || null,
         // Only send the logo when it changed, so saving still works before the logo_url column exists.
         ...(f.logo_url !== (client.logo_url ?? null) ? { logo_url: f.logo_url } : {}),
       },
       { entity: 'client', entityId: client.id, action: 'updated', message: `updated client ${f.name.trim()}` },
     )
+    const note = clientNoteFor(client.id)
+    if (f.notes.trim() !== note.body.trim() || f.notes_shared !== note.shared) saveClientNote(client.id, { body: f.notes, shared: f.notes_shared })
     toast.success('Client saved')
     navigate(`/clients/${client.id}`)
   }
@@ -267,8 +270,12 @@ export function ClientSettingsPage() {
             </div>
           </Section>
 
-          <Section id="notes" title="Notes & preferences" desc="Only owners and admins see these.">
+          <Section id="notes" title="Notes & preferences" desc={f.notes_shared ? 'Shared: everyone with access to this client can read these.' : 'Only owners and admins see these.'}>
             <textarea className="inp" rows={4} aria-label="Internal notes" value={f.notes} onChange={(e) => set('notes', e.target.value)} />
+            <label className="row-sm small mt-8" style={{ cursor: 'pointer' }}>
+              <input type="checkbox" className="cb" checked={f.notes_shared} onChange={(e) => set('notes_shared', e.target.checked)} />
+              Share with team
+            </label>
           </Section>
 
           <Section id="danger" title="Danger zone" danger>

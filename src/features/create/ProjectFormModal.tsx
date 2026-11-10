@@ -4,13 +4,13 @@ import { ChevronRight } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
-import { createProject, setProjectStatus, updateProject } from '@/data/actions'
+import { createProject, hourlyAmount, setProjectStatus, updateProject } from '@/data/actions'
 import { useIsAdmin } from '@/hooks/usePermissions'
 import { Modal } from '@/components/ui/modal'
 import { Field, MoneyInput, Select } from '@/components/ui/field'
 import { Avatar } from '@/components/ui/avatar'
 import { SUPPORTED_CURRENCIES } from '@/lib/currency'
-import { clientDisplayName, deriveProjectKey, hasWorkMonthColumn, profileDisplayName } from '@/lib/derive'
+import { clientDisplayName, deriveProjectKey, hasWorkMonthColumn, profileDisplayName, hasClientAccess } from '@/lib/derive'
 import { billingLabel, options, priorityMeta, projectStatus } from '@/lib/status'
 import type { BillingType, ClientMember, Priority, Project, ProjectStatus } from '@/types'
 import { DateInput } from '@/components/ui/date-picker'
@@ -24,10 +24,11 @@ interface Props {
 }
 
 export function ProjectFormModal({ open, onClose, project, defaults = {} }: Props) {
-  const { clients, projects, profiles, clientMembers, invoiceSettings, createRow, deleteRow } = useData()
+  const { clients, projects, profiles, clientMembers, invoiceSettings, me, createRow, deleteRow } = useData()
   const isAdmin = useIsAdmin()
   const navigate = useNavigate()
-  const activeClients = clients.filter((c) => c.status !== 'archived' || c.id === project?.client_id)
+  // New projects only go under clients you have in full (a single shared project doesn't count).
+  const activeClients = clients.filter((c) => (c.status !== 'archived' && (project || hasClientAccess(me, c.id, clientMembers))) || c.id === project?.client_id)
 
   const blank = () => {
     const client = clients.find((c) => c.id === (project?.client_id ?? defaults.client_id)) ?? activeClients[0]
@@ -43,6 +44,7 @@ export function ProjectFormModal({ open, onClose, project, defaults = {} }: Prop
       work_month: project ? project.work_month ?? '' : `${todayISO().slice(0, 7)}-01`,
       due_date: project?.due_date ?? '',
       amount: project ? String(project.amount || '') : '',
+      hourly_rate: project?.hourly_rate != null ? String(project.hourly_rate) : '',
       currency: project?.currency ?? client?.default_currency ?? invoiceSettings?.default_currency ?? 'USD',
       priority: (project?.priority ?? 'medium') as Priority,
       status: (project?.status ?? 'not_started') as ProjectStatus,
@@ -76,7 +78,10 @@ export function ProjectFormModal({ open, onClose, project, defaults = {} }: Prop
   const submit = () => {
     if (!f.title.trim()) return toast.error('Give the project a name')
     if (!f.client_id) return toast.error('Pick a client (add one first if you have none)')
-    const amount = Number(f.amount) || 0
+    const hourly = f.billing_type === 'hourly'
+    const rate = f.hourly_rate.trim() ? Number(f.hourly_rate) || 0 : null
+    // Hourly projects are worth logged hours × rate; the rest use the budget typed in.
+    const amount = hourly ? (rate != null ? hourlyAmount(project?.id, rate) : project?.amount ?? 0) : Number(f.amount) || 0
     // Descriptions are rich text elsewhere; keep existing HTML if the plain text didn't change.
     const plainBefore = project?.description?.replace(/<[^>]+>/g, '') ?? ''
     const description = f.description.trim() === plainBefore.trim() ? project?.description ?? null : f.description.trim() ? `<p>${f.description.trim().replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c]!).replace(/\n/g, '</p><p>')}</p>` : null
@@ -91,6 +96,7 @@ export function ProjectFormModal({ open, onClose, project, defaults = {} }: Prop
       // Only sent once the work_month column exists (any loaded project has the field).
       ...(hasWorkMonth ? { work_month: f.work_month || null } : {}),
       amount,
+      ...(hourly || project?.hourly_rate != null ? { hourly_rate: rate } : {}),
       currency: f.currency,
       priority: f.priority,
       description,
@@ -163,9 +169,14 @@ export function ProjectFormModal({ open, onClose, project, defaults = {} }: Prop
                 <Select value={f.status} onChange={(e) => set('status', e.target.value as ProjectStatus)} options={options(projectStatus)} />
               </Field>
             )}
-            {isAdmin && (
+            {isAdmin && f.billing_type !== 'hourly' && (
               <Field label="Budget" className={project ? undefined : 'span2'}>
                 <MoneyInput amount={f.amount} currency={f.currency} onAmount={(v) => set('amount', v)} onCurrency={(v) => set('currency', v)} currencies={[...SUPPORTED_CURRENCIES]} />
+              </Field>
+            )}
+            {isAdmin && f.billing_type === 'hourly' && (
+              <Field label="Hourly rate" className={project ? undefined : 'span2'} hint="Billed amount = logged hours × this rate">
+                <MoneyInput amount={f.hourly_rate} currency={f.currency} onAmount={(v) => set('hourly_rate', v)} onCurrency={(v) => set('currency', v)} currencies={[...SUPPORTED_CURRENCIES]} />
               </Field>
             )}
           </div>

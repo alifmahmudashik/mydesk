@@ -1,4 +1,4 @@
-import type { Client, ClientMember, Payment, PaymentStatus, Profile, Project, Task } from '@/types'
+import type { Client, ClientMember, Payment, ProjectMember, PaymentStatus, Profile, Project, Task } from '@/types'
 import { formatMoney, isOverdue } from '@/lib/format'
 
 /** The one way to name a client anywhere in the UI. Respects the per-client display preference. */
@@ -71,11 +71,34 @@ export function shortProjectTitle(title: string) {
   return title.split(/\s+[—–-]\s+/)[0]
 }
 
-/** Who can be assigned a task on this client's projects: admins/owner always, plus members granted this client. */
-export function eligibleAssignees(clientId: string | undefined, profiles: Profile[], clientMembers: ClientMember[]) {
+/** Who can be assigned a task on this project: admins/owner always, plus members granted its
+ *  client, plus members the project itself is shared with. */
+export function eligibleAssignees(
+  clientId: string | undefined,
+  profiles: Profile[],
+  clientMembers: ClientMember[],
+  projectId?: string | null,
+  projectMembers: ProjectMember[] = [],
+) {
   if (!clientId) return profiles
   const granted = new Set(clientMembers.filter((m) => m.client_id === clientId).map((m) => m.user_id))
+  for (const m of projectMembers) if (projectId && m.project_id === projectId) granted.add(m.user_id)
   return profiles.filter((p) => p.role !== 'member' || granted.has(p.id))
+}
+
+/** Members (not admins) who can open this project, and how: the whole client or just this project. */
+export function projectTeam(project: { id: string; client_id: string }, profiles: Profile[], clientMembers: ClientMember[], projectMembers: ProjectMember[]) {
+  const viaClient = new Set(clientMembers.filter((m) => m.client_id === project.client_id).map((m) => m.user_id))
+  const viaProject = new Map(projectMembers.filter((m) => m.project_id === project.id).map((m) => [m.user_id, m]))
+  return profiles
+    .filter((p) => p.role === 'member' && (viaClient.has(p.id) || viaProject.has(p.id)))
+    .map((p) => ({ profile: p, scope: viaClient.has(p.id) ? ('client' as const) : ('project' as const), grant: viaProject.get(p.id) }))
+}
+
+/** Has the whole client (owners/admins always do). */
+export function hasClientAccess(me: Profile | null | undefined, clientId: string | undefined, clientMembers: ClientMember[]) {
+  if (!me || me.role !== 'member') return true
+  return Boolean(clientId) && clientMembers.some((m) => m.client_id === clientId && m.user_id === me.id)
 }
 
 /** A payment past its due date that isn't settled reads as overdue even if not flagged. */

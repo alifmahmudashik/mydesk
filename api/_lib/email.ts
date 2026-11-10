@@ -161,6 +161,17 @@ export function renderTemplate(template: string, raw: Payload): { subject: strin
     }
     case 'access_granted': {
       const by = p.actor && p.actor !== 'Someone' ? `${esc(p.actor)} gave you access` : 'You were given access'
+      if (p.project) {
+        return {
+          subject: `You now have access to ${p.project} in MyDesk`,
+          html: layout({
+            heading: `${by} to ${esc(p.project)}`,
+            bodyHtml: `You can now see and work on <b>${esc(p.project)}</b>${p.client ? ` for ${esc(p.client)}` : ''}: its tasks, notes and files. You can add tasks and assign them to others on the project.`,
+            cta: { label: 'Open project', url: link(p.link) },
+          }),
+          text: `You now have access to ${p.project} in MyDesk.\n\n${link(p.link)}`,
+        }
+      }
       return {
         subject: `You now have access to ${p.client ?? 'a client'} in MyDesk`,
         html: layout({

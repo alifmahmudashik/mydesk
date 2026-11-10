@@ -10,8 +10,9 @@
 -- Entities: clients -> projects -> tasks / access_items / payments / project_notes,
 -- plus activity_log, and a collaborator layer (profiles + client_members) with
 -- role-based access: owner > admin > member. Granting a member a client gives them
--- full read/write on every project and task under it; payments/budgets/client
--- contact details stay admin-only.
+-- full read/write on every project and task under it (and they can create projects
+-- there); granting a single project (project_members) opens just that project and its
+-- tasks. Payments/budgets/client contact details stay admin-only.
 --
 -- Workspaces: anyone can sign up and create their own workspace. Every person
 -- (profiles.workspace_id) and every row (workspace_id) belongs to one workspace,
@@ -142,6 +143,17 @@ create table if not exists client_members (
   created_at timestamptz not null default now(),
   unique (client_id, user_id)
 );
+
+-- Grants a user one project only (and its tasks), without the rest of the client.
+create table if not exists project_members (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects (id) on delete cascade,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  added_by uuid default auth.uid() references auth.users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  unique (project_id, user_id)
+);
+create index if not exists idx_project_members_user on project_members (user_id);
 
 -- The sender's own business/payment details, reused as the default on every
 -- invoice. Singleton in practice (the app always upserts the one row it finds).
@@ -288,21 +300,10 @@ begin
   end if;
 end $$;
 
--- Old per-project membership table: fold any grants up to client-level, then drop it.
-do $$
-begin
-  if exists (
-    select 1 from information_schema.tables
-    where table_schema = 'public' and table_name = 'project_members'
-  ) then
-    insert into client_members (client_id, user_id)
-    select distinct p.client_id, pm.user_id
-    from project_members pm
-    join projects p on p.id = pm.project_id
-    on conflict (client_id, user_id) do nothing;
-    drop table project_members;
-  end if;
-end $$;
+-- (An old version folded per-project grants up to client level and dropped the
+-- table. Project-level access is back as project_members above, so that step is gone.)
+alter table project_members add column if not exists added_by uuid default auth.uid() references auth.users (id) on delete set null;
+alter table project_members add column if not exists created_at timestamptz not null default now();
 
 -- ============================================================================
 -- Indexes
@@ -365,9 +366,30 @@ language sql stable security definer set search_path = public as
 $$ select cm.client_id from client_members cm join clients c on c.id = cm.client_id
    where cm.user_id = auth.uid() and c.workspace_id = my_workspace_id() $$;
 
+-- Projects shared with you one at a time (project scope).
+create or replace function public.my_shared_project_ids() returns setof uuid
+language sql stable security definer set search_path = public as
+$$ select pm.project_id from project_members pm join projects p on p.id = pm.project_id
+   where pm.user_id = auth.uid() and p.workspace_id = my_workspace_id() $$;
+
+-- Clients you can see only because one of their projects is shared with you.
+create or replace function public.my_shared_client_ids() returns setof uuid
+language sql stable security definer set search_path = public as
+$$ select distinct client_id from projects where id in (select my_shared_project_ids()) $$;
+
+-- Every project you can open: all of them for owners/admins, otherwise those under
+-- your clients plus the ones shared with you.
 create or replace function public.my_project_ids() returns setof uuid
 language sql stable security definer set search_path = public as
-$$ select id from projects where workspace_id = my_workspace_id() and client_id in (select my_client_ids()) $$;
+$$ select id from projects where workspace_id = my_workspace_id()
+     and (is_admin() or client_id in (select my_client_ids()) or id in (select my_shared_project_ids())) $$;
+
+-- Who may give or take away access to one project: admins, and members who have
+-- the whole client.
+create or replace function public.can_share_project(p_project uuid) returns boolean
+language sql stable security definer set search_path = public as
+$$ select exists (select 1 from projects where id = p_project and workspace_id = my_workspace_id()
+                  and (is_admin() or client_id in (select my_client_ids()))) $$;
 
 -- Anyone may promote/demote another user between admin and member. Two
 -- exceptions stay locked down: the owner role only changes hands via the
@@ -423,7 +445,7 @@ declare t text;
 begin
   foreach t in array array[
     'clients','projects','tasks','access_items','payments',
-    'project_notes','activity_log','profiles','client_members',
+    'project_notes','activity_log','profiles','client_members','project_members',
     'invoice_settings','invoices'
   ] loop
     execute format('alter table %I enable row level security', t);
@@ -444,7 +466,7 @@ begin
     where schemaname = 'public'
       and tablename in (
         'clients','projects','tasks','access_items','payments',
-        'project_notes','activity_log','profiles','client_members',
+        'project_notes','activity_log','profiles','client_members','project_members',
         'invoice_settings','invoices'
       )
   loop
@@ -474,8 +496,9 @@ create policy "cm_all" on client_members for all
 create policy "clients_admin_all" on clients for all
   using (workspace_id = my_workspace_id() and is_admin())
   with check (workspace_id = my_workspace_id() and is_admin());
+-- (Someone with only a shared project sees its client too, so names show up.)
 create policy "clients_member_select" on clients for select
-  using (id in (select my_client_ids()));
+  using (id in (select my_client_ids()) or id in (select my_shared_client_ids()));
 
 -- projects: admins everything; members full CRUD within clients they can see.
 create policy "projects_admin_all" on projects for all
@@ -484,6 +507,22 @@ create policy "projects_admin_all" on projects for all
 create policy "projects_member_all" on projects for all
   using (workspace_id = my_workspace_id() and client_id in (select my_client_ids()))
   with check (workspace_id = my_workspace_id() and client_id in (select my_client_ids()));
+-- Project scope: see and edit the shared project, but not create or delete projects.
+-- (A trigger further down stops them moving it to another client.)
+create policy "projects_shared_select" on projects for select
+  using (id in (select my_shared_project_ids()));
+create policy "projects_shared_update" on projects for update
+  using (id in (select my_shared_project_ids()))
+  with check (workspace_id = my_workspace_id());
+
+-- project_members: everyone on a project sees who else is on it; admins and members
+-- with the whole client add or remove people (only people in your workspace).
+create policy "pm_select" on project_members for select
+  using (project_id in (select my_project_ids()));
+create policy "pm_insert" on project_members for insert
+  with check (can_share_project(project_id) and in_my_workspace(user_id));
+create policy "pm_delete" on project_members for delete
+  using (can_share_project(project_id));
 
 -- tasks / access_items / project_notes: admins everything; members full CRUD
 -- within projects under their granted clients.
@@ -702,6 +741,8 @@ create table if not exists payment_reminders (
 
 -- An invite brings the person into the inviter's workspace.
 alter table invites add column if not exists workspace_id uuid default public.my_workspace_id() references workspaces (id) on delete cascade;
+-- Single projects the invited person gets (on top of whole clients in client_ids).
+alter table invites add column if not exists project_ids uuid[] not null default '{}';
 
 create index if not exists idx_subtasks_task on subtasks (task_id);
 create index if not exists idx_comments_task on task_comments (task_id, created_at);
@@ -1157,6 +1198,8 @@ begin
       select id from profiles where role in ('owner','admin') and workspace_id = r.workspace_id
       union
       select user_id from client_members where client_id = r.client_id
+      union
+      select user_id from project_members where project_id = r.id
     loop
       perform notify(v_uid, 'due_soon', null, 'project', r.id, r.id,
         r.title, 'Project due tomorrow · ' || coalesce(r.client_name, '') || ' · ' || r.open_tasks || ' open task' || case when r.open_tasks = 1 then '' else 's' end,
@@ -1197,6 +1240,10 @@ begin
   select c, p_user from unnest(v_inv.client_ids) c
   where exists (select 1 from clients where id = c and workspace_id is not distinct from v_inv.workspace_id)
   on conflict (client_id, user_id) do nothing;
+  insert into project_members (project_id, user_id, added_by)
+  select pr, p_user, v_inv.invited_by from unnest(coalesce(v_inv.project_ids, '{}')) pr
+  where exists (select 1 from projects where id = pr and workspace_id is not distinct from v_inv.workspace_id)
+  on conflict (project_id, user_id) do nothing;
   update invites set accepted_at = now() where id = v_inv.id;
   perform set_config('mydesk.skip_access_email', 'off', true);
   if v_inv.invited_by is not null then
@@ -1275,6 +1322,8 @@ begin
   update tasks set assignee_id = null where assignee_id = p_user;
   update subtasks set assignee_id = null where assignee_id = p_user;
   delete from client_members where user_id = p_user;
+  delete from project_members where user_id = p_user;
+  delete from time_timers where user_id = p_user;
   -- Rows record who created them (owner_id), and deleting a login deletes its rows.
   -- Hand everything this person created to the workspace owner so the work stays.
   select w.owner_id into v_owner from profiles p join workspaces w on w.id = p.workspace_id where p.id = p_user;
@@ -1316,11 +1365,12 @@ begin
   end loop;
 end $$;
 
--- Anyone who can see the task can see/add its subtasks, files, time and watchers.
+-- Anyone who can see the task can see/add its subtasks, files and watchers.
+-- (Time entries can belong to a project without a task; their policy is further down.)
 do $$
 declare t text;
 begin
-  foreach t in array array['subtasks','task_attachments','time_entries','task_watchers'] loop
+  foreach t in array array['subtasks','task_attachments','task_watchers'] loop
     execute format('create policy "%s_access" on %I for all using (task_id in (select my_task_ids())) with check (task_id in (select my_task_ids()))', t, t);
   end loop;
 end $$;
@@ -1783,6 +1833,7 @@ language plpgsql security definer set search_path = public as $$
 begin
   delete from notifications where user_id in (select id from profiles where workspace_id = p_ws);
   delete from client_members where client_id in (select id from clients where workspace_id = p_ws);
+  delete from project_members where project_id in (select id from projects where workspace_id = p_ws);
   perform set_config('mydesk.system', 'on', true);
   update profiles set workspace_id = null, role = 'member'
   where workspace_id = p_ws and id is distinct from (select owner_id from workspaces where id = p_ws);
@@ -1847,6 +1898,179 @@ begin
   insert into app_private.config (key, value) values ('workspaces_migrated', now()::text)
   on conflict (key) do nothing;
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- Project-level access, shareable client notes, hourly rates, time on projects
+-- and running timers. Safe to re-run.
+-- ---------------------------------------------------------------------------
+
+-- Someone with one shared project can edit it but not move it to another client.
+create or replace function public.projects_guard_move() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.client_id is distinct from old.client_id and auth.uid() is not null and not is_admin()
+     and not (old.client_id in (select my_client_ids()) and new.client_id in (select my_client_ids())) then
+    raise exception 'You can’t move this project to another client';
+  end if;
+  return new;
+end $$;
+drop trigger if exists projects_guard_move on projects;
+create trigger projects_guard_move before update of client_id on projects
+  for each row execute function public.projects_guard_move();
+
+-- Access granted to one project -> one inbox item + email.
+create or replace function public.project_members_after_insert() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare v_title text; v_client text;
+begin
+  if coalesce(current_setting('mydesk.skip_access_email', true), 'off') = 'on' then return null; end if;
+  if new.user_id = auth.uid() then return null; end if;
+  if exists (select 1 from profiles where id = new.user_id and role in ('owner','admin')) then return null; end if;
+  select p.title, coalesce(case when c.use_company_name then c.company_name end, c.name) into v_title, v_client
+  from projects p join clients c on c.id = p.client_id where p.id = new.project_id;
+  perform notify(new.user_id, 'access_granted', auth.uid(), 'project', new.project_id, new.project_id,
+    'You now have access to ' || coalesce(v_title, 'a project'), v_client,
+    '/projects/' || new.project_id,
+    'access:p:' || new.project_id || ':' || new.user_id || ':' || extract(epoch from now())::bigint, 'access',
+    jsonb_build_object('project', v_title, 'client', v_client));
+  return null;
+end $$;
+drop trigger if exists project_members_after_insert on project_members;
+create trigger project_members_after_insert after insert on project_members
+  for each row execute function public.project_members_after_insert();
+
+-- Client notes live in their own table so "not shared" really is private: members can
+-- read the clients row itself, so a note kept there was never fully hidden.
+create table if not exists client_notes (
+  id uuid primary key default gen_random_uuid(),
+  client_id uuid not null unique references clients (id) on delete cascade,
+  body text not null default '',
+  -- On: everyone with access to this client can read the note.
+  shared boolean not null default false,
+  updated_by uuid default auth.uid() references auth.users (id) on delete set null,
+  updated_at timestamptz not null default now(),
+  workspace_id uuid default public.my_workspace_id() references workspaces (id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+-- Move existing notes over (once per client), then clear the old copy.
+insert into client_notes (client_id, body, workspace_id)
+select id, notes, workspace_id from clients where nullif(trim(coalesce(notes, '')), '') is not null
+on conflict (client_id) do nothing;
+update clients c set notes = null
+where c.notes is not null and exists (select 1 from client_notes n where n.client_id = c.id);
+
+alter table client_notes enable row level security;
+drop policy if exists "client_notes_admin" on client_notes;
+create policy "client_notes_admin" on client_notes for all
+  using (workspace_id = my_workspace_id() and is_admin())
+  with check (workspace_id = my_workspace_id() and is_admin() and client_in_my_workspace(client_id));
+drop policy if exists "client_notes_shared" on client_notes;
+create policy "client_notes_shared" on client_notes for select
+  using (shared and (client_id in (select my_client_ids()) or client_id in (select my_shared_client_ids())));
+
+create or replace function public.client_notes_touch() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  new.updated_at := now();
+  new.updated_by := coalesce(auth.uid(), new.updated_by);
+  return new;
+end $$;
+drop trigger if exists client_notes_touch on client_notes;
+create trigger client_notes_touch before update on client_notes
+  for each row execute function public.client_notes_touch();
+
+-- Hourly projects: the rate per hour. Their amount is logged hours × rate.
+alter table projects add column if not exists hourly_rate numeric(12,2);
+
+-- Time can be logged on a project directly, or on one of its tasks.
+alter table time_entries add column if not exists project_id uuid references projects (id) on delete cascade;
+alter table time_entries alter column task_id drop not null;
+update time_entries e set project_id = t.project_id from tasks t where t.id = e.task_id and e.project_id is null;
+create index if not exists idx_time_project on time_entries (project_id);
+
+-- A task's time always counts toward that task's project.
+create or replace function public.time_entries_before_write() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.task_id is not null then
+    select project_id into new.project_id from tasks where id = new.task_id;
+  end if;
+  if new.project_id is null then
+    raise exception 'A time entry needs a project or a task';
+  end if;
+  return new;
+end $$;
+drop trigger if exists time_entries_before_write on time_entries;
+create trigger time_entries_before_write before insert or update on time_entries
+  for each row execute function public.time_entries_before_write();
+
+drop policy if exists "time_entries_access" on time_entries;
+create policy "time_entries_access" on time_entries for all
+  using (project_id in (select my_project_ids()))
+  with check (project_id in (select my_project_ids()) and (task_id is null or task_id in (select my_task_ids())));
+
+-- Keeps an hourly project's amount at logged hours × rate, and its own open payment
+-- in step (same rule as editing a budget by hand).
+create or replace function public.sync_hourly_amount(p_project uuid) returns void
+language plpgsql security definer set search_path = public as $$
+declare v_rate numeric; v_type text; v_amount numeric;
+begin
+  select hourly_rate, billing_type into v_rate, v_type from projects where id = p_project;
+  if v_type is distinct from 'hourly' or v_rate is null then return; end if;
+  select round(coalesce(sum(minutes), 0) * v_rate / 60.0, 2) into v_amount
+  from time_entries where project_id = p_project;
+  update projects set amount = v_amount where id = p_project and amount is distinct from v_amount;
+  if (select count(*) from payments where p_project = any(project_ids)) = 1 then
+    update payments set amount = v_amount
+    where project_ids = array[p_project] and status not in ('paid','refunded') and amount is distinct from v_amount;
+  end if;
+end $$;
+revoke execute on function public.sync_hourly_amount(uuid) from public, anon, authenticated;
+
+create or replace function public.time_entries_after_write() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'DELETE' then
+    perform sync_hourly_amount(old.project_id);
+    return null;
+  end if;
+  perform sync_hourly_amount(new.project_id);
+  if tg_op = 'UPDATE' and old.project_id is distinct from new.project_id then
+    perform sync_hourly_amount(old.project_id);
+  end if;
+  return null;
+end $$;
+drop trigger if exists time_entries_after_write on time_entries;
+create trigger time_entries_after_write after insert or update or delete on time_entries
+  for each row execute function public.time_entries_after_write();
+
+create or replace function public.projects_after_rate_change() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  perform sync_hourly_amount(new.id);
+  return null;
+end $$;
+drop trigger if exists projects_after_rate_change on projects;
+create trigger projects_after_rate_change after update of hourly_rate, billing_type on projects
+  for each row execute function public.projects_after_rate_change();
+
+-- A running timer: at most one per person. Stopping it logs a time entry.
+create table if not exists time_timers (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null unique default auth.uid() references auth.users (id) on delete cascade,
+  project_id uuid not null references projects (id) on delete cascade,
+  task_id uuid references tasks (id) on delete cascade,
+  note text,
+  started_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+alter table time_timers enable row level security;
+drop policy if exists "time_timers_own" on time_timers;
+create policy "time_timers_own" on time_timers for all
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid() and project_id in (select my_project_ids())
+              and (task_id is null or task_id in (select my_task_ids())));
 
 -- ---------------------------------------------------------------------------
 -- Realtime (live inbox, comments, activity)

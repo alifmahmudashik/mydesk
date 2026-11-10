@@ -19,13 +19,13 @@ import { Field } from '@/components/ui/field'
 import { labelTone } from '@/components/domain/TaskRow'
 import { supabase } from '@/lib/supabase'
 import { clientDisplayName, eligibleAssignees, profileDisplayName, profileFullName, shortProjectTitle, taskRef, taskAssigneeIds } from '@/lib/derive'
-import { daysUntil, formatBytes, formatDate, formatDateTime, formatFeedAgo, formatMinutes, parseDuration, todayISO } from '@/lib/format'
+import { daysUntil, formatBytes, formatDate, formatDateTime, formatFeedAgo, formatMinutes, parseDuration } from '@/lib/format'
 import { priorityMeta, taskRing, taskStatus } from '@/lib/status'
 import { copyText } from '@/lib/utils'
-import type { Priority, Subtask, TaskAttachment, TaskStatus, TaskWatcher, TimeEntry } from '@/types'
+import type { Priority, Subtask, TaskAttachment, TaskStatus, TaskWatcher } from '@/types'
 import { format, parseISO } from 'date-fns'
-import { DateInput } from '@/components/ui/date-picker'
 import { CodeSnippets } from '@/components/domain/CodeSnippets'
+import { LogTimeModal, TimeEntryRow, TimerButton } from '@/components/domain/TimeTracking'
 
 const STATUSES: TaskStatus[] = ['todo', 'in_progress', 'waiting_for_client', 'blocked', 'review', 'done']
 
@@ -38,7 +38,7 @@ export function TaskPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const data = useData()
-  const { tasks, projects, clients, profiles, clientMembers, subtasks, comments, attachments, timeEntries, watchers, activity, me, demoMode, createRow, updateRow, deleteRow } = data
+  const { tasks, projects, clients, profiles, clientMembers, projectMembers, subtasks, comments, attachments, timeEntries, watchers, activity, me, demoMode, createRow, updateRow, deleteRow } = data
   const task = tasks.find((t) => t.id === id)
   const project = projects.find((p) => p.id === task?.project_id)
   const client = clients.find((c) => c.id === project?.client_id)
@@ -93,7 +93,7 @@ export function TaskPage() {
     )
   }
 
-  const people = eligibleAssignees(project?.client_id, profiles, clientMembers)
+  const people = eligibleAssignees(project?.client_id, profiles, clientMembers, project?.id, projectMembers)
   const taskSnippets = data.snippets.filter((s) => s.task_id === task.id).length
   const assigneeIds = taskAssigneeIds(task)
   const assignee = profiles.find((p) => p.id === assigneeIds[0])
@@ -473,9 +473,10 @@ export function TaskPage() {
             />
 
             <span>Time logged</span>
-            <span className="row-sm" style={{ padding: '0 8px' }}>
-              <b className={`m small ${task.estimate_minutes && logged > task.estimate_minutes ? 't-warn' : ''}`}>{formatMinutes(logged)}</b>
+            <span className="row-sm wrap" style={{ padding: '0 8px', rowGap: 6 }}>
+              <b style={{ whiteSpace: 'nowrap' }} className={`m small ${task.estimate_minutes && logged > task.estimate_minutes ? 't-warn' : ''}`}>{formatMinutes(logged)}</b>
               <button className="btn btn-sm" type="button" style={{ height: 24, fontSize: 11.5 }} onClick={() => setLogOpen(true)}>+ Log time</button>
+              <TimerButton projectId={task.project_id} taskId={task.id} small />
             </span>
 
             <span>Project</span>
@@ -489,17 +490,7 @@ export function TaskPage() {
               <div className="divider" style={{ margin: '16px 0' }} />
               <div className="label-caps" style={{ marginBottom: 8 }}>Time entries</div>
               <div className="stack-sm small">
-                {[...time].sort((a, b) => b.logged_on.localeCompare(a.logged_on)).map((t) => {
-                  const who = profiles.find((p) => p.id === t.user_id)
-                  return (
-                    <div key={t.id} className="row-sm">
-                      <Avatar profile={who} size="xs" />
-                      <span className="grow trunc muted">{formatDate(t.logged_on)}{t.note ? ` · ${t.note}` : ''}</span>
-                      <b className="m">{formatMinutes(t.minutes)}</b>
-                      {(t.user_id === me?.id || me?.role !== 'member') && <button type="button" className="btn btn-ghost btn-sm btn-icon" style={{ width: 22, height: 22 }} aria-label="Delete entry" onClick={() => deleteRow('time_entries', t.id)}><X className="i i-xs" /></button>}
-                    </div>
-                  )
-                })}
+                {[...time].sort((a, b) => b.logged_on.localeCompare(a.logged_on)).map((t) => <TimeEntryRow key={t.id} entry={t} />)}
               </div>
             </>
           )}
@@ -536,7 +527,7 @@ export function TaskPage() {
         }}
       />
       <MoveModal open={moveOpen} onClose={() => setMoveOpen(false)} taskId={task.id} />
-      <LogTimeModal open={logOpen} onClose={() => setLogOpen(false)} taskId={task.id} projectId={task.project_id} taskTitle={task.title} />
+      <LogTimeModal open={logOpen} onClose={() => setLogOpen(false)} taskId={task.id} projectId={task.project_id} />
       <LinkModal open={linkOpen} onClose={() => setLinkOpen(false)} onAdd={addLink} />
     </>
   )
@@ -572,39 +563,6 @@ function MoveModal({ open, onClose, taskId }: { open: boolean; onClose: () => vo
           {list.length === 0 && <div className="empty sm"><p>No other projects.</p></div>}
         </div>
       </div>
-    </Modal>
-  )
-}
-
-function LogTimeModal({ open, onClose, taskId, projectId, taskTitle }: { open: boolean; onClose: () => void; taskId: string; projectId: string; taskTitle: string }) {
-  const { createRow, logActivity } = useData()
-  const [f, setF] = useState({ duration: '', date: todayISO(), note: '' })
-  useEffect(() => {
-    if (open) setF({ duration: '', date: todayISO(), note: '' })
-  }, [open])
-  const save = () => {
-    const mins = parseDuration(f.duration)
-    if (!mins) return toast.error('Enter time like “1h 30m”, “45m” or “1.5”')
-    createRow<TimeEntry>('time_entries', { task_id: taskId, minutes: mins, logged_on: f.date || todayISO(), note: f.note.trim() || null })
-    logActivity({ entity: 'time', entityId: taskId, action: 'logged', message: `logged ${formatMinutes(mins)} on “${taskTitle}”`, projectId })
-    onClose()
-  }
-  return (
-    <Modal open={open} onClose={onClose} title="Log time" size="narrow" footer={<><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="button" className="btn btn-pri" onClick={save}>Log time</button></>}>
-      <form className="dlg-b" onSubmit={(e) => { e.preventDefault(); save() }}>
-        <div className="f2">
-          <Field label="Time spent" hint="1h 30m, 45m, 1.5">
-            <input data-autofocus className="inp" value={f.duration} onChange={(e) => setF({ ...f, duration: e.target.value })} placeholder="1h 30m" />
-          </Field>
-          <Field label="Date">
-            <DateInput value={f.date} onChange={(v) => setF({ ...f, date: v ?? todayISO() })} clearable={false} />
-          </Field>
-        </div>
-        <Field label="Note">
-          <input className="inp" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} placeholder="What did you work on?" />
-        </Field>
-        <button type="submit" hidden />
-      </form>
     </Modal>
   )
 }

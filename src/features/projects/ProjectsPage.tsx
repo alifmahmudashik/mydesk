@@ -19,7 +19,7 @@ const PER_CLIENT = 6
 
 export function ProjectsPage() {
   const isAdmin = useIsAdmin()
-  const { projects, clients, tasks, profiles, clientMembers, payments } = useData()
+  const { projects, clients, tasks, profiles, clientMembers, projectMembers, payments } = useData()
   const { openCreate } = useUI()
   const [params, setParams] = useSearchParams()
   const tab = (params.get('tab') as 'active' | 'done') || 'active'
@@ -48,6 +48,7 @@ export function ProjectsPage() {
 
   const team = (p: Project): Profile[] => {
     const granted = new Set(clientMembers.filter((m) => m.client_id === p.client_id).map((m) => m.user_id))
+    for (const m of projectMembers) if (m.project_id === p.id) granted.add(m.user_id)
     const assignees = new Set(tasks.filter((t) => t.project_id === p.id).flatMap((t) => taskAssigneeIds(t)))
     return profiles.filter((u) => granted.has(u.id) || assignees.has(u.id))
   }

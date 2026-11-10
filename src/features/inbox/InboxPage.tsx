@@ -56,7 +56,7 @@ function NotifText({ n }: { n: AppNotification }) {
 }
 
 export function InboxPage() {
-  const { notifications, markNotificationsRead, tasks, projects, clients, comments, profiles, clientMembers, attachments, me } = useData()
+  const { notifications, markNotificationsRead, tasks, projects, clients, comments, profiles, clientMembers, projectMembers, attachments, me } = useData()
   const navigate = useNavigate()
   const [filter, setFilter] = useState<'all' | 'unread' | 'mentions'>('all')
   const [selId, setSelId] = useState<string | null>(null)
@@ -91,7 +91,7 @@ export function InboxPage() {
   const comment = comments.find((c) => c.id === commentId) ?? (task ? [...comments].filter((c) => c.task_id === task.id).pop() : undefined)
   const commentAuthor = profiles.find((p) => p.id === comment?.author_id)
   const files = task ? attachments.filter((a) => a.task_id === task.id && a.kind === 'file').slice(0, 2) : []
-  const people = task ? eligibleAssignees(project?.client_id, profiles, clientMembers) : []
+  const people = task ? eligibleAssignees(project?.client_id, profiles, clientMembers, project?.id, projectMembers) : []
 
   const unread = notifications.filter((n) => !n.read_at).length
 

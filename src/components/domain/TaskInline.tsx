@@ -92,11 +92,11 @@ export function InlineDate({ task }: { task: Task }) {
 }
 
 export function InlineAssignees({ task }: { task: Task }) {
-  const { projects, profiles, clientMembers, me } = useData()
+  const { projects, profiles, clientMembers, projectMembers, me } = useData()
   const project = projects.find((p) => p.id === task.project_id)
   const ids = taskAssigneeIds(task)
   // People with access to this project's client, plus anyone already on the task.
-  const eligible = eligibleAssignees(project?.client_id, profiles, clientMembers)
+  const eligible = eligibleAssignees(project?.client_id, profiles, clientMembers, project?.id, projectMembers)
   const people = [...eligible, ...profiles.filter((p) => ids.includes(p.id) && !eligible.includes(p))]
   return (
     <AssigneePicker

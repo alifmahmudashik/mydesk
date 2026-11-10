@@ -26,8 +26,9 @@ export function TeamAnalytics({ since, rangeText, rates }: { since: string; rang
     const people = new Map(
       rangeProjects.map((p) => [p.id, profiles.filter((u) => liveTasks.some((t) => t.project_id === p.id && isAssignedTo(t, u.id)))]),
     )
-    const minutesOn = (taskIds: Set<string>, userId?: string) =>
-      timeEntries.filter((e) => taskIds.has(e.task_id) && e.logged_on >= since && (!userId || e.user_id === userId)).reduce((s, e) => s + (Number(e.minutes) || 0), 0)
+    // A project's time: logged on the project itself or on any of its tasks.
+    const minutesOn = (projectId: string, taskIds: Set<string>) =>
+      timeEntries.filter((e) => (e.project_id === projectId || taskIds.has(e.task_id ?? '')) && e.logged_on >= since).reduce((s, e) => s + (Number(e.minutes) || 0), 0)
 
     const rows = profiles
       .map((u) => {
@@ -64,7 +65,7 @@ export function TeamAnalytics({ since, rangeText, rates }: { since: string; rang
         people: people.get(p.id)!,
         done: pt.filter((t) => t.status === 'done').length,
         total: pt.length,
-        minutes: minutesOn(new Set(pt.map((t) => t.id))),
+        minutes: minutesOn(p.id, new Set(pt.map((t) => t.id))),
       }
     })
     return { rows, projectRows, unstaffed: projectRows.filter((r) => r.people.length === 0).length }

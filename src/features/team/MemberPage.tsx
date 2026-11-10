@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { format, parseISO, startOfMonth } from 'date-fns'
-import { AlertTriangle, Briefcase, Key, ListChecks, User } from 'lucide-react'
+import { AlertTriangle, Briefcase, Folder, Key, ListChecks, User } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, useData } from '@/data/store'
 import { useIsAdmin, useIsOwner } from '@/hooks/usePermissions'
@@ -12,9 +12,9 @@ import { Avatar, ClientMark } from '@/components/ui/avatar'
 import { DateChip, StatusRing } from '@/components/ui/pill'
 import { ConfirmDialog } from '@/components/ui/modal'
 import { ProfileFields, draftPatch, profileDraft, type ProfileDraft } from '@/features/team/ProfileFields'
-import { clientDisplayName, OPEN_TASK, profileDisplayName, profileFullName, shortProjectTitle, isAssignedTo, taskAssigneeIds } from '@/lib/derive'
+import { clientDisplayName, OPEN_PROJECT, OPEN_TASK, profileDisplayName, profileFullName, shortProjectTitle, isAssignedTo, taskAssigneeIds } from '@/lib/derive'
 import { formatDate, formatFeedAgo } from '@/lib/format'
-import type { ClientMember, Role } from '@/types'
+import type { ClientMember, ProjectMember, Role } from '@/types'
 
 const roleLabel = { owner: 'Owner', admin: 'Admin', member: 'Member' } as const
 
@@ -23,13 +23,15 @@ export function MemberPage() {
   const navigate = useNavigate()
   const isAdmin = useIsAdmin()
   const isOwner = useIsOwner()
-  const { profiles, clients, projects, tasks, clientMembers, onlineIds, me, demoMode, updateRow, createRow, deleteRow } = useData()
+  const { profiles, clients, projects, tasks, clientMembers, projectMembers, accessV2Ready, onlineIds, me, demoMode, updateRow, createRow, deleteRow } = useData()
   const person = profiles.find((p) => p.id === id)
 
   const grantedNow = useMemo(() => new Set(clientMembers.filter((m) => m.user_id === id).map((m) => m.client_id)), [clientMembers, id])
+  const sharedNow = useMemo(() => new Set(projectMembers.filter((m) => m.user_id === id).map((m) => m.project_id)), [projectMembers, id])
   const [draft, setDraft] = useState<ProfileDraft | null>(person ? profileDraft(person) : null)
   const [role, setRole] = useState<Role>(person?.role ?? 'member')
   const [access, setAccess] = useState<Set<string>>(grantedNow)
+  const [shared, setShared] = useState<Set<string>>(sharedNow)
   const [confirmRemove, setConfirmRemove] = useState(false)
 
   useEffect(() => {
@@ -39,9 +41,11 @@ export function MemberPage() {
     }
   }, [person?.id]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => setAccess(new Set(grantedNow)), [grantedNow])
+  useEffect(() => setShared(new Set(sharedNow)), [sharedNow])
 
   const profileDirty = person && draft ? JSON.stringify(draftPatch(draft)) !== JSON.stringify(draftPatch(profileDraft(person))) : false
   const accessDirty = [...access].some((c) => !grantedNow.has(c)) || [...grantedNow].some((c) => !access.has(c))
+    || [...shared].some((p) => !sharedNow.has(p)) || [...sharedNow].some((p) => !shared.has(p))
   const dirty = profileDirty || accessDirty || role !== person?.role
   useUnsavedGuard(dirty)
 
@@ -69,6 +73,8 @@ export function MemberPage() {
     if (accessDirty) {
       for (const c of access) if (!grantedNow.has(c)) createRow<ClientMember>('client_members', { client_id: c, user_id: person.id })
       for (const m of clientMembers.filter((m) => m.user_id === person.id)) if (!access.has(m.client_id)) deleteRow('client_members', m.id)
+      for (const p of shared) if (!sharedNow.has(p)) createRow<ProjectMember>('project_members', { project_id: p, user_id: person.id })
+      for (const m of projectMembers.filter((m) => m.user_id === person.id)) if (!shared.has(m.project_id)) deleteRow('project_members', m.id)
     }
     toast.success(`Saved changes for ${name}`)
   }
@@ -79,6 +85,7 @@ export function MemberPage() {
       useData.setState((s) => ({
         profiles: s.profiles.filter((p) => p.id !== person.id),
         clientMembers: s.clientMembers.filter((m) => m.user_id !== person.id),
+        projectMembers: s.projectMembers.filter((m) => m.user_id !== person.id),
         tasks: s.tasks.map((t) => {
           if (!isAssignedTo(t, person.id)) return t
           const ids = taskAssigneeIds(t).filter((x) => x !== person.id)
@@ -126,14 +133,14 @@ export function MemberPage() {
           <div className="kstrip" style={{ gridTemplateColumns: 'repeat(3,auto)' }}>
             <div style={{ padding: '10px 16px' }}><div className="xs muted">Open tasks</div><div className="b" style={{ fontSize: 18 }}>{open.length}</div></div>
             <div style={{ padding: '10px 16px' }}><div className="xs muted">Done this month</div><div className="b" style={{ fontSize: 18 }}>{doneThisMonth.length}</div></div>
-            <div style={{ padding: '10px 16px' }}><div className="xs muted">Clients</div><div className="b" style={{ fontSize: 18 }}>{person.role === 'member' ? grantedNow.size : 'All'}</div></div>
+            <div style={{ padding: '10px 16px' }}><div className="xs muted">Clients</div><div className="b" style={{ fontSize: 18 }}>{person.role === 'member' ? grantedNow.size : 'All'}{person.role === 'member' && sharedNow.size > 0 && <span className="xs muted m"> + {sharedNow.size} project{sharedNow.size === 1 ? '' : 's'}</span>}</div></div>
           </div>
         </div>
 
         <SettingsLayout
           nav={[
             ...(canEdit ? [{ id: 'profile', label: 'Personal info', icon: <User className="i i-sm" /> }, { id: 'role', label: 'Role', icon: <Key className="i i-sm" /> }] : []),
-            ...(canEdit && role === 'member' ? [{ id: 'access', label: 'Client access', icon: <Briefcase className="i i-sm" /> }] : []),
+            ...(canEdit && role === 'member' ? [{ id: 'access', label: 'Client access', icon: <Briefcase className="i i-sm" /> }, { id: 'projects', label: 'Project access', icon: <Folder className="i i-sm" /> }] : []),
             { id: 'work', label: 'Work', icon: <ListChecks className="i i-sm" /> },
             ...(canEdit ? [{ id: 'danger', label: 'Remove', icon: <AlertTriangle className="i i-sm" />, danger: true }] : []),
           ]}
@@ -153,7 +160,7 @@ export function MemberPage() {
             </Section>
           )}
           {canEdit && role === 'member' && (
-            <Section id="access" title="Client access" desc="Every project and task under a checked client.">
+            <Section id="access" title="Client access" desc="Every project and task under a checked client. They can also create projects for it.">
               <div className="card" style={{ margin: '-4px 0' }}>
                 {activeClients.map((c) => {
                   const n = projects.filter((p) => p.client_id === c.id).length
@@ -178,6 +185,43 @@ export function MemberPage() {
                     </label>
                   )
                 })}
+              </div>
+            </Section>
+          )}
+          {canEdit && role === 'member' && (
+            <Section id="projects" title="Project access" desc="Single projects only, without the rest of the client. They can add and assign tasks there.">
+              {!accessV2Ready && <p className="small t-warn">Run <b>supabase/schema.sql</b> in Supabase to turn this on.</p>}
+              <div className="card" style={{ margin: '-4px 0', maxHeight: 360, overflowY: 'auto' }}>
+                {projects.filter((p) => !access.has(p.client_id) && (OPEN_PROJECT(p) || shared.has(p.id))).length === 0 && (
+                  <div className="empty sm"><p>Every open project is already covered by their client access.</p></div>
+                )}
+                {projects
+                  .filter((p) => !access.has(p.client_id) && (OPEN_PROJECT(p) || shared.has(p.id)))
+                  .sort((a, b) => a.client_id.localeCompare(b.client_id) || a.title.localeCompare(b.title))
+                  .map((p) => {
+                    const c = clients.find((x) => x.id === p.client_id)
+                    return (
+                      <label key={p.id} className="check-row">
+                        <input
+                          className="cb"
+                          type="checkbox"
+                          disabled={!accessV2Ready}
+                          checked={shared.has(p.id)}
+                          onChange={(e) =>
+                            setShared((s) => {
+                              const x = new Set(s)
+                              if (e.target.checked) x.add(p.id)
+                              else x.delete(p.id)
+                              return x
+                            })
+                          }
+                        />
+                        {c && <ClientMark client={c} size="sm" />}
+                        <span className="txt m trunc">{shortProjectTitle(p.title)}</span>
+                        <span className="xs muted trunc">{c ? clientDisplayName(c) : ''}</span>
+                      </label>
+                    )
+                  })}
               </div>
             </Section>
           )}
@@ -210,7 +254,7 @@ export function MemberPage() {
           )}
         </SettingsLayout>
       </Content>
-      {canEdit && dirty && <SaveBar note={`Changes save for ${name} only`} onCancel={() => { setDraft(profileDraft(person)); setRole(person.role); setAccess(new Set(grantedNow)) }} onSave={save} />}
+      {canEdit && dirty && <SaveBar note={`Changes save for ${name} only`} onCancel={() => { setDraft(profileDraft(person)); setRole(person.role); setAccess(new Set(grantedNow)); setShared(new Set(sharedNow)) }} onSave={save} />}
       <ConfirmDialog
         open={confirmRemove}
         onClose={() => setConfirmRemove(false)}

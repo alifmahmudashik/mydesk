@@ -66,6 +66,8 @@ export interface Project {
   /** Short prefix for task refs, e.g. "CPS" → CPS-12. */
   key?: string | null
   billing_type?: BillingType | null
+  /** Hourly projects: rate per hour. Their amount is logged hours × rate (kept by the database). */
+  hourly_rate?: number | null
   link_url?: string | null
   link_label?: string | null
   archived_at?: string | null
@@ -224,11 +226,31 @@ export interface NotificationPrefs {
   access?: boolean
 }
 
-/** Grants a user every project (and task) under this client — see migration-005. */
+/** Grants a user every project (and task) under this client. */
 export interface ClientMember {
   id: string
   client_id: string
   user_id: string
+  created_at: string
+}
+
+/** Grants a user one project (and its tasks) without the rest of the client. */
+export interface ProjectMember {
+  id: string
+  project_id: string
+  user_id: string
+  added_by?: string | null
+  created_at: string
+}
+
+/** A client's note. Private to owners/admins unless shared with the team. */
+export interface ClientNote {
+  id: string
+  client_id: string
+  body: string
+  shared: boolean
+  updated_by?: string | null
+  updated_at?: string | null
   created_at: string
 }
 
@@ -284,13 +306,27 @@ export interface TaskAttachment {
   created_at: string
 }
 
+/** Time logged on a task, or on a project directly (task_id empty). */
 export interface TimeEntry {
   id: string
-  task_id: string
+  task_id?: string | null
+  /** Always set: the task's project, or the project the time was logged on. */
+  project_id?: string | null
   user_id?: string | null
   minutes: number
   note?: string | null
   logged_on: string
+  created_at: string
+}
+
+/** A running timer (one per person). Stopping it logs a TimeEntry. */
+export interface TimeTimer {
+  id: string
+  user_id: string
+  project_id: string
+  task_id?: string | null
+  note?: string | null
+  started_at: string
   created_at: string
 }
 
@@ -327,6 +363,8 @@ export interface Invite {
   email: string
   role: 'admin' | 'member'
   client_ids: string[]
+  /** Single projects, on top of whole clients. */
+  project_ids?: string[]
   token: string
   invited_by?: string | null
   accepted_at?: string | null

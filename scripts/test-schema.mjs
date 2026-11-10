@@ -410,5 +410,62 @@ let ownerBlocked = false
 try { await as(null, `select prepare_member_removal($1)`, [U1]) } catch { ownerBlocked = true }
 ok(ownerBlocked, 'the owner can’t be removed like a member (their account goes with the workspace)')
 
+// ---- 7. project-level access, client notes, time on projects ----
+const U7 = '77777777-7777-7777-7777-777777777777' // member with one project only
+const C1 = 'aaaaaaaa-0000-0000-0000-000000000001'
+const P1 = 'bbbbbbbb-0000-0000-0000-000000000001'
+const P2 = 'bbbbbbbb-0000-0000-0000-000000000002'
+await q(`insert into auth.users (id, email) values ($1, 'proj@x.com')`, [U7])
+await db.exec(`select set_config('mydesk.system', 'on', false)`)
+await q(`update profiles set workspace_id = $1, role = 'member' where id = $2`, [ws1, U7])
+await db.exec(`select set_config('mydesk.system', 'off', false)`)
+await as(U1, `insert into projects (id, client_id, title) values ($1, $2, 'Other project')`, [P2, C1])
+
+await db.exec(`set role authenticated`)
+const snip = await as(U1, `insert into code_snippets (project_id, title) values ($1, 'Owner code') returning id`, [P1])
+ok(snip.rows.length === 1, 'an owner can save code on a project')
+
+ok((await as(U7, `select id from projects`)).rows.length === 0, 'a member with no access sees no projects')
+await as(U1, `insert into project_members (project_id, user_id) values ($1, $2)`, [P1, U7])
+const seen7 = (await as(U7, `select id from projects`)).rows.map((r) => r.id)
+ok(seen7.length === 1 && seen7[0] === P1, 'a project-scope member sees only the shared project')
+ok((await as(U7, `select id from clients`)).rows.length === 1, 'they see that project’s client (for its name)')
+const t7 = await as(U7, `insert into tasks (project_id, title, assignee_ids) values ($1, 'From project member', $2) returning id`, [P1, [U1]])
+ok(t7.rows.length === 1, 'they can add and assign tasks in the shared project')
+let made7 = true
+try { await as(U7, `insert into projects (client_id, title) values ($1, 'Sneaky')`, [C1]) } catch { made7 = false }
+ok(!made7, 'they can’t create projects for the client')
+ok((await as(U7, `delete from projects where id = $1 returning id`, [P1])).rows.length === 0, 'they can’t delete the shared project')
+ok((await as(U7, `update projects set priority = 'high' where id = $1 returning id`, [P1])).rows.length === 1, 'they can edit the shared project')
+let share7 = true
+try { await as(U7, `insert into project_members (project_id, user_id) values ($1, $2)`, [P1, U5]) } catch { share7 = false }
+ok(!share7, 'a project-scope member can’t share the project onward')
+ok((await as(U7, `insert into code_snippets (project_id, title) values ($1, 'Member code') returning id`, [P1])).rows.length === 1, 'they can save code on the shared project')
+
+// Client notes: hidden from members until shared.
+await as(U1, `insert into client_notes (client_id, body) values ($1, 'Pays late, be firm')`, [C1])
+ok((await as(U7, `select * from client_notes`)).rows.length === 0, 'a private client note is hidden from members')
+await as(U1, `update client_notes set shared = true where client_id = $1`, [C1])
+ok((await as(U7, `select body from client_notes`)).rows[0]?.body === 'Pays late, be firm', 'a shared client note is visible to the team')
+
+// Time: on the project itself or on a task; hourly projects bill hours × rate.
+await as(U1, `update projects set billing_type = 'hourly', hourly_rate = 40 where id = $1`, [P1])
+await as(U7, `insert into time_entries (project_id, minutes) values ($1, 90)`, [P1])
+await as(U7, `insert into time_entries (task_id, minutes) values ($1, 30)`, [t7.rows[0].id])
+let timeOther = true
+try { await as(U7, `insert into time_entries (project_id, minutes) values ($1, 30)`, [P2]) } catch { timeOther = false }
+ok(!timeOther, 'they can’t log time on a project they don’t have')
+await as(U7, `insert into time_timers (project_id) values ($1)`, [P1])
+ok((await as(U1, `select * from time_timers`)).rows.length === 0, 'timers are private to the person running them')
+await db.exec(`reset role`)
+const te = (await q(`select project_id from time_entries where task_id = $1`, [t7.rows[0].id])).rows[0]
+ok(te?.project_id === P1, 'time on a task counts toward its project')
+const amt = Number((await q(`select amount from projects where id = $1`, [P1])).rows[0].amount)
+ok(amt === 80, `hourly amount = 2 h × 40 (${amt})`)
+const n7 = (await q(`select title from notifications where user_id = $1 and type = 'access_granted'`, [U7])).rows
+ok(n7.length === 1, 'being given a project sends one access notification')
+await as(null, `select prepare_member_removal($1)`, [U7])
+ok((await q(`select count(*)::int c from project_members where user_id = $1`, [U7])).rows[0].c === 0, 'removing a member clears their project access')
+
 console.log(failures ? `\n${failures} check(s) failed` : '\nAll schema checks passed')
 process.exit(failures ? 1 : 0)

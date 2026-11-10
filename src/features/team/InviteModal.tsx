@@ -5,14 +5,15 @@ import { useData } from '@/data/store'
 import { Modal } from '@/components/ui/modal'
 import { Field, RadioCard } from '@/components/ui/field'
 import { ClientMark } from '@/components/ui/avatar'
-import { clientDisplayName } from '@/lib/derive'
+import { clientDisplayName, OPEN_PROJECT, shortProjectTitle } from '@/lib/derive'
 import type { Invite } from '@/types'
 
 export function InviteModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { clients, profiles, invites, createRow } = useData()
+  const { clients, projects, profiles, invites, accessV2Ready, createRow } = useData()
   const [emails, setEmails] = useState('')
   const [role, setRole] = useState<'member' | 'admin'>('member')
   const [access, setAccess] = useState<Set<string>>(new Set())
+  const [single, setSingle] = useState<Set<string>>(new Set())
   const active = clients.filter((c) => c.status !== 'archived')
 
   useEffect(() => {
@@ -20,6 +21,7 @@ export function InviteModal({ open, onClose }: { open: boolean; onClose: () => v
       setEmails('')
       setRole('member')
       setAccess(new Set())
+      setSingle(new Set())
     }
   }, [open])
 
@@ -33,7 +35,8 @@ export function InviteModal({ open, onClose }: { open: boolean; onClose: () => v
     for (const email of list) {
       const pending = invites.find((i) => i.email.toLowerCase() === email && !i.accepted_at && !i.revoked_at)
       if (pending) continue
-      createRow<Invite>('invites', { email, role, client_ids: role === 'member' ? [...access] : [], token: crypto.randomUUID().replace(/-/g, '') }, {
+      const projectIds = role === 'member' ? [...single].filter((id) => !access.has(projects.find((p) => p.id === id)?.client_id ?? '')) : []
+      createRow<Invite>('invites', { email, role, client_ids: role === 'member' ? [...access] : [], ...(projectIds.length ? { project_ids: projectIds } : {}), token: crypto.randomUUID().replace(/-/g, '') }, {
         entity: 'member', action: 'invited', message: `invited ${email} as ${role}`,
       })
     }
@@ -90,6 +93,41 @@ export function InviteModal({ open, onClose }: { open: boolean; onClose: () => v
                 </label>
               ))}
             </div>
+            <span className="hint">Every project for a checked client, and they can create new ones.</span>
+          </div>
+        )}
+        {role === 'member' && accessV2Ready && (
+          <div className="field">
+            <span className="lbl">Or single projects</span>
+            <div className="card" style={{ maxHeight: 200, overflowY: 'auto' }}>
+              {projects.filter((p) => OPEN_PROJECT(p) && !access.has(p.client_id)).length === 0 && <div className="empty sm"><p>No other open projects.</p></div>}
+              {projects
+                .filter((p) => OPEN_PROJECT(p) && !access.has(p.client_id))
+                .map((p) => {
+                  const c = clients.find((x) => x.id === p.client_id)
+                  return (
+                    <label key={p.id} className="check-row">
+                      <input
+                        type="checkbox"
+                        className="cb"
+                        checked={single.has(p.id)}
+                        onChange={(e) =>
+                          setSingle((s) => {
+                            const n = new Set(s)
+                            if (e.target.checked) n.add(p.id)
+                            else n.delete(p.id)
+                            return n
+                          })
+                        }
+                      />
+                      {c && <ClientMark client={c} size="sm" />}
+                      <span className="txt trunc">{shortProjectTitle(p.title)}</span>
+                      <span className="xs muted trunc">{c ? clientDisplayName(c) : ''}</span>
+                    </label>
+                  )
+                })}
+            </div>
+            <span className="hint">Only that project and its tasks.</span>
           </div>
         )}
       </div>

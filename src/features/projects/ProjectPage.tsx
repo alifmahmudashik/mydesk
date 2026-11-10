@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Archive, Calendar, Copy, Edit3, FileText, Filter, Folder, Lock, MoreHorizontal, Pin, PinOff, Plus, Trash2, UserPlus, X } from 'lucide-react'
+import { Archive, Calendar, Clock, Copy, Edit3, FileText, Filter, Folder, Lock, MoreHorizontal, Pin, PinOff, Plus, Trash2, UserPlus, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
 import { useUI } from '@/data/ui'
-import { archiveProject, createTask, deleteProject, duplicateForNextMonth, setProjectStatus, updateProject } from '@/data/actions'
+import { archiveProject, createTask, deleteProject, duplicateForNextMonth, hourlyAmount, projectMinutes, setProjectStatus, updateProject } from '@/data/actions'
 import { useIsAdmin } from '@/hooks/usePermissions'
 import { pushRecent } from '@/components/layout/CommandPalette'
 import { Topbar, Empty } from '@/components/ui/layout'
@@ -17,6 +17,8 @@ import { Composer, MentionText } from '@/components/ui/mentions'
 import { ConfirmDialog } from '@/components/ui/modal'
 import { DoneRow, TaskGroup, TaskListRow } from '@/components/domain/TaskViews'
 import { CodeSnippets } from '@/components/domain/CodeSnippets'
+import { ProjectTimePanel } from '@/components/domain/TimeTracking'
+import { ShareProjectModal } from '@/features/projects/ShareProjectModal'
 import { ProjectFormModal } from '@/features/create/ProjectFormModal'
 import { Popover } from '@/components/ui/popover'
 import { DateInput } from '@/components/ui/date-picker'
@@ -24,12 +26,12 @@ import { MonthInput } from '@/components/ui/month-picker'
 import { MoneyInput } from '@/components/ui/field'
 import { SUPPORTED_CURRENCIES } from '@/lib/currency'
 import { monthLabel } from '@/components/ui/month-picker'
-import { clientDisplayName, effectivePaymentStatus, hasWorkMonthColumn, projectWorkDate, eligibleAssignees, profileDisplayName, profileFullName, shortProjectTitle, isAssignedTo } from '@/lib/derive'
-import { formatDate, formatFeedAgo, formatMoney } from '@/lib/format'
+import { clientDisplayName, effectivePaymentStatus, hasWorkMonthColumn, projectWorkDate, eligibleAssignees, profileDisplayName, profileFullName, shortProjectTitle, isAssignedTo, projectTeam, hasClientAccess } from '@/lib/derive'
+import { formatDate, formatFeedAgo, formatMinutes, formatMoney } from '@/lib/format'
 import { accessStatus, billingLabel, paymentStatus, priorityMeta, projectStatus, taskRing, taskStatus } from '@/lib/status'
 import type { AccessItem, AccessStatus, Priority, ProjectNote, ProjectStatus, Task, TaskStatus, BillingType, Project } from '@/types'
 
-type Tab = 'tasks' | 'overview' | 'notes' | 'code' | 'access' | 'activity'
+type Tab = 'tasks' | 'overview' | 'notes' | 'code' | 'time' | 'access' | 'activity'
 const RING: Record<ProjectStatus, string> = { not_started: '', in_progress: 'prog', waiting_for_client: 'wait', blocked: 'block', completed: 'done', finished: 'done', cancelled: 'cancel' }
 
 export function ProjectPage() {
@@ -37,12 +39,14 @@ export function ProjectPage() {
   const navigate = useNavigate()
   const isAdmin = useIsAdmin()
   const { openCreate } = useUI()
-  const { projects, clients, tasks, profiles, clientMembers, notes, accessItems, activity, payments, invoices, snippets, me } = useData()
+  const { projects, clients, tasks, profiles, clientMembers, projectMembers, notes, accessItems, activity, payments, invoices, snippets, me } = useData()
   const [params, setParams] = useSearchParams()
   const tab = (params.get('tab') as Tab) || 'tasks'
   const setTab = (t: Tab) => setParams(t === 'tasks' ? {} : { tab: t }, { replace: true })
   const [editOpen, setEditOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
+  const timeEntries = useData((s) => s.timeEntries)
   const [filter, setFilter] = useState<'all' | 'mine' | 'dated' | 'late'>('all')
 
   const project = projects.find((p) => p.id === id)
@@ -54,7 +58,7 @@ export function ProjectPage() {
 
   const projectTasks = useMemo(() => tasks.filter((t) => t.project_id === id && t.status !== 'cancelled'), [tasks, id])
   const projectNotes = notes.filter((n) => n.project_id === id).sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || b.created_at.localeCompare(a.created_at))
-  const access = accessItems.filter((a) => a.project_id === id)
+  const checklist = accessItems.filter((a) => a.project_id === id)
   const history = activity.filter((a) => a.project_id === id || a.entity_id === id).sort((a, b) => b.created_at.localeCompare(a.created_at))
   const linkedPayments = payments.filter((p) => p.project_ids?.includes(id))
 
@@ -69,9 +73,12 @@ export function ProjectPage() {
 
   const done = projectTasks.filter((t) => t.status === 'done')
   const pct = projectTasks.length ? Math.round((done.length / projectTasks.length) * 100) : 0
-  const granted = new Set(clientMembers.filter((m) => m.client_id === project.client_id).map((m) => m.user_id))
-  const team = profiles.filter((p) => p.role === 'member' && granted.has(p.id))
-  const people = eligibleAssignees(project.client_id, profiles, clientMembers)
+  const access = projectTeam(project, profiles, clientMembers, projectMembers)
+  const team = access.map((a) => a.profile)
+  // Owners/admins and members with the whole client can share; project-only members can't.
+  const wholeClient = hasClientAccess(me, project.client_id, clientMembers)
+  const minutes = timeEntries.filter((e) => e.project_id === project.id).reduce((s, e) => s + (Number(e.minutes) || 0), 0)
+  const people = eligibleAssignees(project.client_id, profiles, clientMembers, project.id, projectMembers)
   const pinnedNote = projectNotes[0]
 
   const filtered = projectTasks.filter((t) => {
@@ -92,18 +99,19 @@ export function ProjectPage() {
           { label: shortProjectTitle(project.title) },
         ]}
       >
-        {isAdmin && (
-          <Link className="btn hide-sm" to={`/team?client=${project.client_id}`}>
+        {wholeClient && (
+          <button type="button" className="btn hide-sm" onClick={() => setShareOpen(true)}>
             <UserPlus className="i" />Share
-          </Link>
+          </button>
         )}
         <Menu trigger={({ toggle }) => <button type="button" className="btn btn-icon" aria-label="More" onClick={toggle}><MoreHorizontal className="i" /></button>}>
           <MenuItem icon={<Edit3 className="i" />} onSelect={() => setEditOpen(true)}>Edit project</MenuItem>
           {isAdmin && <MenuItem icon={<FileText className="i" />} onSelect={() => navigate(`/invoices/new?client=${project.client_id}&projects=${project.id}`)}>Create invoice</MenuItem>}
-          <MenuItem icon={<Copy className="i" />} onSelect={() => { const c = duplicateForNextMonth(project); navigate(`/projects/${c.id}`) }}>Duplicate for next month</MenuItem>
+          {wholeClient && <MenuItem icon={<UserPlus className="i" />} onSelect={() => setShareOpen(true)}>Share</MenuItem>}
+          {wholeClient && <MenuItem icon={<Copy className="i" />} onSelect={() => { const c = duplicateForNextMonth(project); navigate(`/projects/${c.id}`) }}>Duplicate for next month</MenuItem>}
           <MenuSep />
           <MenuItem icon={<Archive className="i" />} onSelect={() => { archiveProject(project, !project.archived_at); toast.success(project.archived_at ? 'Project restored' : 'Project archived') }}>{project.archived_at ? 'Restore' : 'Archive'}</MenuItem>
-          <MenuItem danger icon={<Trash2 className="i" />} onSelect={() => setConfirmDelete(true)}>Delete</MenuItem>
+          {wholeClient && <MenuItem danger icon={<Trash2 className="i" />} onSelect={() => setConfirmDelete(true)}>Delete</MenuItem>}
         </Menu>
       </Topbar>
 
@@ -168,7 +176,23 @@ export function ProjectPage() {
               <MenuItem key={b} on={(project.billing_type ?? 'retainer') === b} onSelect={() => updateProject(project, { billing_type: b })}>{billingLabel[b]}</MenuItem>
             ))}
           </Menu>
-          {isAdmin && (
+          {isAdmin && project.billing_type === 'hourly' && (
+            <Popover
+              title="Hourly rate"
+              width={280}
+              trigger={({ open, toggle }) => (
+                <button type="button" className={`chip${project.hourly_rate != null ? '' : ' dashed'}${open ? ' on' : ''}`} title="Only owners and admins see this" onClick={toggle}>
+                  <Lock className="i i-sm" />
+                  {project.hourly_rate != null
+                    ? <>{formatMoney(Number(project.hourly_rate), project.currency)}/h<span className="chip-sub">· {formatMinutes(minutes)} = {formatMoney(Number(project.amount) || 0, project.currency)}</span></>
+                    : 'Hourly rate · set rate'}
+                </button>
+              )}
+            >
+              {(close) => <RateEditor project={project} onDone={close} />}
+            </Popover>
+          )}
+          {isAdmin && project.billing_type !== 'hourly' && (
             <Popover
               title="Budget"
               width={280}
@@ -200,7 +224,8 @@ export function ProjectPage() {
             { id: 'overview', label: 'Overview' },
             { id: 'notes', label: 'Notes', count: projectNotes.length || undefined },
             { id: 'code', label: 'Code', count: snippets.filter((s) => s.project_id === project.id).length || undefined },
-            { id: 'access', label: 'Access checklist', count: access.length || undefined },
+            { id: 'time', label: 'Time' },
+            { id: 'access', label: 'Access checklist', count: checklist.length || undefined },
             { id: 'activity', label: 'Activity' },
           ]}
         />
@@ -238,6 +263,8 @@ export function ProjectPage() {
                   {client ? <Link className="row-sm m" to={`/clients/${client.id}`}><ClientMark client={client} size="xs" />{clientDisplayName(client)}</Link> : <span>—</span>}
                   <span>Team</span>
                   <AvatarStack profiles={team} />
+                  <span>Time</span>
+                  <button type="button" className="link-btn small row-sm" style={{ justifySelf: 'start' }} onClick={() => setTab('time')}><Clock className="i i-xs" />{formatMinutes(minutes)} logged</button>
                   {project.link_url && (
                     <>
                       <span>Link</span>
@@ -313,15 +340,15 @@ export function ProjectPage() {
                   </section>
                   <section className="card card-b stack">
                     <div className="label-caps">Team access</div>
-                    {team.length === 0 && <span className="small muted">Only owners and admins can see this project.</span>}
-                    {team.map((p) => (
+                    {access.length === 0 && <span className="small muted">Only owners and admins can see this project.</span>}
+                    {access.map(({ profile: p, scope }) => (
                       <div className="row" key={p.id}>
                         <Avatar profile={p} size="md" />
                         <div className="grow" style={{ minWidth: 0 }}><div className="small m">{profileFullName(p)}</div><div className="xs muted trunc">{p.email}</div></div>
-                        <span className="pill">Member</span>
+                        <span className="pill" title={scope === 'client' ? 'Sees every project for this client' : 'Sees only this project'}>{scope === 'client' ? 'Whole client' : 'This project'}</span>
                       </div>
                     ))}
-                    {isAdmin && <Link className="link small" to={`/team?client=${project.client_id}`}>Manage access →</Link>}
+                    {wholeClient && <button type="button" className="link-btn small" style={{ textAlign: 'left' }} onClick={() => setShareOpen(true)}>Manage access →</button>}
                   </section>
                 </div>
               </div>
@@ -334,7 +361,8 @@ export function ProjectPage() {
               <CodeSnippets projectId={project.id} />
             </div>
           )}
-          {tab === 'access' && <AccessPanel projectId={project.id} items={access} />}
+          {tab === 'time' && <ProjectTimePanel project={project} />}
+          {tab === 'access' && <AccessPanel projectId={project.id} items={checklist} />}
 
           {tab === 'activity' && (
             <div className="content narrow" style={{ paddingTop: 20, gap: 2 }}>
@@ -354,6 +382,7 @@ export function ProjectPage() {
       </div>
 
       <ProjectFormModal open={editOpen} onClose={() => setEditOpen(false)} project={project} />
+      <ShareProjectModal open={shareOpen} onClose={() => setShareOpen(false)} project={project} />
       <ConfirmDialog
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
@@ -483,6 +512,33 @@ function AccessPanel({ projectId, items }: { projectId: string; items: AccessIte
         </div>
       </div>
     </div>
+  )
+}
+
+/** Hourly projects: the rate per hour. The amount becomes logged hours × rate. */
+function RateEditor({ project, onDone }: { project: Project; onDone: () => void }) {
+  const [rate, setRate] = useState(project.hourly_rate != null ? String(project.hourly_rate) : '')
+  const [currency, setCurrency] = useState(project.currency)
+  const mins = projectMinutes(project.id)
+  const n = rate.trim() ? Number(rate) || 0 : null
+  const save = () => {
+    if (n !== (project.hourly_rate ?? null) || currency !== project.currency) {
+      updateProject(project, { hourly_rate: n, currency, ...(n != null ? { amount: hourlyAmount(project.id, n) } : {}) })
+      toast.success('Hourly rate updated')
+    }
+    onDone()
+  }
+  return (
+    <form className="pop-form" onSubmit={(e) => { e.preventDefault(); save() }}>
+      <MoneyInput amount={rate} currency={currency} onAmount={setRate} onCurrency={setCurrency} currencies={[...SUPPORTED_CURRENCIES]} />
+      <span className="hint">
+        {formatMinutes(mins)} logged{n != null ? ` × ${formatMoney(n, currency)}/h = ${formatMoney(hourlyAmount(project.id, n), currency)}` : ''}. The amount and its open payment follow as time is logged.
+      </span>
+      <div className="pop-actions">
+        <button type="button" className="btn btn-sm" onClick={onDone}>Cancel</button>
+        <button type="submit" className="btn btn-sm btn-pri">Save</button>
+      </div>
+    </form>
   )
 }
 

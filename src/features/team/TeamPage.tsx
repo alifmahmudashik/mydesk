@@ -26,7 +26,7 @@ export function inviteLink(inv: Invite) {
 export function TeamPage() {
   const isAdmin = useIsAdmin()
   const { openCreate } = useUI()
-  const { profiles, clients, projects, tasks, clientMembers, invites, me, onlineIds, demoMode, createRow, deleteRow, updateRow } = useData()
+  const { profiles, clients, projects, tasks, clientMembers, projectMembers, invites, me, onlineIds, demoMode, createRow, deleteRow, updateRow } = useData()
   const [params, setParams] = useSearchParams()
   const focusClient = params.get('client')
   const tab = (params.get('tab') as 'members' | 'access' | 'roles') || (focusClient ? 'access' : 'members')
@@ -108,8 +108,9 @@ export function TeamPage() {
                   <tbody>
                     {profiles.map((p) => {
                       const granted = clients.filter((c) => clientMembers.some((m) => m.client_id === c.id && m.user_id === p.id))
+                      const single = projectMembers.filter((m) => m.user_id === p.id && !granted.some((c) => projects.find((x) => x.id === m.project_id)?.client_id === c.id)).length
                       // Current work only: open projects under the clients they can see (not every project ever made).
-                      const nProjects = projects.filter((x) => OPEN_PROJECT(x) && granted.some((c) => c.id === x.client_id)).length
+                      const nProjects = projects.filter((x) => OPEN_PROJECT(x) && (granted.some((c) => c.id === x.client_id) || projectMembers.some((m) => m.user_id === p.id && m.project_id === x.id))).length
                       const open = tasks.filter((t) => isAssignedTo(t, p.id) && OPEN_TASK(t)).length
                       const to = p.id === me?.id ? '/account' : `/team/${p.id}`
                       return (
@@ -127,12 +128,13 @@ export function TeamPage() {
                           <td>
                             {p.role !== 'member' ? (
                               <span className="muted">All {clients.length} clients</span>
-                            ) : granted.length === 0 ? (
+                            ) : granted.length === 0 && single === 0 ? (
                               <span className="faint small">No clients yet</span>
                             ) : (
                               <span className="row-sm wrap">
                                 {granted.slice(0, 3).map((c) => <span key={c.id} className="tag" style={{ background: `${clientColor(c)}1F`, color: clientColor(c) }}>{clientDisplayName(c)}</span>)}
                                 {granted.length > 3 && <span className="xs muted">+{granted.length - 3}</span>}
+                                {single > 0 && <span className="tag" title="Shared one project at a time">{single} single project{single === 1 ? '' : 's'}</span>}
                                 <span className="xs muted">{nProjects} active project{nProjects === 1 ? '' : 's'}</span>
                               </span>
                             )}
@@ -171,7 +173,7 @@ export function TeamPage() {
                 <div className="card-h">
                   <div>
                     <h2 className="h2">Client access</h2>
-                    <div className="xs muted" style={{ marginTop: 2 }}>Granting a client opens every project and task under it.</div>
+                    <div className="xs muted" style={{ marginTop: 2 }}>Granting a client opens every project and task under it. To share just one project, use Share on the project or the member’s page.</div>
                   </div>
                   <span className="small muted">{draft.size} grant{draft.size === 1 ? '' : 's'}</span>
                 </div>
@@ -244,7 +246,7 @@ export function TeamPage() {
               <div className="grid-3">
                 <div className="role-card"><span className="pill pri">Owner</span><p>Everything: all clients, money, invoices, billing and team settings. Only one owner.</p></div>
                 <div className="role-card"><span className="pill teal">Admin</span><p>Every client and project, payments and invoices. Can invite people. Can’t remove the owner.</p></div>
-                <div className="role-card"><span className="pill">Member</span><p>Projects, tasks, notes and comments under the clients you grant. No budgets, payments or contact details.</p></div>
+                <div className="role-card"><span className="pill">Member</span><p>With a whole client: every project under it, and they can create projects and assign tasks. With a single project: only that project, where they can add and assign tasks. No budgets, payments or contact details.</p></div>
               </div>
             )}
           </div>

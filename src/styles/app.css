@@ -820,3 +820,11 @@ html.desktop .side::-webkit-scrollbar { width: 0; } /* still scrolls with the wh
 .btn-destroy { background: var(--bad-dot) !important; border-color: var(--bad-dot) !important; color: #fff !important; }
 .btn-destroy:hover:not(:disabled) { filter: brightness(.94); }
 .btn-destroy:disabled { opacity: .5; }
+
+/* Running timer in the sidebar footer */
+.run-timer { display: flex; align-items: center; gap: 8px; padding: 8px 10px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.run-timer a { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; color: inherit; text-decoration: none; }
+.run-timer b { font-size: 13px; font-variant-numeric: tabular-nums; }
+.run-timer small { font-size: 11.5px; color: var(--mute); }
+.run-timer .btn-icon { width: 26px; height: 26px; flex: none; }
+.time-row { min-height: 26px; }

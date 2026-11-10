@@ -2,9 +2,9 @@ import { addMonths, format, parseISO } from 'date-fns'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
 import { clientDisplayName, profileDisplayName, taskAssigneeIds, taskRef } from '@/lib/derive'
-import { formatMoney, todayISO } from '@/lib/format'
+import { formatMinutes, formatMoney, todayISO } from '@/lib/format'
 import { projectStatus, taskStatus } from '@/lib/status'
-import type { Payment, Project, ProjectStatus, Subtask, Task, TaskComment, TaskStatus } from '@/types'
+import type { ClientNote, Payment, Project, ProjectStatus, Subtask, Task, TaskComment, TaskStatus, TimeEntry, TimeTimer } from '@/types'
 
 const S = () => useData.getState()
 const isAdmin = () => S().me?.role !== 'member'
@@ -99,6 +99,7 @@ export function deleteTask(task: Task) {
     attachments: s.attachments.filter((x) => x.task_id !== task.id),
     timeEntries: s.timeEntries.filter((x) => x.task_id !== task.id),
   }))
+  mirrorHourlyAmount(task.project_id)
 }
 
 export function duplicateTask(task: Task) {
@@ -212,6 +213,9 @@ export function deleteProject(project: Project) {
       tasks: s.tasks.filter((t) => !taskIds.has(t.id)),
       notes: s.notes.filter((n) => n.project_id !== project.id),
       accessItems: s.accessItems.filter((a) => a.project_id !== project.id),
+      timeEntries: s.timeEntries.filter((e) => e.project_id !== project.id),
+      projectMembers: s.projectMembers.filter((m) => m.project_id !== project.id),
+      timers: s.timers.filter((t) => t.project_id !== project.id),
       subtasks: s.subtasks.filter((x) => !taskIds.has(x.task_id)),
       comments: s.comments.filter((x) => !taskIds.has(x.task_id)),
     }
@@ -318,6 +322,117 @@ export function taskLink(task: Task) {
 export function taskLabel(task: Task) {
   const project = S().projects.find((p) => p.id === task.project_id)
   return taskRef(task, project)
+}
+
+// ---------------------------------------------------------------- client notes
+
+/** A client's note and whether the team can read it. Falls back to the old clients.notes
+ *  column until schema.sql has been run. */
+export function clientNoteFor(clientId: string) {
+  const row = S().clientNotes.find((n) => n.client_id === clientId)
+  if (row) return { body: row.body, shared: row.shared }
+  if (!S().accessV2Ready) return { body: S().clients.find((c) => c.id === clientId)?.notes ?? '', shared: false }
+  return { body: '', shared: false }
+}
+
+export function saveClientNote(clientId: string, patch: { body?: string; shared?: boolean }) {
+  const name = clientDisplayName(S().clients.find((c) => c.id === clientId))
+  if (!S().accessV2Ready) {
+    if (patch.body !== undefined) S().updateRow('clients', clientId, { notes: patch.body.trim() || null })
+    return
+  }
+  const row = S().clientNotes.find((n) => n.client_id === clientId)
+  const log = { entity: 'client' as const, entityId: clientId, action: 'updated' as const, message: patch.shared !== undefined && patch.body === undefined ? `${patch.shared ? 'shared' : 'unshared'} the notes for ${name}` : `updated the notes for ${name}` }
+  if (row) S().updateRow('client_notes', row.id, { ...patch, ...(patch.body !== undefined ? { body: patch.body.trim() } : {}) }, log)
+  else S().createRow<ClientNote>('client_notes', { client_id: clientId, body: (patch.body ?? '').trim(), shared: Boolean(patch.shared) }, log)
+}
+
+// ---------------------------------------------------------------- time
+
+/** Minutes logged on a project, its tasks included. */
+export function projectMinutes(projectId: string | undefined) {
+  if (!projectId) return 0
+  return S().timeEntries.filter((e) => e.project_id === projectId).reduce((s, e) => s + (Number(e.minutes) || 0), 0)
+}
+
+/** What an hourly project is worth at this rate: logged hours × rate. */
+export function hourlyAmount(projectId: string | undefined, rate: number) {
+  return Math.round(((projectMinutes(projectId) * rate) / 60) * 100) / 100
+}
+
+/** The database keeps an hourly project's amount (and its own open payment) at hours × rate.
+ *  Show the same thing right away instead of waiting for a reload. */
+export function mirrorHourlyAmount(projectId: string | undefined) {
+  const project = S().projects.find((p) => p.id === projectId)
+  if (!project || project.billing_type !== 'hourly' || project.hourly_rate == null) return
+  const amount = hourlyAmount(project.id, Number(project.hourly_rate))
+  useData.setState((s) => {
+    const linked = s.payments.filter((p) => (p.project_ids ?? []).includes(project.id))
+    const own = linked.length === 1 && linked[0].project_ids.length === 1 && !['paid', 'refunded'].includes(linked[0].status) ? linked[0].id : null
+    return {
+      projects: s.projects.map((p) => (p.id === project.id ? { ...p, amount } : p)),
+      payments: own ? s.payments.map((p) => (p.id === own ? { ...p, amount } : p)) : s.payments,
+    }
+  })
+}
+
+/** Logs time on a task, or on the project itself when there's no task. */
+export function logTime(input: { projectId: string; taskId?: string | null; minutes: number; date?: string; note?: string | null }) {
+  const task = input.taskId ? S().tasks.find((t) => t.id === input.taskId) : undefined
+  const project = S().projects.find((p) => p.id === (task?.project_id ?? input.projectId))
+  const entry = S().createRow<TimeEntry>('time_entries', {
+    task_id: task?.id ?? null,
+    project_id: project?.id ?? input.projectId,
+    minutes: input.minutes,
+    logged_on: input.date || todayISO(),
+    note: input.note?.trim() || null,
+  })
+  S().logActivity({
+    entity: 'time',
+    entityId: task?.id ?? input.projectId,
+    action: 'logged',
+    message: `logged ${formatMinutes(input.minutes)} on “${task?.title ?? project?.title ?? 'the project'}”`,
+    projectId: project?.id ?? input.projectId,
+  })
+  mirrorHourlyAmount(project?.id)
+  return entry
+}
+
+export function deleteTimeEntry(entry: TimeEntry) {
+  S().deleteRow('time_entries', entry.id)
+  mirrorHourlyAmount(entry.project_id ?? undefined)
+}
+
+/** My running timer, if any. */
+export function myTimer() {
+  const me = S().me?.id
+  return S().timers.find((t) => t.user_id === me)
+}
+
+/** Starts a timer on a task or a project. A timer already running elsewhere is stopped and logged first. */
+export function startTimer(projectId: string, taskId?: string | null) {
+  const running = myTimer()
+  if (running) stopTimer(running)
+  S().createRow<TimeTimer>('time_timers', { project_id: projectId, task_id: taskId ?? null, started_at: new Date().toISOString() } as TimeTimer)
+}
+
+/** Stops a timer and logs the time (rounded to the nearest minute). Under 30 seconds logs nothing. */
+export function stopTimer(timer: TimeTimer = myTimer()!) {
+  if (!timer) return
+  S().deleteRow('time_timers', timer.id)
+  const ms = Date.now() - new Date(timer.started_at).getTime()
+  if (ms < 30_000) {
+    toast('Timer stopped', { description: 'Under a minute, so nothing was logged.' })
+    return
+  }
+  const minutes = Math.max(1, Math.round(ms / 60_000))
+  logTime({ projectId: timer.project_id, taskId: timer.task_id, minutes, note: timer.note })
+  toast.success(`Logged ${formatMinutes(minutes)}`)
+}
+
+/** Throws away a running timer without logging anything. */
+export function discardTimer(timer: TimeTimer) {
+  S().deleteRow('time_timers', timer.id)
 }
 
 // ---------------------------------------------------------------- invoices

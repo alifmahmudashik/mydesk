@@ -13,7 +13,7 @@ export function buildExport() {
     project_notes: s.notes, task_comments: s.comments, task_attachments: s.attachments, time_entries: s.timeEntries,
     task_watchers: s.watchers, code_snippets: s.snippets, payments: s.payments, invoices: s.invoices,
     payment_reminders: s.reminders, invoice_settings: s.invoiceSettings, profiles: s.profiles,
-    client_members: s.clientMembers, invites: s.invites, activity_log: s.activity, notifications: s.notifications,
+    client_members: s.clientMembers, project_members: s.projectMembers, client_notes: s.clientNotes, invites: s.invites, activity_log: s.activity, notifications: s.notifications,
     learning_items: s.learning, learning_goals: s.goals, learning_topics: s.topics, learning_lessons: s.lessons,
     learning_resources: s.resources, learning_topic_members: s.topicMembers, learning_progress: s.progress,
     team_links: s.teamLinks,

@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { useData } from '@/data/store'
 import { invoiceTotal } from '@/lib/invoice-math'
 import { useUI } from '@/data/ui'
-import { paymentTitle } from '@/data/actions'
+import { clientNoteFor, paymentTitle, saveClientNote } from '@/data/actions'
 import { useIsAdmin } from '@/hooks/usePermissions'
 import { pushRecent } from '@/components/layout/CommandPalette'
 import { Topbar, Content, Empty } from '@/components/ui/layout'
@@ -19,7 +19,7 @@ import { RemindModal } from '@/features/payments/RemindModal'
 import { PaymentModal } from '@/features/payments/PaymentModal'
 import { ClientProjects } from '@/features/clients/ClientProjects'
 import { PrivacyToggle } from '@/components/ui/privacy-toggle'
-import { clientColor, clientDisplayName, clientSecondaryName, effectivePaymentStatus, invoiceStatus, isOpenPayment, OPEN_PROJECT, profileDisplayName, sumByCurrency } from '@/lib/derive'
+import { clientColor, clientDisplayName, clientSecondaryName, effectivePaymentStatus, hasClientAccess, invoiceStatus, isOpenPayment, OPEN_PROJECT, profileDisplayName, sumByCurrency } from '@/lib/derive'
 import { formatDate, formatMoney, lateLabel } from '@/lib/format'
 import { clientStatus, paymentStatus } from '@/lib/status'
 import type { Payment } from '@/types'
@@ -31,19 +31,24 @@ export function ClientPage() {
   const navigate = useNavigate()
   const isAdmin = useIsAdmin()
   const { openCreate } = useUI()
-  const { clients, projects, tasks, payments, invoices, profiles, clientMembers, me, updateRow } = useData()
+  const { clients, projects, tasks, payments, invoices, profiles, clientMembers, projectMembers, clientNotes, me, updateRow } = useData()
   const [params, setParams] = useSearchParams()
   const tab = (params.get('tab') as Tab) || 'projects'
   const [note, setNote] = useState('')
+  const [shared, setShared] = useState(false)
   const [remind, setRemind] = useState<Payment | null>(null)
   const [editPay, setEditPay] = useState<Payment | undefined>()
   const [confirmArchive, setConfirmArchive] = useState(false)
 
   const client = clients.find((c) => c.id === id)
   useEffect(() => {
-    setNote(client?.notes ?? '')
+    if (client) {
+      const n = clientNoteFor(client.id)
+      setNote(n.body)
+      setShared(n.shared)
+    }
     if (client) pushRecent(`/clients/${client.id}`)
-  }, [client?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [client?.id, clientNotes.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!client) {
     return (
@@ -63,6 +68,11 @@ export function ClientPage() {
   const open = cPayments.filter(isOpenPayment)
   const cInvoices = invoices.filter((i) => i.client_id === id).sort((a, b) => (b.issue_date ?? '').localeCompare(a.issue_date ?? ''))
   const team = profiles.filter((u) => clientMembers.some((m) => m.client_id === id && m.user_id === u.id))
+  // People who only have some of this client's projects.
+  const projectOnly = profiles.filter((u) => !team.includes(u) && projectMembers.some((m) => m.user_id === u.id && cProjects.some((p) => p.id === m.project_id)))
+  const savedNote = clientNoteFor(id)
+  const sharedNote = clientNotes.find((n) => n.client_id === id && n.shared && n.body.trim())
+  const canAddProject = hasClientAccess(me, id, clientMembers)
 
   const statusOfInvoice = (invId: string) => {
     const inv = invoices.find((i) => i.id === invId)
@@ -88,7 +98,9 @@ export function ClientPage() {
           { id: 'payments' as const, label: 'Payments', count: open.length || undefined },
           { id: 'notes' as const, label: 'Notes' },
         ]
-      : []),
+      : sharedNote
+        ? [{ id: 'notes' as const, label: 'Notes' }]
+        : []),
   ]
 
   return (
@@ -101,11 +113,11 @@ export function ClientPage() {
         ) : (
           <button type="button" className="btn btn-icon" aria-label="Archive client" title="Archive client" onClick={() => setConfirmArchive(true)}><Archive className="i" /></button>
         ))}
-        <Menu trigger={({ toggle }) => <button type="button" className="btn btn-pri" onClick={toggle}><Plus className="i" />New</button>}>
+        {(isAdmin || canAddProject) && <Menu trigger={({ toggle }) => <button type="button" className="btn btn-pri" onClick={toggle}><Plus className="i" />New</button>}>
           <MenuItem icon={<Folder className="i" />} onSelect={() => openCreate('project', { client_id: id })}>Project for {first}</MenuItem>
           {isAdmin && <MenuItem icon={<FileText className="i" />} onSelect={() => navigate(`/invoices/new?client=${id}`)}>Invoice</MenuItem>}
           {isAdmin && <MenuItem icon={<CreditCard className="i" />} onSelect={() => openCreate('payment', { client_id: id })}>Payment</MenuItem>}
-        </Menu>
+        </Menu>}
       </Topbar>
       <Content>
         <div className="client-head">
@@ -204,32 +216,58 @@ export function ClientPage() {
                   </div>
                 )}
 
-                {tab === 'notes' && (
+                {tab === 'notes' && isAdmin && (
                   <div className="stack">
                     <div className="composer">
-                      <textarea placeholder="Private note about this client…" aria-label="Client note" value={note} onChange={(e) => setNote(e.target.value)} rows={4} />
-                      <div className="row between">
-                        <span className="xs muted">Only owners and admins see client notes</span>
+                      <textarea placeholder="Note about this client…" aria-label="Client note" value={note} onChange={(e) => setNote(e.target.value)} rows={4} />
+                      <div className="row between wrap">
+                        <label className="row-sm small" style={{ cursor: 'pointer' }} title="Everyone with access to this client (or one of its projects) can read the note">
+                          <input
+                            type="checkbox"
+                            className="cb"
+                            checked={shared}
+                            onChange={(e) => {
+                              setShared(e.target.checked)
+                              // Sharing an already-saved note takes effect straight away.
+                              if (savedNote.body.trim() && note.trim() === savedNote.body.trim()) {
+                                saveClientNote(client.id, { shared: e.target.checked })
+                                toast.success(e.target.checked ? 'Note shared with the team' : 'Note is private again')
+                              }
+                            }}
+                          />
+                          Share with team
+                          <span className="xs muted">{shared ? '· everyone with access to this client can read it' : '· only owners and admins'}</span>
+                        </label>
                         <button
                           type="button"
                           className="btn btn-pri btn-sm"
-                          disabled={note === (client.notes ?? '')}
+                          disabled={note.trim() === savedNote.body.trim() && shared === savedNote.shared}
                           onClick={() => {
-                            updateRow('clients', client.id, { notes: note.trim() || null })
-                            toast.success('Note saved')
+                            saveClientNote(client.id, { body: note, shared })
+                            toast.success(shared ? 'Note saved and shared' : 'Note saved')
                           }}
                         >
                           Save note
                         </button>
                       </div>
                     </div>
-                    {client.notes && (
+                    {savedNote.body.trim() && (
                       <div className="note-card">
-                        <div className="row-sm"><Avatar profile={me} size="xs" /><b className="small m">Client notes</b></div>
-                        <p style={{ whiteSpace: 'pre-wrap' }}>{client.notes}</p>
+                        <div className="row-sm"><Avatar profile={me} size="xs" /><b className="small m">Client notes</b>{savedNote.shared && <span className="pill">Shared with team</span>}</div>
+                        <p style={{ whiteSpace: 'pre-wrap' }}>{savedNote.body}</p>
                       </div>
                     )}
                   </div>
+                )}
+                {tab === 'notes' && !isAdmin && (
+                  sharedNote ? (
+                    <div className="note-card">
+                      <div className="row-sm"><b className="small m">Client notes</b><span className="xs muted">· shared by the team</span></div>
+                      <p style={{ whiteSpace: 'pre-wrap' }}>{sharedNote.body}</p>
+                    </div>
+                  ) : (
+                    <Empty small title="No shared notes">Notes appear here when an owner or admin shares them.</Empty>
+                  )
                 )}
               </div>
             </div>
@@ -250,14 +288,24 @@ export function ClientPage() {
             )}
             <section className="card card-b stack">
               <div className="row between"><span className="label-caps">Team with access</span>{isAdmin && <Link className="link small" to={`/team?client=${id}`}>Manage</Link>}</div>
-              {team.length === 0 && <span className="small muted">Only owners and admins.</span>}
+              {team.length === 0 && projectOnly.length === 0 && <span className="small muted">Only owners and admins.</span>}
               {team.map((u) => (
                 <Link key={u.id} className="row" to={`/team/${u.id}`}>
                   <Avatar profile={u} size="md" />
                   <div className="grow small m">{profileDisplayName(u)}</div>
-                  <span className="pill">Member</span>
+                  <span className="pill" title="Every project for this client">Whole client</span>
                 </Link>
               ))}
+              {projectOnly.map((u) => {
+                const n = projectMembers.filter((m) => m.user_id === u.id && cProjects.some((p) => p.id === m.project_id)).length
+                return (
+                  <Link key={u.id} className="row" to={`/team/${u.id}`}>
+                    <Avatar profile={u} size="md" />
+                    <div className="grow small m">{profileDisplayName(u)}</div>
+                    <span className="pill" title="Only the projects shared with them">{n} project{n === 1 ? '' : 's'}</span>
+                  </Link>
+                )
+              })}
             </section>
             {isAdmin && (
               <section className="card card-b stack">
