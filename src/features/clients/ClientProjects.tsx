@@ -47,7 +47,6 @@ export function ClientProjects({ client }: { client: Client }) {
   const all = useMemo(() => projects.filter((p) => p.client_id === client.id), [projects, client.id])
   const selection = useSelection(all.map((p) => p.id))
   const sel = selection.ids
-  const selecting = sel.size > 0
   const rank = (p: Project) => (p.status === 'completed' ? 1 : p.status === 'cancelled' ? 2 : 0)
   const current = all
     .filter((p) => p.status !== 'finished')
@@ -163,12 +162,12 @@ export function ClientProjects({ client }: { client: Client }) {
       )}
 
       </SelectionProvider>
-      {selecting && (
+      {selection.isSelecting && (
         <ProjectBulkBar
           sel={selection}
           allIds={all.map((p) => p.id)}
           extra={isAdmin ? (
-            <button type="button" className="btn btn-sm" title={`Total: ${sumByCurrency(selected)}`} onClick={() => setExportText(buildChatSummary(firstName, selected))}>
+            <button type="button" className="btn btn-sm" disabled={selected.length === 0} title={`Total: ${sumByCurrency(selected)}`} onClick={() => setExportText(buildChatSummary(firstName, selected))}>
               <MessageSquare className="i i-sm" />Export message
             </button>
           ) : undefined}

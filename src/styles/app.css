@@ -862,6 +862,18 @@ html.desktop .side::-webkit-scrollbar { width: 0; } /* still scrolls with the wh
 .sel-on .li, .sel-on tr.hov { cursor: pointer; }
 .select-btn { gap: 6px; }
 .select-btn.on .n { background: var(--pri-mid); color: var(--pri-h); }
+
+/* In selection mode, disable other inputs (task complete circle, date, priority, inline edits, time log) */
+.sel-on .li > input.cb.round,
+.sel-on .li .inline-edit,
+.sel-on .li .chip.chip-sm,
+.sel-on .li .status-ring button,
+.sel-on .li .status-ring {
+  pointer-events: none;
+  opacity: 0.35;
+  cursor: not-allowed;
+  filter: grayscale(0.5);
+}
 @media (hover: none) { .cb.sel-box { opacity: 1; } }
 
 .bulk-bar {
@@ -871,6 +883,11 @@ html.desktop .side::-webkit-scrollbar { width: 0; } /* still scrolls with the wh
   background: var(--panel); border: 1px solid var(--line2); border-radius: 12px;
   box-shadow: 0 12px 36px rgba(16,16,24,.18), 0 2px 8px rgba(16,16,24,.06);
   animation: bulkIn .18s var(--ease, ease-out);
+}
+.bulk-bar .btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 .bulk-count { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--ink); white-space: nowrap; }
 .bulk-count .i { color: var(--pri); }

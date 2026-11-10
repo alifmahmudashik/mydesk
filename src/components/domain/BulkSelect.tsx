@@ -127,11 +127,11 @@ export function SelectButton({ sel, className }: { sel: Selection; className?: s
       type="button"
       className={cn('chip select-btn', active && 'on', className)}
       onClick={sel.toggleSelecting}
-      title={active ? 'Exit selection mode' : 'Select items'}
+      title={active ? 'Cancel selection mode' : 'Select items'}
       aria-pressed={active}
     >
-      <CheckSquare className="i i-sm" />
-      <span>{active ? 'Done' : 'Select'}</span>
+      {active ? <X className="i i-sm" /> : <CheckSquare className="i i-sm" />}
+      <span>{active ? 'Cancel' : 'Select'}</span>
       {active && sel.ids.size > 0 && <span className="n" style={{ marginLeft: 3 }}>{sel.ids.size}</span>}
     </button>
   )
@@ -163,9 +163,10 @@ export function TaskBulkBar({ sel, allIds }: { sel: Selection; allIds: string[] 
   const [confirm, setConfirm] = useState(false)
   const dateBtn = useRef<HTMLButtonElement>(null)
   const picked = tasks.filter((t) => sel.ids.has(t.id))
-  if (picked.length === 0) return null
+  if (!sel.isSelecting && picked.length === 0) return null
   const n = picked.length
   const s = n === 1 ? '' : 's'
+  const disabled = n === 0
 
   // People who can work on every selected task's project.
   const projectIds = [...new Set(picked.map((t) => t.project_id))]
@@ -187,7 +188,7 @@ export function TaskBulkBar({ sel, allIds }: { sel: Selection; allIds: string[] 
   return (
     <>
       <Bar count={n} total={allIds.length} onAll={() => sel.set(allIds)} onClear={sel.clear}>
-        <Menu align="left" trigger={({ toggle }) => <button type="button" className="btn btn-sm" onClick={toggle}><span className="st" />Status</button>}>
+        <Menu align="left" trigger={({ toggle }) => <button type="button" className="btn btn-sm" disabled={disabled} onClick={disabled ? undefined : toggle}><span className="st" />Status</button>}>
           <MenuTitle>Set status for {n} task{s}</MenuTitle>
           {TASK_STATUSES.map((st) => (
             <MenuItem key={st} icon={<span className={`st ${taskRing[st]}`} />} onSelect={() => { for (const t of picked) setTaskStatus(t, st); toast.success(`${n} task${s} → ${taskStatus[st].label}`) }}>
@@ -195,18 +196,18 @@ export function TaskBulkBar({ sel, allIds }: { sel: Selection; allIds: string[] 
             </MenuItem>
           ))}
         </Menu>
-        <Menu align="left" trigger={({ toggle }) => <button type="button" className="btn btn-sm" onClick={toggle}><Flag className="i i-sm" />Priority</button>}>
+        <Menu align="left" trigger={({ toggle }) => <button type="button" className="btn btn-sm" disabled={disabled} onClick={disabled ? undefined : toggle}><Flag className="i i-sm" />Priority</button>}>
           {(Object.keys(priorityMeta) as Priority[]).map((p) => (
             <MenuItem key={p} icon={<PrioBars priority={p} />} onSelect={() => { for (const t of picked) if (t.priority !== p) updateTask(t, { priority: p }, `set priority to ${priorityMeta[p].label}`); toast.success(`Priority set on ${n} task${s}`) }}>
               {priorityMeta[p].label}
             </MenuItem>
           ))}
         </Menu>
-        <button ref={dateBtn} type="button" className="btn btn-sm" onClick={() => setDateOpen((o) => !o)}><Calendar className="i i-sm" />Due date</button>
+        <button ref={dateBtn} type="button" className="btn btn-sm" disabled={disabled} onClick={disabled ? undefined : () => setDateOpen((o) => !o)}><Calendar className="i i-sm" />Due date</button>
         <Menu
           align="left"
           wide
-          trigger={({ toggle }) => <button type="button" className="btn btn-sm" onClick={toggle}><UserPlus className="i i-sm" />Assign</button>}
+          trigger={({ toggle }) => <button type="button" className="btn btn-sm" disabled={disabled} onClick={disabled ? undefined : toggle}><UserPlus className="i i-sm" />Assign</button>}
         >
           <MenuTitle>Click to add to all {n} · again to remove</MenuTitle>
           {people.map((p) => {
@@ -222,7 +223,7 @@ export function TaskBulkBar({ sel, allIds }: { sel: Selection; allIds: string[] 
           <MenuSep />
           <MenuItem icon={<Users className="i" />} onSelect={() => { for (const t of picked) if (taskAssigneeIds(t).length) setTaskAssignees(t, []) }}>Unassign all</MenuItem>
         </Menu>
-        <button type="button" className="btn btn-sm btn-danger" onClick={() => setConfirm(true)}><Trash2 className="i i-sm" />Delete</button>
+        <button type="button" className="btn btn-sm btn-danger" disabled={disabled} onClick={disabled ? undefined : () => setConfirm(true)}><Trash2 className="i i-sm" />Delete</button>
       </Bar>
       {dateOpen && (
         <CalendarPopover
@@ -261,12 +262,13 @@ export function ProjectBulkBar({ sel, allIds, extra }: { sel: Selection; allIds:
   const [confirm, setConfirm] = useState(false)
   const dateBtn = useRef<HTMLButtonElement>(null)
   const picked = projects.filter((p) => sel.ids.has(p.id))
-  if (picked.length === 0) return null
+  if (!sel.isSelecting && picked.length === 0) return null
   const n = picked.length
   const s = n === 1 ? '' : 's'
+  const disabled = n === 0
   // Only projects you hold in full can be deleted or shared (owners/admins: all).
   const manageable = picked.filter((p) => hasClientAccess(me, p.client_id, clientMembers))
-  const allArchived = picked.every((p) => p.archived_at)
+  const allArchived = picked.length > 0 && picked.every((p) => p.archived_at)
   const members = profiles.filter((p) => p.role === 'member')
 
   const share = (userId: string) => {
@@ -285,7 +287,7 @@ export function ProjectBulkBar({ sel, allIds, extra }: { sel: Selection; allIds:
   return (
     <>
       <Bar count={n} total={allIds.length} onAll={() => sel.set(allIds)} onClear={sel.clear}>
-        <Menu align="left" trigger={({ toggle }) => <button type="button" className="btn btn-sm" onClick={toggle}><span className="st" />Status</button>}>
+        <Menu align="left" trigger={({ toggle }) => <button type="button" className="btn btn-sm" disabled={disabled} onClick={disabled ? undefined : toggle}><span className="st" />Status</button>}>
           <MenuTitle>Set status for {n} project{s}</MenuTitle>
           {PROJECT_STATUSES.map((st) => (
             <MenuItem key={st} icon={<span className={`st ${RING[st]}`} />} onSelect={() => { for (const p of picked) setProjectStatus(p, st); toast.success(`${n} project${s} → ${projectStatus[st].label}`) }}>
@@ -293,20 +295,20 @@ export function ProjectBulkBar({ sel, allIds, extra }: { sel: Selection; allIds:
             </MenuItem>
           ))}
         </Menu>
-        <button ref={dateBtn} type="button" className="btn btn-sm" onClick={() => setDateOpen((o) => !o)}><Calendar className="i i-sm" />Due date</button>
-        {members.length > 0 && manageable.length > 0 && (
-          <Menu align="left" wide trigger={({ toggle }) => <button type="button" className="btn btn-sm" onClick={toggle}><UserPlus className="i i-sm" />Share</button>}>
+        <button ref={dateBtn} type="button" className="btn btn-sm" disabled={disabled} onClick={disabled ? undefined : () => setDateOpen((o) => !o)}><Calendar className="i i-sm" />Due date</button>
+        {members.length > 0 && (manageable.length > 0 || disabled) && (
+          <Menu align="left" wide trigger={({ toggle }) => <button type="button" className="btn btn-sm" disabled={disabled || manageable.length === 0} onClick={disabled || manageable.length === 0 ? undefined : toggle}><UserPlus className="i i-sm" />Share</button>}>
             <MenuTitle>Give access to {manageable.length === 1 ? 'this project' : `these ${manageable.length} projects`}</MenuTitle>
             {members.map((p) => (
               <MenuItem key={p.id} icon={<Avatar profile={p} size="xs" />} onSelect={() => share(p.id)}>{profileFullName(p)}</MenuItem>
             ))}
           </Menu>
         )}
-        <button type="button" className="btn btn-sm" onClick={() => { for (const p of picked) archiveProject(p, !allArchived); toast.success(`${allArchived ? 'Restored' : 'Archived'} ${n} project${s}`); sel.clear() }}>
+        <button type="button" className="btn btn-sm" disabled={disabled} onClick={disabled ? undefined : () => { for (const p of picked) archiveProject(p, !allArchived); toast.success(`${allArchived ? 'Restored' : 'Archived'} ${n} project${s}`); sel.clear() }}>
           {allArchived ? <ArchiveRestore className="i i-sm" /> : <Archive className="i i-sm" />}{allArchived ? 'Restore' : 'Archive'}
         </button>
         {extra}
-        {manageable.length > 0 && <button type="button" className="btn btn-sm btn-danger" onClick={() => setConfirm(true)}><Trash2 className="i i-sm" />Delete</button>}
+        {(manageable.length > 0 || disabled) && <button type="button" className="btn btn-sm btn-danger" disabled={disabled || manageable.length === 0} onClick={disabled || manageable.length === 0 ? undefined : () => setConfirm(true)}><Trash2 className="i i-sm" />Delete</button>}
       </Bar>
       {dateOpen && (
         <CalendarPopover

@@ -30,7 +30,7 @@ export function TaskListRow({ task, showProject = true, showClient = true }: { t
   const onRowClick = (e: React.MouseEvent) => {
     if (sel?.isSelecting) {
       const target = e.target as HTMLElement
-      if (target.closest('.above, button, input, select, textarea')) return
+      if (target.closest('.sel-box')) return
       e.preventDefault()
       sel.toggle(task.id)
     }
@@ -39,7 +39,21 @@ export function TaskListRow({ task, showProject = true, showClient = true }: { t
   return (
     <div className={cn('li hover', sel?.has(task.id) && 'selected')} onClick={onRowClick}>
       <SelectBox id={task.id} label={task.title} />
-      <input className="cb round above" type="checkbox" checked={done} aria-label="Mark complete" onChange={() => toggleTaskDone(task)} />
+      <input
+        className="cb round above"
+        type="checkbox"
+        checked={done}
+        disabled={Boolean(sel?.isSelecting)}
+        aria-label="Mark complete"
+        onChange={() => !sel?.isSelecting && toggleTaskDone(task)}
+        onClick={(e) => {
+          if (sel?.isSelecting) {
+            e.preventDefault()
+            e.stopPropagation()
+            sel.toggle(task.id)
+          }
+        }}
+      />
       <span className="mono xs faint hide-sm" style={{ width: 52, flex: 'none' }}>{taskRef(task, project)}</span>
       <Link
         className="grow cover"
@@ -81,7 +95,7 @@ export function DoneRow({ task }: { task: Task }) {
   const onRowClick = (e: React.MouseEvent) => {
     if (sel?.isSelecting) {
       const target = e.target as HTMLElement
-      if (target.closest('.above, button, input, select, textarea')) return
+      if (target.closest('.sel-box')) return
       e.preventDefault()
       sel.toggle(task.id)
     }
@@ -90,7 +104,7 @@ export function DoneRow({ task }: { task: Task }) {
   return (
     <div className={cn('li hover', sel?.has(task.id) && 'selected')} onClick={onRowClick}>
       <SelectBox id={task.id} label={task.title} />
-      <span className="above"><StatusRing status={task.status} onToggle={() => toggleTaskDone(task)} /></span>
+      <span className="above"><StatusRing status={task.status} onToggle={sel?.isSelecting ? undefined : () => toggleTaskDone(task)} /></span>
       <span className="mono xs faint" style={{ width: 52, flex: 'none' }}>{taskRef(task, project)}</span>
       <Link
         className="grow cover"
