@@ -9,7 +9,7 @@ import { Tabs } from '@/components/ui/tabs'
 import { Menu, MenuItem, MenuSearch } from '@/components/ui/menu'
 import { AvatarStack, ClientMark } from '@/components/ui/avatar'
 import { StatusPill } from '@/components/ui/pill'
-import { ProjectBulkBar, SelectBox, SelectionProvider, useSelection } from '@/components/domain/BulkSelect'
+import { ProjectBulkBar, SelectBox, SelectButton, SelectionProvider, useSelection } from '@/components/domain/BulkSelect'
 import { ClientGroup, groupByClient } from '@/components/domain/ClientGroup'
 import { clientDisplayName, effectivePaymentStatus, OPEN_PROJECT, sumByCurrency, taskAssigneeIds } from '@/lib/derive'
 import { formatDate, formatMoney, isOverdue } from '@/lib/format'
@@ -71,7 +71,20 @@ export function ProjectsPage() {
       <span className="row-sm" style={{ alignItems: 'flex-start' }}>
         <SelectBox id={p.id} label={p.title} />
         <span style={{ minWidth: 0 }}>
-          <Link className="m cover" to={`/projects/${p.id}`} style={{ display: 'block' }}>{p.title}</Link>
+          <Link
+            className="m cover"
+            to={`/projects/${p.id}`}
+            style={{ display: 'block' }}
+            onClick={(e) => {
+              if (projectSel.isSelecting) {
+                e.preventDefault()
+                e.stopPropagation()
+                projectSel.toggle(p.id)
+              }
+            }}
+          >
+            {p.title}
+          </Link>
           {p.project_type && <span className="xs muted">{p.project_type}</span>}
         </span>
       </span>
@@ -97,6 +110,7 @@ export function ProjectsPage() {
             ]}
             after={
               <>
+                <SelectButton sel={projectSel} />
                 {tab === 'done' && finishedCount > 0 && (
                   <button type="button" className={`chip${showFinished ? ' on' : ''}`} style={{ marginRight: 6 }} onClick={() => setShowFinished((v) => !v)}>
                     {showFinished ? 'Hide' : 'Show'} finished · {finishedCount}
@@ -173,7 +187,19 @@ export function ProjectsPage() {
                                 const pt = tasks.filter((t) => t.project_id === p.id && t.status !== 'cancelled')
                                 const d = pt.filter((t) => t.status === 'done').length
                                 return (
-                                  <tr key={p.id} className={`hov${projectSel.has(p.id) ? ' selected' : ''}`}>
+                                  <tr
+                                    key={p.id}
+                                    className={`hov${projectSel.has(p.id) ? ' selected' : ''}`}
+                                    onClick={(e) => {
+                                      if (projectSel.isSelecting) {
+                                        const target = e.target as HTMLElement
+                                        if (target.closest('.above, button, input, select, textarea')) return
+                                        e.preventDefault()
+                                        projectSel.toggle(p.id)
+                                      }
+                                    }}
+                                    style={projectSel.isSelecting ? { cursor: 'pointer' } : undefined}
+                                  >
                                     {projectCell(p)}
                                     <td><StatusPill meta={projectStatus[p.status]} /></td>
                                     <td>
@@ -207,7 +233,19 @@ export function ProjectsPage() {
                                 const order = ['overdue', 'unpaid', 'partial', 'paid', 'refunded']
                                 const st = linked.length ? linked.map(effectivePaymentStatus).sort((a, b) => order.indexOf(a) - order.indexOf(b))[0] : null
                                 return (
-                                  <tr key={p.id} className={`hov${projectSel.has(p.id) ? ' selected' : ''}`}>
+                                  <tr
+                                    key={p.id}
+                                    className={`hov${projectSel.has(p.id) ? ' selected' : ''}`}
+                                    onClick={(e) => {
+                                      if (projectSel.isSelecting) {
+                                        const target = e.target as HTMLElement
+                                        if (target.closest('.above, button, input, select, textarea')) return
+                                        e.preventDefault()
+                                        projectSel.toggle(p.id)
+                                      }
+                                    }}
+                                    style={projectSel.isSelecting ? { cursor: 'pointer' } : undefined}
+                                  >
                                     {projectCell(p)}
                                     <td>{formatDate((p.completed_at ?? p.due_date ?? p.created_at).slice(0, 10))}</td>
                                     <td>{p.archived_at ? <span className="pill gray">Archived</span> : <StatusPill meta={projectStatus[p.status]} />}</td>

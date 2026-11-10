@@ -13,7 +13,7 @@ import { sumByCurrency, isAssignedTo } from '@/lib/derive'
 import { formatDate, formatMoney, isOverdue } from '@/lib/format'
 import { projectStatus } from '@/lib/status'
 import { copyText } from '@/lib/utils'
-import { ProjectBulkBar, SelectBox, SelectionProvider, useSelection } from '@/components/domain/BulkSelect'
+import { ProjectBulkBar, SelectBox, SelectButton, SelectionProvider, useSelection } from '@/components/domain/BulkSelect'
 import type { Client, Project, ProjectStatus } from '@/types'
 
 const RING: Record<ProjectStatus, string> = { not_started: '', in_progress: 'prog', waiting_for_client: 'wait', blocked: 'block', completed: 'done', finished: 'done', cancelled: 'cancel' }
@@ -94,7 +94,23 @@ export function ClientProjects({ client }: { client: Client }) {
         <ChevronRight className="i faint" />
       </>
     )
-    return <Link key={p.id} className={`li${sel.has(p.id) ? ' selected' : ''}`} to={`/projects/${p.id}`}>{body}</Link>
+    return (
+      <Link
+        key={p.id}
+        className={`li${sel.has(p.id) ? ' selected' : ''}`}
+        to={`/projects/${p.id}`}
+        onClick={(e) => {
+          if (selection.isSelecting) {
+            const target = e.target as HTMLElement
+            if (target.closest('.above, button, input')) return
+            e.preventDefault()
+            selection.toggle(p.id)
+          }
+        }}
+      >
+        {body}
+      </Link>
+    )
   }
 
   if (all.length === 0) {
@@ -107,14 +123,17 @@ export function ClientProjects({ client }: { client: Client }) {
 
   return (
     <div className="stack">
-      {isAdmin && (
-        <div className="row wrap">
-          <span className="small muted">{current.length} project{current.length === 1 ? '' : 's'}{finished.length ? ` · ${finished.length} finished` : ''} · tick boxes to act on several</span>
-          <span className="spacer" />
+      <div className="row wrap">
+        <span className="small muted">{current.length} project{current.length === 1 ? '' : 's'}{finished.length ? ` · ${finished.length} finished` : ''}</span>
+        <span className="spacer" />
+        <SelectButton sel={selection} />
+        {isAdmin && (
           <button type="button" className="chip" onClick={() => { selection.set(all.filter((p) => p.status === 'completed' || p.status === 'finished').map((p) => p.id)); if (finished.length) setFinishedOpen(true) }}>Select completed</button>
+        )}
+        {isAdmin && (
           <button type="button" className="btn btn-sm" onClick={() => openCreate('project', { client_id: client.id })}><Plus className="i i-sm" />New project</button>
-        </div>
-      )}
+        )}
+      </div>
 
       <SelectionProvider value={selection}>
       {current.length === 0 && <div className="card"><div className="empty sm"><p>No running projects. Everything is finished.</p></div></div>}

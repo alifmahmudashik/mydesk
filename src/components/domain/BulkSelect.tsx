@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { Archive, ArchiveRestore, Calendar, CheckSquare, Flag, Trash2, UserPlus, Users, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
@@ -11,16 +12,20 @@ import { PrioBars } from '@/components/ui/pill'
 import { eligibleAssignees, hasClientAccess, profileFullName, taskAssigneeIds } from '@/lib/derive'
 import { formatDate } from '@/lib/format'
 import { priorityMeta, projectStatus, taskRing, taskStatus } from '@/lib/status'
+import { cn } from '@/lib/utils'
 import type { Priority, ProjectMember, ProjectStatus, TaskStatus } from '@/types'
 
 // ---------------------------------------------------------------- selection state
 
-interface Selection {
+export interface Selection {
   ids: Set<string>
   has: (id: string) => boolean
   toggle: (id: string) => void
   set: (ids: string[]) => void
   clear: () => void
+  isSelecting: boolean
+  toggleSelecting: () => void
+  setIsSelecting: (v: boolean | ((prev: boolean) => boolean)) => void
 }
 
 const SelectionContext = createContext<Selection | null>(null)
@@ -28,6 +33,7 @@ const SelectionContext = createContext<Selection | null>(null)
 /** Ticked rows on a page. Esc clears. Rows that disappear drop out of the selection. */
 export function useSelection(visibleIds: string[]): Selection {
   const [ids, setIds] = useState<Set<string>>(new Set())
+  const [isSelectingMode, setIsSelectingMode] = useState(false)
   const key = visibleIds.join()
   useEffect(() => {
     setIds((s) => {
@@ -37,35 +43,57 @@ export function useSelection(visibleIds: string[]): Selection {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key])
   useEffect(() => {
-    if (ids.size === 0) return
+    if (ids.size === 0 && !isSelectingMode) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !document.querySelector('.dlg, .menu-pop, .date-pop')) setIds(new Set())
+      if (e.key === 'Escape' && !document.querySelector('.dlg, .menu-pop, .date-pop')) {
+        setIds(new Set())
+        setIsSelectingMode(false)
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [ids.size])
+  }, [ids.size, isSelectingMode])
+
+  const isSelecting = isSelectingMode || ids.size > 0
+
   return useMemo(
     () => ({
       ids,
-      has: (id) => ids.has(id),
-      toggle: (id) =>
+      has: (id: string) => ids.has(id),
+      toggle: (id: string) =>
         setIds((s) => {
           const n = new Set(s)
           if (n.has(id)) n.delete(id)
           else n.add(id)
           return n
         }),
-      set: (list) => setIds(new Set(list)),
-      clear: () => setIds(new Set()),
+      set: (list: string[]) => {
+        setIds(new Set(list))
+        if (list.length > 0) setIsSelectingMode(true)
+      },
+      clear: () => {
+        setIds(new Set())
+        setIsSelectingMode(false)
+      },
+      isSelecting,
+      setIsSelecting: setIsSelectingMode,
+      toggleSelecting: () => {
+        if (isSelecting) {
+          setIds(new Set())
+          setIsSelectingMode(false)
+        } else {
+          setIsSelectingMode(true)
+        }
+      },
     }),
-    [ids],
+    [ids, isSelecting],
   )
 }
 
 export function SelectionProvider({ value, children }: { value: Selection; children: ReactNode }) {
   return (
     <SelectionContext.Provider value={value}>
-      <div className={value.ids.size ? 'sel-on' : undefined} style={{ display: 'contents' }}>{children}</div>
+      <div className={value.isSelecting ? 'sel-on' : undefined} style={{ display: 'contents' }}>{children}</div>
     </SelectionContext.Provider>
   )
 }
@@ -74,7 +102,7 @@ export function useRowSelection() {
   return useContext(SelectionContext)
 }
 
-/** The square tick box on a row (shows on hover, or always once something is ticked). */
+/** The square tick box on a row (shows on hover, or always once something is ticked / in selection mode). */
 export function SelectBox({ id, label }: { id: string; label: string }) {
   const sel = useContext(SelectionContext)
   if (!sel) return null
@@ -91,10 +119,29 @@ export function SelectBox({ id, label }: { id: string; label: string }) {
   )
 }
 
+/** Dedicated Select toggle button to enter or exit selection mode. */
+export function SelectButton({ sel, className }: { sel: Selection; className?: string }) {
+  const active = sel.isSelecting
+  return (
+    <button
+      type="button"
+      className={cn('chip select-btn', active && 'on', className)}
+      onClick={sel.toggleSelecting}
+      title={active ? 'Exit selection mode' : 'Select items'}
+      aria-pressed={active}
+    >
+      <CheckSquare className="i i-sm" />
+      <span>{active ? 'Done' : 'Select'}</span>
+      {active && sel.ids.size > 0 && <span className="n" style={{ marginLeft: 3 }}>{sel.ids.size}</span>}
+    </button>
+  )
+}
+
 // ---------------------------------------------------------------- bars
 
 function Bar({ count, total, onAll, onClear, children }: { count: number; total: number; onAll: () => void; onClear: () => void; children: ReactNode }) {
-  return (
+  if (typeof document === 'undefined') return null
+  return createPortal(
     <div className="bulk-bar" role="toolbar" aria-label="Actions for selected">
       <span className="bulk-count"><CheckSquare className="i i-sm" />{count} selected</span>
       {count < total && <button type="button" className="link-btn small" onClick={onAll}>Select all {total}</button>}
@@ -102,7 +149,8 @@ function Bar({ count, total, onAll, onClear, children }: { count: number; total:
       {children}
       <span className="bulk-sep" />
       <button type="button" className="btn btn-sm btn-ghost btn-icon" aria-label="Clear selection" title="Clear (Esc)" onClick={onClear}><X className="i i-sm" /></button>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

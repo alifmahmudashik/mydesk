@@ -27,12 +27,32 @@ export function TaskListRow({ task, showProject = true, showClient = true }: { t
   const done = task.status === 'done'
   const sel = useRowSelection()
 
+  const onRowClick = (e: React.MouseEvent) => {
+    if (sel?.isSelecting) {
+      const target = e.target as HTMLElement
+      if (target.closest('.above, button, input, select, textarea')) return
+      e.preventDefault()
+      sel.toggle(task.id)
+    }
+  }
+
   return (
-    <div className={cn('li hover', sel?.has(task.id) && 'selected')}>
+    <div className={cn('li hover', sel?.has(task.id) && 'selected')} onClick={onRowClick}>
       <SelectBox id={task.id} label={task.title} />
       <input className="cb round above" type="checkbox" checked={done} aria-label="Mark complete" onChange={() => toggleTaskDone(task)} />
       <span className="mono xs faint hide-sm" style={{ width: 52, flex: 'none' }}>{taskRef(task, project)}</span>
-      <Link className="grow cover" to={`/tasks/${task.id}`} style={{ minWidth: 0 }}>
+      <Link
+        className="grow cover"
+        to={`/tasks/${task.id}`}
+        style={{ minWidth: 0 }}
+        onClick={(e) => {
+          if (sel?.isSelecting) {
+            e.preventDefault()
+            e.stopPropagation()
+            sel.toggle(task.id)
+          }
+        }}
+      >
         <div className="t trunc" style={done ? { textDecoration: 'line-through', color: 'var(--faint)' } : undefined}>{task.title}</div>
         <div className="s">
           {showProject && showClient && <ClientChip client={client} to={false} />}
@@ -57,12 +77,33 @@ export function DoneRow({ task }: { task: Task }) {
   const { projects, profiles } = useData()
   const project = projects.find((p) => p.id === task.project_id)
   const sel = useRowSelection()
+
+  const onRowClick = (e: React.MouseEvent) => {
+    if (sel?.isSelecting) {
+      const target = e.target as HTMLElement
+      if (target.closest('.above, button, input, select, textarea')) return
+      e.preventDefault()
+      sel.toggle(task.id)
+    }
+  }
+
   return (
-    <div className={cn('li hover', sel?.has(task.id) && 'selected')}>
+    <div className={cn('li hover', sel?.has(task.id) && 'selected')} onClick={onRowClick}>
       <SelectBox id={task.id} label={task.title} />
       <span className="above"><StatusRing status={task.status} onToggle={() => toggleTaskDone(task)} /></span>
       <span className="mono xs faint" style={{ width: 52, flex: 'none' }}>{taskRef(task, project)}</span>
-      <Link className="grow cover" to={`/tasks/${task.id}`} style={{ minWidth: 0 }}>
+      <Link
+        className="grow cover"
+        to={`/tasks/${task.id}`}
+        style={{ minWidth: 0 }}
+        onClick={(e) => {
+          if (sel?.isSelecting) {
+            e.preventDefault()
+            e.stopPropagation()
+            sel.toggle(task.id)
+          }
+        }}
+      >
         <div className="t muted trunc">{task.title}</div>
       </Link>
       {project?.billing_type === 'hourly' && <QuickLogTime task={task} />}

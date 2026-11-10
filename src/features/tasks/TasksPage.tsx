@@ -9,7 +9,7 @@ import { Menu, MenuItem, MenuSearch, MenuTitle } from '@/components/ui/menu'
 import { Avatar, ClientMark } from '@/components/ui/avatar'
 import { StatusRing } from '@/components/ui/pill'
 import { DoneRow, TaskBoard, TaskGroup, TaskListRow } from '@/components/domain/TaskViews'
-import { SelectionProvider, TaskBulkBar, useSelection } from '@/components/domain/BulkSelect'
+import { SelectButton, SelectionProvider, TaskBulkBar, useSelection } from '@/components/domain/BulkSelect'
 import { ClientGroup, groupByClient } from '@/components/domain/ClientGroup'
 import { clientDisplayName, profileDisplayName, shortProjectTitle, taskRef, isAssignedTo, taskAssigneeIds } from '@/lib/derive'
 import { taskStatus } from '@/lib/status'
@@ -132,6 +132,7 @@ export function TasksPage() {
             ]}
           />
           <div className="row wrap" style={{ marginTop: -4 }}>
+            {view === 'list' && <SelectButton sel={taskSel} />}
             <label className="inp-wrap" style={{ width: 260, maxWidth: '100%' }}>
               <Search className="i i-sm" />
               <input placeholder="Search tasks…" aria-label="Search tasks" value={q} onChange={(e) => setQ(e.target.value)} />

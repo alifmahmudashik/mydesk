@@ -18,7 +18,7 @@ import { ConfirmDialog } from '@/components/ui/modal'
 import { DoneRow, TaskGroup, TaskListRow } from '@/components/domain/TaskViews'
 import { CodeSnippets } from '@/components/domain/CodeSnippets'
 import { ProjectTimePanel } from '@/components/domain/TimeTracking'
-import { SelectionProvider, TaskBulkBar, useSelection } from '@/components/domain/BulkSelect'
+import { SelectButton, SelectionProvider, TaskBulkBar, useSelection } from '@/components/domain/BulkSelect'
 import { ShareProjectModal } from '@/features/projects/ShareProjectModal'
 import { ProjectFormModal } from '@/features/create/ProjectFormModal'
 import { Popover } from '@/components/ui/popover'
@@ -236,6 +236,7 @@ export function ProjectPage() {
             <div className="cols" style={{ gap: 0, alignItems: 'stretch' }}>
               <div className="col-main" style={{ padding: '20px 32px 48px', gap: 16 }}>
                 <div className="row wrap">
+                  <SelectButton sel={taskSel} />
                   <Menu align="left" trigger={({ toggle }) => <button type="button" className={`chip${filter !== 'all' ? ' on' : ''}`} onClick={toggle}><Filter className="i i-sm" />{{ all: 'Filter', mine: 'Assigned to me', dated: 'Has due date', late: 'Overdue' }[filter]}</button>}>
                     <MenuItem on={filter === 'all'} onSelect={() => setFilter('all')}>All tasks</MenuItem>
                     <MenuItem on={filter === 'mine'} onSelect={() => setFilter('mine')}>Assigned to me</MenuItem>
