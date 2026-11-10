@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { CheckSquare, ChevronDown, ChevronRight, Copy, Folder, MessageSquare, Plus, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, Copy, Folder, MessageSquare, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
 import { useUI } from '@/data/ui'
@@ -13,6 +13,7 @@ import { sumByCurrency, isAssignedTo } from '@/lib/derive'
 import { formatDate, formatMoney, isOverdue } from '@/lib/format'
 import { projectStatus } from '@/lib/status'
 import { copyText } from '@/lib/utils'
+import { ProjectBulkBar, SelectBox, SelectionProvider, useSelection } from '@/components/domain/BulkSelect'
 import type { Client, Project, ProjectStatus } from '@/types'
 
 const RING: Record<ProjectStatus, string> = { not_started: '', in_progress: 'prog', waiting_for_client: 'wait', blocked: 'block', completed: 'done', finished: 'done', cancelled: 'cancel' }
@@ -41,11 +42,12 @@ export function ClientProjects({ client }: { client: Client }) {
   const { openCreate } = useUI()
   const { projects, tasks, profiles, payments } = useData()
   const [finishedOpen, setFinishedOpen] = useState(false)
-  const [selecting, setSelecting] = useState(false)
-  const [sel, setSel] = useState<Set<string>>(new Set())
   const [exportText, setExportText] = useState<string | null>(null)
 
   const all = useMemo(() => projects.filter((p) => p.client_id === client.id), [projects, client.id])
+  const selection = useSelection(all.map((p) => p.id))
+  const sel = selection.ids
+  const selecting = sel.size > 0
   const rank = (p: Project) => (p.status === 'completed' ? 1 : p.status === 'cancelled' ? 2 : 0)
   const current = all
     .filter((p) => p.status !== 'finished')
@@ -56,14 +58,6 @@ export function ClientProjects({ client }: { client: Client }) {
   const finished = all.filter((p) => p.status === 'finished').sort((a, b) => (b.completed_at ?? b.due_date ?? b.created_at).localeCompare(a.completed_at ?? a.due_date ?? a.created_at))
   const selected = all.filter((p) => sel.has(p.id))
   const firstName = client.name.split(' ')[0]
-
-  const toggle = (id: string) =>
-    setSel((s) => {
-      const n = new Set(s)
-      if (n.has(id)) n.delete(id)
-      else n.add(id)
-      return n
-    })
 
   const row = (p: Project) => {
     const pt = tasks.filter((t) => t.project_id === p.id && t.status !== 'cancelled')
@@ -82,11 +76,8 @@ export function ClientProjects({ client }: { client: Client }) {
     )
     const body = (
       <>
-        {selecting ? (
-          <input type="checkbox" className="cb" checked={sel.has(p.id)} onChange={() => toggle(p.id)} onClick={(e) => e.stopPropagation()} aria-label={`Select ${p.title}`} />
-        ) : (
-          <span className={`st ${RING[p.status]}`} />
-        )}
+        <SelectBox id={p.id} label={p.title} />
+        <span className={`st ${RING[p.status]}`} />
         <div className="grow" style={{ minWidth: 0 }}>
           <div className={`t trunc ${p.status === 'finished' ? 'muted' : ''}`}>{p.title}</div>
           <div className="s">{sub}</div>
@@ -100,14 +91,10 @@ export function ClientProjects({ client }: { client: Client }) {
         {isAdmin && p.amount > 0 && <span className="num small m priv">{formatMoney(p.amount, p.currency)}</span>}
         <StatusPill meta={projectStatus[p.status]} />
         {open && team.length > 0 && <AvatarStack profiles={team} />}
-        {!selecting && <ChevronRight className="i faint" />}
+        <ChevronRight className="i faint" />
       </>
     )
-    return selecting ? (
-      <label key={p.id} className="li hover" style={{ cursor: 'pointer', background: sel.has(p.id) ? 'var(--sel-bg)' : undefined }}>{body}</label>
-    ) : (
-      <Link key={p.id} className="li" to={`/projects/${p.id}`}>{body}</Link>
-    )
+    return <Link key={p.id} className={`li${sel.has(p.id) ? ' selected' : ''}`} to={`/projects/${p.id}`}>{body}</Link>
   }
 
   if (all.length === 0) {
@@ -122,24 +109,14 @@ export function ClientProjects({ client }: { client: Client }) {
     <div className="stack">
       {isAdmin && (
         <div className="row wrap">
-          {selecting ? (
-            <>
-              <button type="button" className="chip" onClick={() => { setSel(new Set(all.filter((p) => p.status === 'completed' || p.status === 'finished').map((p) => p.id))); if (finished.length) setFinishedOpen(true) }}>Select completed</button>
-              <button type="button" className="chip" onClick={() => { setSel(sel.size === all.length ? new Set() : new Set(all.map((p) => p.id))); if (finished.length) setFinishedOpen(true) }}>{sel.size === all.length ? 'Clear' : 'Select all'}</button>
-              <span className="spacer" />
-              <button type="button" className="btn btn-sm btn-ghost" onClick={() => { setSelecting(false); setSel(new Set()) }}><X className="i i-sm" />Cancel</button>
-            </>
-          ) : (
-            <>
-              <span className="small muted">{current.length} project{current.length === 1 ? '' : 's'}{finished.length ? ` · ${finished.length} finished` : ''}</span>
-              <span className="spacer" />
-              <button type="button" className="btn btn-sm" onClick={() => setSelecting(true)}><CheckSquare className="i i-sm" />Select to export</button>
-              <button type="button" className="btn btn-sm" onClick={() => openCreate('project', { client_id: client.id })}><Plus className="i i-sm" />New project</button>
-            </>
-          )}
+          <span className="small muted">{current.length} project{current.length === 1 ? '' : 's'}{finished.length ? ` · ${finished.length} finished` : ''} · tick boxes to act on several</span>
+          <span className="spacer" />
+          <button type="button" className="chip" onClick={() => { selection.set(all.filter((p) => p.status === 'completed' || p.status === 'finished').map((p) => p.id)); if (finished.length) setFinishedOpen(true) }}>Select completed</button>
+          <button type="button" className="btn btn-sm" onClick={() => openCreate('project', { client_id: client.id })}><Plus className="i i-sm" />New project</button>
         </div>
       )}
 
+      <SelectionProvider value={selection}>
       {current.length === 0 && <div className="card"><div className="empty sm"><p>No running projects. Everything is finished.</p></div></div>}
       {running.length > 0 && (
         <div>
@@ -166,16 +143,17 @@ export function ClientProjects({ client }: { client: Client }) {
         </div>
       )}
 
+      </SelectionProvider>
       {selecting && (
-        <div className="card card-b row" style={{ position: 'sticky', bottom: 16, boxShadow: 'var(--shadow-pop)', zIndex: 5 }}>
-          <div className="grow">
-            <b className="m">{sel.size} selected</b>
-            <div className="xs muted">Total: {selected.length ? sumByCurrency(selected) : formatMoney(0)}</div>
-          </div>
-          <button type="button" className="btn btn-pri" disabled={!sel.size} onClick={() => setExportText(buildChatSummary(firstName, selected))}>
-            <MessageSquare className="i i-sm" />Export message
-          </button>
-        </div>
+        <ProjectBulkBar
+          sel={selection}
+          allIds={all.map((p) => p.id)}
+          extra={isAdmin ? (
+            <button type="button" className="btn btn-sm" title={`Total: ${sumByCurrency(selected)}`} onClick={() => setExportText(buildChatSummary(firstName, selected))}>
+              <MessageSquare className="i i-sm" />Export message
+            </button>
+          ) : undefined}
+        />
       )}
 
       <Modal
@@ -189,8 +167,7 @@ export function ClientProjects({ client }: { client: Client }) {
             onClick={() => {
               if (exportText) void copyText(exportText).then(() => toast.success('Copied to clipboard'))
               setExportText(null)
-              setSelecting(false)
-              setSel(new Set())
+              selection.clear()
             }}
           >
             <Copy className="i i-sm" />Copy &amp; close

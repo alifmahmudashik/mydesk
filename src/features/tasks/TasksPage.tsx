@@ -9,6 +9,7 @@ import { Menu, MenuItem, MenuSearch, MenuTitle } from '@/components/ui/menu'
 import { Avatar, ClientMark } from '@/components/ui/avatar'
 import { StatusRing } from '@/components/ui/pill'
 import { DoneRow, TaskBoard, TaskGroup, TaskListRow } from '@/components/domain/TaskViews'
+import { SelectionProvider, TaskBulkBar, useSelection } from '@/components/domain/BulkSelect'
 import { ClientGroup, groupByClient } from '@/components/domain/ClientGroup'
 import { clientDisplayName, profileDisplayName, shortProjectTitle, taskRef, isAssignedTo, taskAssigneeIds } from '@/lib/derive'
 import { taskStatus } from '@/lib/status'
@@ -67,6 +68,7 @@ export function TasksPage() {
 
   const open = filtered.filter((t) => t.status !== 'done')
   const done = filtered.filter((t) => t.status === 'done').sort((a, b) => (b.completed_at ?? b.created_at).localeCompare(a.completed_at ?? a.created_at))
+  const taskSel = useSelection([...open, ...done.slice(0, 50)].map((t) => t.id))
   const byDue = (a: Task, b: Task) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999') || b.created_at.localeCompare(a.created_at)
 
   const today = format(new Date(), 'yyyy-MM-dd')
@@ -163,6 +165,7 @@ export function TasksPage() {
 
           {view === 'list' ? (
             <div className="stack-lg panel-in">
+              <SelectionProvider value={taskSel}>
               {open.length === 0 && done.length === 0 && (
                 <div className="card">
                   <Empty icon={<ListChecks className="i" />} title={tasks.length ? 'No tasks match' : 'No tasks yet'} action={<button type="button" className="btn btn-pri" onClick={() => openCreate('task')}><Plus className="i" />New task</button>}>
@@ -191,6 +194,8 @@ export function TasksPage() {
                 <TaskGroup key={g.key} icon={g.icon} title={g.title} tasks={g.tasks} />
               ))}
               <TaskGroup collapsible defaultOpen={false} icon={<span className="st done" />} title="Wrapped up" tasks={done.slice(0, 50)} render={(t) => <DoneRow key={t.id} task={t} />} />
+              </SelectionProvider>
+              <TaskBulkBar sel={taskSel} allIds={open.map((t) => t.id)} />
             </div>
           ) : (
             <div className="panel-in">

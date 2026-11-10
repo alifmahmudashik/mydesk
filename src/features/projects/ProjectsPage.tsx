@@ -9,6 +9,7 @@ import { Tabs } from '@/components/ui/tabs'
 import { Menu, MenuItem, MenuSearch } from '@/components/ui/menu'
 import { AvatarStack, ClientMark } from '@/components/ui/avatar'
 import { StatusPill } from '@/components/ui/pill'
+import { ProjectBulkBar, SelectBox, SelectionProvider, useSelection } from '@/components/domain/BulkSelect'
 import { ClientGroup, groupByClient } from '@/components/domain/ClientGroup'
 import { clientDisplayName, effectivePaymentStatus, OPEN_PROJECT, sumByCurrency, taskAssigneeIds } from '@/lib/derive'
 import { formatDate, formatMoney, isOverdue } from '@/lib/format'
@@ -64,10 +65,16 @@ export function ProjectsPage() {
       return n
     })
 
+  const projectSel = useSelection(list.map((p) => p.id))
   const projectCell = (p: Project) => (
     <td>
-      <Link className="m cover" to={`/projects/${p.id}`} style={{ display: 'block' }}>{p.title}</Link>
-      {p.project_type && <span className="xs muted">{p.project_type}</span>}
+      <span className="row-sm" style={{ alignItems: 'flex-start' }}>
+        <SelectBox id={p.id} label={p.title} />
+        <span style={{ minWidth: 0 }}>
+          <Link className="m cover" to={`/projects/${p.id}`} style={{ display: 'block' }}>{p.title}</Link>
+          {p.project_type && <span className="xs muted">{p.project_type}</span>}
+        </span>
+      </span>
     </td>
   )
 
@@ -130,6 +137,7 @@ export function ProjectsPage() {
                 </Empty>
               </div>
             ) : (
+              <SelectionProvider value={projectSel}>
               <div className="client-groups">
                 {groups.map((g) => {
                   const rows = expanded.has(g.id) ? g.rows : g.rows.slice(0, PER_CLIENT)
@@ -165,7 +173,7 @@ export function ProjectsPage() {
                                 const pt = tasks.filter((t) => t.project_id === p.id && t.status !== 'cancelled')
                                 const d = pt.filter((t) => t.status === 'done').length
                                 return (
-                                  <tr key={p.id} className="hov">
+                                  <tr key={p.id} className={`hov${projectSel.has(p.id) ? ' selected' : ''}`}>
                                     {projectCell(p)}
                                     <td><StatusPill meta={projectStatus[p.status]} /></td>
                                     <td>
@@ -199,7 +207,7 @@ export function ProjectsPage() {
                                 const order = ['overdue', 'unpaid', 'partial', 'paid', 'refunded']
                                 const st = linked.length ? linked.map(effectivePaymentStatus).sort((a, b) => order.indexOf(a) - order.indexOf(b))[0] : null
                                 return (
-                                  <tr key={p.id} className="hov">
+                                  <tr key={p.id} className={`hov${projectSel.has(p.id) ? ' selected' : ''}`}>
                                     {projectCell(p)}
                                     <td>{formatDate((p.completed_at ?? p.due_date ?? p.created_at).slice(0, 10))}</td>
                                     <td>{p.archived_at ? <span className="pill gray">Archived</span> : <StatusPill meta={projectStatus[p.status]} />}</td>
@@ -222,7 +230,9 @@ export function ProjectsPage() {
                   )
                 })}
               </div>
+              </SelectionProvider>
             )}
+            <ProjectBulkBar sel={projectSel} allIds={list.map((p) => p.id)} />
           </div>
         </div>
       </Content>

@@ -18,6 +18,7 @@ import { ConfirmDialog } from '@/components/ui/modal'
 import { DoneRow, TaskGroup, TaskListRow } from '@/components/domain/TaskViews'
 import { CodeSnippets } from '@/components/domain/CodeSnippets'
 import { ProjectTimePanel } from '@/components/domain/TimeTracking'
+import { SelectionProvider, TaskBulkBar, useSelection } from '@/components/domain/BulkSelect'
 import { ShareProjectModal } from '@/features/projects/ShareProjectModal'
 import { ProjectFormModal } from '@/features/create/ProjectFormModal'
 import { Popover } from '@/components/ui/popover'
@@ -57,6 +58,7 @@ export function ProjectPage() {
   }, [project?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const projectTasks = useMemo(() => tasks.filter((t) => t.project_id === id && t.status !== 'cancelled'), [tasks, id])
+  const taskSel = useSelection(projectTasks.map((t) => t.id))
   const projectNotes = notes.filter((n) => n.project_id === id).sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || b.created_at.localeCompare(a.created_at))
   const checklist = accessItems.filter((a) => a.project_id === id)
   const history = activity.filter((a) => a.project_id === id || a.entity_id === id).sort((a, b) => b.created_at.localeCompare(a.created_at))
@@ -243,6 +245,7 @@ export function ProjectPage() {
                   <span className="spacer" />
                   <button type="button" className="btn btn-dark btn-sm" onClick={() => openCreate('task', { project_id: project.id })}><Plus className="i" />New task</button>
                 </div>
+                <SelectionProvider value={taskSel}>
                 {(['blocked', 'waiting_for_client', 'review', 'in_progress'] as TaskStatus[]).map((s) => (
                   <TaskGroup key={s} icon={<span className={`st ${taskRing[s]}`} />} title={taskStatus[s].label} tasks={byStatus(s)} render={(t) => <TaskListRow key={t.id} task={t} showProject={false} />} />
                 ))}
@@ -254,6 +257,8 @@ export function ProjectPage() {
                   </div>
                 </div>
                 <TaskGroup collapsible defaultOpen={done.length <= 5} icon={<span className="st done" />} title="Done" tasks={byStatus('done').sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? ''))} render={(t) => <DoneRow key={t.id} task={t} />} />
+                </SelectionProvider>
+                <TaskBulkBar sel={taskSel} allIds={filtered.map((t) => t.id)} />
               </div>
               <aside className="col-side" style={{ padding: '20px 32px 48px 24px', borderLeft: '1px solid var(--line-s)', gap: 16, flex: '0 1 340px' }}>
                 <div className="label-caps">About</div>

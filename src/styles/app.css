@@ -854,3 +854,23 @@ html.desktop .side::-webkit-scrollbar { width: 0; } /* still scrolls with the wh
 
 /* Small chip (quick time log on task rows) */
 .chip.chip-sm { height: 24px; padding: 0 8px; font-size: 12px; gap: 4px; flex: none; white-space: nowrap; }
+
+/* Bulk select: tick boxes show on hover, and stay once anything is ticked */
+.cb.sel-box { flex: none; border-radius: 5px; opacity: 0; transition: opacity .12s; }
+.li:hover .sel-box, tr:hover .sel-box, .sel-box:focus-visible, .sel-box:checked, .sel-on .sel-box { opacity: 1; }
+.li.selected, .tbl tbody tr.selected td { background: var(--sel-bg); }
+@media (hover: none) { .cb.sel-box { opacity: 1; } }
+
+.bulk-bar {
+  position: fixed; bottom: 20px; left: calc(50% + 124px); transform: translateX(-50%); z-index: 60;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center;
+  width: max-content; max-width: calc(100vw - 290px); padding: 8px 10px 8px 14px;
+  background: var(--panel); border: 1px solid var(--line2); border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(16,16,24,.16), 0 2px 6px rgba(16,16,24,.06);
+  animation: bulkIn .18s var(--ease, ease-out);
+}
+.bulk-count { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--ink); white-space: nowrap; }
+.bulk-count .i { color: var(--pri); }
+.bulk-sep { width: 1px; height: 20px; background: var(--line2); margin: 0 4px; }
+@keyframes bulkIn { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@media (max-width: 900px) { .bulk-bar { left: 50%; max-width: calc(100vw - 24px); } }

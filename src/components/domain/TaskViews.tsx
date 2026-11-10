@@ -10,6 +10,7 @@ import { labelTone } from '@/components/domain/TaskRow'
 import { InlineAssignees, InlineDate, InlinePriority, InlineStatus } from '@/components/domain/TaskInline'
 import { ClientChip } from '@/components/domain/ClientGroup'
 import { QuickLogTime } from '@/components/domain/TimeTracking'
+import { SelectBox, useRowSelection } from '@/components/domain/BulkSelect'
 import { shortProjectTitle, taskRef, taskAssigneeIds } from '@/lib/derive'
 import { formatDate } from '@/lib/format'
 import { taskRing, taskStatus } from '@/lib/status'
@@ -24,9 +25,11 @@ export function TaskListRow({ task, showProject = true, showClient = true }: { t
   const nComments = comments.filter((c) => c.task_id === task.id).length
   const subs = subtasks.filter((s) => s.task_id === task.id)
   const done = task.status === 'done'
+  const sel = useRowSelection()
 
   return (
-    <div className="li hover">
+    <div className={cn('li hover', sel?.has(task.id) && 'selected')}>
+      <SelectBox id={task.id} label={task.title} />
       <input className="cb round above" type="checkbox" checked={done} aria-label="Mark complete" onChange={() => toggleTaskDone(task)} />
       <span className="mono xs faint hide-sm" style={{ width: 52, flex: 'none' }}>{taskRef(task, project)}</span>
       <Link className="grow cover" to={`/tasks/${task.id}`} style={{ minWidth: 0 }}>
@@ -53,8 +56,10 @@ export function TaskListRow({ task, showProject = true, showClient = true }: { t
 export function DoneRow({ task }: { task: Task }) {
   const { projects, profiles } = useData()
   const project = projects.find((p) => p.id === task.project_id)
+  const sel = useRowSelection()
   return (
-    <div className="li hover">
+    <div className={cn('li hover', sel?.has(task.id) && 'selected')}>
+      <SelectBox id={task.id} label={task.title} />
       <span className="above"><StatusRing status={task.status} onToggle={() => toggleTaskDone(task)} /></span>
       <span className="mono xs faint" style={{ width: 52, flex: 'none' }}>{taskRef(task, project)}</span>
       <Link className="grow cover" to={`/tasks/${task.id}`} style={{ minWidth: 0 }}>
