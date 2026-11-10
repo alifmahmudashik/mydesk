@@ -89,17 +89,21 @@ export function ShareProjectModal({ project, open, onClose }: { project: Project
                   <span className="m trunc" style={{ display: 'block' }}>{profileFullName(p)}</span>
                   <span className="xs muted trunc" style={{ display: 'block' }}>{p.email}</span>
                 </span>
-                <select
-                  className="inp sm"
-                  style={{ width: 'auto' }}
-                  aria-label={`Access for ${profileFullName(p)}`}
-                  value={draft[p.id] ?? 'none'}
-                  onChange={(e) => setDraft((d) => ({ ...d, [p.id]: e.target.value as Scope }))}
-                >
-                  <option value="none">No access</option>
-                  <option value="project" disabled={!accessV2Ready}>This project only</option>
-                  <option value="client">Whole client</option>
-                </select>
+                <div className="pick" role="radiogroup" aria-label={`Access for ${profileFullName(p)}`}>
+                  {([['none', 'No access'], ['project', 'This project'], ['client', 'Whole client']] as [Scope, string][]).map(([v, label]) => (
+                    <button
+                      key={v}
+                      type="button"
+                      role="radio"
+                      aria-checked={(draft[p.id] ?? 'none') === v}
+                      className={(draft[p.id] ?? 'none') === v ? 'on' : undefined}
+                      disabled={v === 'project' && !accessV2Ready}
+                      onClick={() => setDraft((d) => ({ ...d, [p.id]: v }))}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
             ))}
           </div>

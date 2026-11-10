@@ -4,6 +4,7 @@ import { format, parseISO, startOfMonth } from 'date-fns'
 import { AlertTriangle, Briefcase, Folder, Key, ListChecks, User } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, useData } from '@/data/store'
+import { setMemberAccess } from '@/data/actions'
 import { useIsAdmin, useIsOwner } from '@/hooks/usePermissions'
 import { Topbar, Content, Empty, Section, SaveBar } from '@/components/ui/layout'
 import { SettingsLayout, useUnsavedGuard } from '@/components/ui/settings-layout'
@@ -14,7 +15,7 @@ import { ConfirmDialog } from '@/components/ui/modal'
 import { ProfileFields, draftPatch, profileDraft, type ProfileDraft } from '@/features/team/ProfileFields'
 import { clientDisplayName, OPEN_PROJECT, OPEN_TASK, profileDisplayName, profileFullName, shortProjectTitle, isAssignedTo, taskAssigneeIds } from '@/lib/derive'
 import { formatDate, formatFeedAgo } from '@/lib/format'
-import type { ClientMember, ProjectMember, Role } from '@/types'
+import type { Role } from '@/types'
 
 const roleLabel = { owner: 'Owner', admin: 'Admin', member: 'Member' } as const
 
@@ -23,7 +24,7 @@ export function MemberPage() {
   const navigate = useNavigate()
   const isAdmin = useIsAdmin()
   const isOwner = useIsOwner()
-  const { profiles, clients, projects, tasks, clientMembers, projectMembers, accessV2Ready, onlineIds, me, demoMode, updateRow, createRow, deleteRow } = useData()
+  const { profiles, clients, projects, tasks, clientMembers, projectMembers, accessV2Ready, onlineIds, me, demoMode, updateRow } = useData()
   const person = profiles.find((p) => p.id === id)
 
   const grantedNow = useMemo(() => new Set(clientMembers.filter((m) => m.user_id === id).map((m) => m.client_id)), [clientMembers, id])
@@ -71,10 +72,7 @@ export function MemberPage() {
     if (profileDirty) updateRow('profiles', person.id, draftPatch(draft))
     if (role !== person.role) updateRow('profiles', person.id, { role }, { entity: 'member', entityId: person.id, action: 'updated', message: `changed ${name}'s role to ${roleLabel[role]}` })
     if (accessDirty) {
-      for (const c of access) if (!grantedNow.has(c)) createRow<ClientMember>('client_members', { client_id: c, user_id: person.id })
-      for (const m of clientMembers.filter((m) => m.user_id === person.id)) if (!access.has(m.client_id)) deleteRow('client_members', m.id)
-      for (const p of shared) if (!sharedNow.has(p)) createRow<ProjectMember>('project_members', { project_id: p, user_id: person.id })
-      for (const m of projectMembers.filter((m) => m.user_id === person.id)) if (!shared.has(m.project_id)) deleteRow('project_members', m.id)
+      setMemberAccess(person.id, access, shared)
     }
     toast.success(`Saved changes for ${name}`)
   }

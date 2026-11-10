@@ -79,6 +79,14 @@ export function Composer({ people, meId, roleOf, placeholder = 'Write a commentâ
     pendingCaret.current = null
   }, [text])
 
+  // The box grows with what you type (up to a cap, then it scrolls).
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 420)}px`
+  }, [text])
+
   const onChange = (value: string) => {
     setText(value)
     const caret = ref.current?.selectionStart ?? value.length
@@ -182,7 +190,7 @@ export function Composer({ people, meId, roleOf, placeholder = 'Write a commentâ
             onKeyDown={onKeyDown}
             onFocus={() => window.clearTimeout(blurTimer.current)}
             onBlur={() => { blurTimer.current = window.setTimeout(() => setQuery(null), 150) }}
-            rows={2}
+            rows={4}
           />
           <div className="row between">
             <button

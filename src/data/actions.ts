@@ -4,7 +4,7 @@ import { useData } from '@/data/store'
 import { clientDisplayName, profileDisplayName, taskAssigneeIds, taskRef } from '@/lib/derive'
 import { formatMinutes, formatMoney, todayISO } from '@/lib/format'
 import { projectStatus, taskStatus } from '@/lib/status'
-import type { ClientNote, Payment, Project, ProjectStatus, Subtask, Task, TaskComment, TaskStatus, TimeEntry, TimeTimer } from '@/types'
+import type { ClientMember, ClientNote, Payment, Project, ProjectMember, ProjectStatus, Subtask, Task, TaskComment, TaskStatus, TimeEntry, TimeTimer } from '@/types'
 
 const S = () => useData.getState()
 const isAdmin = () => S().me?.role !== 'member'
@@ -437,3 +437,33 @@ export function discardTimer(timer: TimeTimer) {
 
 // ---------------------------------------------------------------- invoices
 
+
+// ---------------------------------------------------------------- team access
+
+/**
+ * Sets exactly which clients (whole client) and single projects a member has.
+ * A single project under a client they now have in full is dropped as redundant.
+ */
+export function setMemberAccess(userId: string, clientIds: Set<string>, projectIds: Set<string>) {
+  const s = S()
+  const singles = new Set(
+    [...projectIds].filter((pid) => {
+      const p = s.projects.find((x) => x.id === pid)
+      return p && !clientIds.has(p.client_id)
+    }),
+  )
+  const myClients = s.clientMembers.filter((m) => m.user_id === userId)
+  const myProjects = s.projectMembers.filter((m) => m.user_id === userId)
+  for (const c of clientIds) if (!myClients.some((m) => m.client_id === c)) s.createRow<ClientMember>('client_members', { client_id: c, user_id: userId })
+  for (const m of myClients) if (!clientIds.has(m.client_id)) s.deleteRow('client_members', m.id)
+  for (const p of singles) if (!myProjects.some((m) => m.project_id === p)) s.createRow<ProjectMember>('project_members', { project_id: p, user_id: userId })
+  for (const m of myProjects) if (!singles.has(m.project_id)) s.deleteRow('project_members', m.id)
+}
+
+/** "2 clients · 1 project", or '' when they have nothing. */
+export function accessSummary(userId: string) {
+  const s = S()
+  const nc = s.clientMembers.filter((m) => m.user_id === userId).length
+  const np = s.projectMembers.filter((m) => m.user_id === userId).length
+  return [nc ? `${nc} client${nc === 1 ? '' : 's'}` : '', np ? `${np} project${np === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ')
+}

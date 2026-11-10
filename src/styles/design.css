@@ -408,7 +408,7 @@ select.inp{appearance:none;-webkit-appearance:none;cursor:pointer;padding-right:
 .sys b{color:var(--ink2);font-weight:600}
 .composer{position:relative;border:1px solid var(--line2);border-radius:10px;padding:10px 12px;transition:border-color .15s,box-shadow .2s}
 .composer:focus-within{border-color:var(--pri);box-shadow:0 0 0 3px var(--pri-soft)}
-.composer textarea{width:100%;border:0;outline:0;resize:none;background:transparent;font-size:13.5px;line-height:1.5;min-height:44px}
+.composer textarea{width:100%;border:0;outline:0;resize:none;background:transparent;font-size:13.5px;line-height:1.5;min-height:84px;max-height:420px;overflow-y:auto;display:block}
 .mention-pop{display:none;position:absolute;bottom:calc(100% + 8px);left:12px;width:270px;background:var(--panel);border:1px solid var(--line2);border-radius:11px;box-shadow:var(--shadow-pop);padding:6px;z-index:5}
 .mention-pop.open{display:block;animation:pop .2s var(--ease) both;transform-origin:bottom left}
 .editor-bar{display:flex;align-items:center;gap:2px;padding:4px;border:1px solid var(--line);border-bottom:0;border-radius:10px 10px 0 0;background:var(--soft2)}

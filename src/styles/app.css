@@ -828,3 +828,26 @@ html.desktop .side::-webkit-scrollbar { width: 0; } /* still scrolls with the wh
 .run-timer small { font-size: 11.5px; color: var(--mute); }
 .run-timer .btn-icon { width: 26px; height: 26px; flex: none; }
 .time-row { min-height: 26px; }
+
+/* Rows inside a rounded card: the hover background follows the card's corners. */
+.card > :first-child,
+.card > .list:first-child > :first-child { border-top-left-radius: 11px; border-top-right-radius: 11px; }
+.card > :last-child,
+.card > .list:last-child > :last-child { border-bottom-left-radius: 11px; border-bottom-right-radius: 11px; }
+
+/* Team access: clients with their projects underneath */
+.access-list { max-height: 52vh; overflow-y: auto; }
+.access-grp + .access-grp { border-top: 1px solid var(--line-xs); }
+.check-row.sub { padding-left: 64px; }
+.link-plain { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+
+/* One-click choice (No access / This project / Whole client) */
+.pick { display: inline-flex; gap: 2px; padding: 3px; border-radius: 9px; background: var(--line-xs); flex: none; }
+.pick button { border: 0; background: transparent; padding: 5px 10px; border-radius: 7px; font: inherit; font-size: 12.5px; font-weight: 500; color: var(--mute); cursor: pointer; white-space: nowrap; transition: background .15s, color .15s; }
+.pick button:hover:not(:disabled) { color: var(--ink); }
+.pick button.on { background: var(--panel); color: var(--ink); box-shadow: 0 1px 2px rgba(16,16,24,.08), 0 0 0 1px var(--line); }
+.pick button:disabled { opacity: .45; cursor: not-allowed; }
+
+/* Client access grid: project rows under each client */
+.tbl tr.proj-row td:first-child { padding-left: 44px; }
+.tbl tr.proj-row td { background: var(--soft2); }
