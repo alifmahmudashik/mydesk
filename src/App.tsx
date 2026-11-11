@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, type ReactNode } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useData } from '@/data/store'
+import { useTrackNavHistory } from '@/lib/nav-history'
 import { useAuth } from '@/hooks/useAuth'
 import { usePrefs } from '@/hooks/usePrefs'
 import { useIsAdmin } from '@/hooks/usePermissions'
@@ -69,6 +70,7 @@ function AdminOnly({ children }: { children: ReactNode }) {
 function Routed() {
   const ready = useData((s) => s.ready)
   const location = useLocation()
+  useTrackNavHistory()
   if (!ready) return <PageSkeleton />
   return (
     // Keyed by path so each page plays its entrance animation.

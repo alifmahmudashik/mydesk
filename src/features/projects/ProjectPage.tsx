@@ -4,6 +4,7 @@ import { Archive, Calendar, Clock, Copy, Edit3, FileText, Filter, Folder, Lock, 
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
 import { useUI } from '@/data/ui'
+import { previousPage } from '@/lib/nav-history'
 import { archiveProject, createTask, deleteProject, duplicateForNextMonth, hourlyAmount, projectMinutes, setProjectStatus, updateProject } from '@/data/actions'
 import { useIsAdmin } from '@/hooks/usePermissions'
 import { pushRecent } from '@/components/layout/CommandPalette'
@@ -395,8 +396,12 @@ export function ProjectPage() {
         title={`Delete “${shortProjectTitle(project.title)}”?`}
         description={`This removes the project, its ${projectTasks.length} task${projectTasks.length === 1 ? '' : 's'}, notes and checklist${isAdmin ? ', plus payments that only covered this project' : ''}. This can’t be undone.`}
         onConfirm={() => {
+          // Go back to where you opened the project from (e.g. its client), skipping
+          // this project's page and its tasks, which are about to be gone.
+          const gone = new Set([`/projects/${project.id}`, ...projectTasks.map((t) => `/tasks/${t.id}`)])
+          const back = previousPage((path) => gone.has(path.split('?')[0]), '/projects')
           deleteProject(project)
-          navigate('/projects')
+          navigate(back, { replace: true })
         }}
       />
     </>
