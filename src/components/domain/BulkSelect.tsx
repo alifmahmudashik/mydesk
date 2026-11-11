@@ -132,7 +132,7 @@ export function SelectButton({ sel, className }: { sel: Selection; className?: s
     >
       {active ? <X className="i i-sm" /> : <CheckSquare className="i i-sm" />}
       <span>{active ? 'Cancel' : 'Select'}</span>
-      {active && sel.ids.size > 0 && <span className="n" style={{ marginLeft: 3 }}>{sel.ids.size}</span>}
+      {active && sel.ids.size > 0 && <span className="select-num" style={{ marginLeft: 3, fontWeight: 600 }}>{sel.ids.size}</span>}
     </button>
   )
 }

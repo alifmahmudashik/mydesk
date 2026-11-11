@@ -861,7 +861,7 @@ html.desktop .side::-webkit-scrollbar { width: 0; } /* still scrolls with the wh
 .li.selected, .tbl tbody tr.selected td { background: var(--sel-bg); }
 .sel-on .li, .sel-on tr.hov { cursor: pointer; }
 .select-btn { gap: 6px; }
-.select-btn.on .n { background: var(--pri-mid); color: var(--pri-h); }
+.select-btn .select-num { background: none; font-weight: 600; opacity: .9; }
 
 /* In selection mode, disable other inputs (task complete circle, date, priority, inline edits, time log) */
 .sel-on .li > input.cb.round,
