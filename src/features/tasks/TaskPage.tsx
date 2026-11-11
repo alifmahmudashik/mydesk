@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { Check, ChevronDown, ChevronUp, Copy, Eye, EyeOff, Folder, Link2, Mail, MoreHorizontal, Paperclip, Plus, Trash2, X } from 'lucide-react'
+import { Check, ChevronDown, Clock, ChevronUp, Copy, Eye, EyeOff, Folder, Link2, Mail, MoreHorizontal, Paperclip, Plus, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
 import { addComment, deleteTask, duplicateTask, setTaskAssignees, setTaskStatus, toggleSubtask, updateTask } from '@/data/actions'
@@ -25,7 +25,7 @@ import { copyText } from '@/lib/utils'
 import type { Priority, Subtask, TaskAttachment, TaskStatus, TaskWatcher } from '@/types'
 import { format, parseISO } from 'date-fns'
 import { CodeSnippets } from '@/components/domain/CodeSnippets'
-import { LogTimeModal, TimeEntryRow, TimerButton } from '@/components/domain/TimeTracking'
+import { InlineLogTime, TimeEntryRow, TimerButton } from '@/components/domain/TimeTracking'
 
 const STATUSES: TaskStatus[] = ['todo', 'in_progress', 'waiting_for_client', 'blocked', 'review', 'done']
 
@@ -496,15 +496,16 @@ export function TaskPage() {
             <span className="label-caps">Time</span>
             <span className="row-sm">
               <TimerButton projectId={task.project_id} taskId={task.id} small />
-              <button className="btn btn-sm" type="button" style={{ height: 24, fontSize: 11.5 }} onClick={() => setLogOpen(true)}><Plus className="i i-xs" />Log time</button>
+              <button className="btn btn-sm" type="button" style={{ height: 24, fontSize: 11.5 }} onClick={() => setLogOpen((o) => !o)} aria-expanded={logOpen}><Clock className="i i-xs" />Log time</button>
             </span>
           </div>
+          {logOpen && <InlineLogTime task={task} onDone={() => setLogOpen(false)} />}
           {time.length > 0 ? (
             <div className="stack-sm small">
               {[...time].sort((a, b) => b.logged_on.localeCompare(a.logged_on) || b.created_at.localeCompare(a.created_at)).map((t) => <TimeEntryRow key={t.id} entry={t} />)}
             </div>
           ) : (
-            <span className="xs muted">Nothing logged yet.</span>
+            !logOpen && <span className="xs muted">Nothing logged yet.</span>
           )}
 
           <div className="divider" style={{ margin: '16px 0' }} />
@@ -539,7 +540,6 @@ export function TaskPage() {
         }}
       />
       <MoveModal open={moveOpen} onClose={() => setMoveOpen(false)} taskId={task.id} />
-      <LogTimeModal open={logOpen} onClose={() => setLogOpen(false)} taskId={task.id} projectId={task.project_id} />
       <LinkModal open={linkOpen} onClose={() => setLinkOpen(false)} onAdd={addLink} />
     </>
   )

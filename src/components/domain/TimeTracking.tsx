@@ -237,6 +237,34 @@ export function QuickLogTime({ task }: { task: { id: string; project_id: string;
   )
 }
 
+/** Log time on a task right in the page (task Details → Time), no popup. */
+export function InlineLogTime({ task, onDone }: { task: { id: string; project_id: string }; onDone: () => void }) {
+  const [f, setF] = useState({ duration: '', date: todayISO(), note: '' })
+  const save = () => {
+    const minutes = parseDuration(f.duration)
+    if (!minutes) return toast.error('Enter time like “1h 30m”, “45m” or “1.5”')
+    logTime({ projectId: task.project_id, taskId: task.id, minutes, date: f.date, note: f.note })
+    toast.success(`Logged ${formatMinutes(minutes)}`)
+    onDone()
+  }
+  return (
+    <form className="qlog inline-log" onSubmit={(e) => { e.preventDefault(); save() }} onKeyDown={(e) => e.key === 'Escape' && onDone()}>
+      <div className="qlog-chips">
+        {QUICK.map((m) => (
+          <button key={m} type="button" className={`btn btn-sm${parseDuration(f.duration) === m ? ' on' : ''}`} onClick={() => setF({ ...f, duration: quickLabel(m) })}>{quickLabel(m)}</button>
+        ))}
+      </div>
+      <input className="inp sm" autoFocus placeholder="Or type: 1h 30m, 45m" aria-label="Time spent" value={f.duration} onChange={(e) => setF({ ...f, duration: e.target.value })} />
+      <DateInput value={f.date} onChange={(v) => setF({ ...f, date: v ?? todayISO() })} clearable={false} />
+      <input className="inp sm" placeholder="What did you work on? (optional)" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} />
+      <div className="pop-actions">
+        <button type="button" className="btn btn-sm" onClick={onDone}>Cancel</button>
+        <button type="submit" className="btn btn-sm btn-pri" disabled={!f.duration.trim()}>Log</button>
+      </div>
+    </form>
+  )
+}
+
 /** One-click amounts, also offered in the Log time window. */
 const QUICK = [15, 30, 60, 120]
 const quickLabel = (m: number) => (m < 60 ? `${m}m` : `${m / 60}h`)
