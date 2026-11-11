@@ -28,7 +28,7 @@ import { MonthInput } from '@/components/ui/month-picker'
 import { MoneyInput } from '@/components/ui/field'
 import { SUPPORTED_CURRENCIES } from '@/lib/currency'
 import { monthLabel } from '@/components/ui/month-picker'
-import { clientDisplayName, effectivePaymentStatus, hasWorkMonthColumn, projectWorkDate, eligibleAssignees, profileDisplayName, profileFullName, shortProjectTitle, isAssignedTo, projectTeam, hasClientAccess } from '@/lib/derive'
+import { clientDisplayName, effectivePaymentStatus, hasWorkMonthColumn, projectWorkDate, eligibleAssignees, profileDisplayName, profileFullName, shortProjectTitle, isAssignedTo, projectTeam, hasClientAccess, lineIsForProject } from '@/lib/derive'
 import { formatDate, formatFeedAgo, formatMinutes, formatMoney } from '@/lib/format'
 import { accessStatus, billingLabel, paymentStatus, priorityMeta, projectStatus, taskRing, taskStatus } from '@/lib/status'
 import type { AccessItem, AccessStatus, Priority, ProjectNote, ProjectStatus, Task, TaskStatus, BillingType, Project } from '@/types'
@@ -91,7 +91,7 @@ export function ProjectPage() {
     return true
   })
   const byStatus = (s: TaskStatus) => filtered.filter((t) => t.status === s).sort((a, b) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999'))
-  const projectInvoices = invoices.filter((inv) => inv.client_id === project.client_id && inv.line_items.some((li) => li.description.trim() === project.title.trim()))
+  const projectInvoices = invoices.filter((inv) => inv.client_id === project.client_id && inv.line_items.some((li) => lineIsForProject(li, project)))
 
   return (
     <>

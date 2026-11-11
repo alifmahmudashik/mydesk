@@ -129,6 +129,8 @@ export interface InvoiceLineItem {
   description: string
   price: number
   qty: number
+  /** Set on task lines of an hourly project, so the invoice still links to that project. */
+  project_id?: string | null
 }
 
 /** A generated, exportable invoice — separate from Payments (which track what's owed/settled). */

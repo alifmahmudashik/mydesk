@@ -1,4 +1,4 @@
-import type { Client, ClientMember, Payment, ProjectMember, PaymentStatus, Profile, Project, Task } from '@/types'
+import type { Client, ClientMember, Payment, ProjectMember, PaymentStatus, Profile, Project, Task, TimeEntry } from '@/types'
 import { formatMoney, isOverdue } from '@/lib/format'
 
 /** The one way to name a client anywhere in the UI. Respects the per-client display preference. */
@@ -155,16 +155,24 @@ export function plainMentions(body: string) {
  */
 const sameTitle = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
 
+type LineRef = { description: string; project_id?: string | null }
+
+/** A line item belongs to a project when it carries the project's id (task lines of an
+ *  hourly project) or its description is the project's title (one line per project). */
+export function lineIsForProject(li: LineRef, p: Pick<Project, 'id' | 'title'>) {
+  return li.project_id === p.id || (Boolean(li.description.trim()) && sameTitle(li.description, p.title))
+}
+
 /** Projects an invoice is for: its line items matched to the client's projects by name,
  *  plus any project whose payment is linked to the invoice. */
 export function invoiceProjects(
-  inv: { id: string; client_id: string; line_items: { description: string }[] },
+  inv: { id: string; client_id: string; line_items: LineRef[] },
   projects: Project[],
   payments: Payment[],
 ): Project[] {
   const linkedIds = new Set(payments.filter((p) => p.invoice_id === inv.id).flatMap((p) => p.project_ids ?? []))
   return projects.filter(
-    (p) => linkedIds.has(p.id) || (p.client_id === inv.client_id && inv.line_items.some((li) => li.description.trim() && sameTitle(li.description, p.title))),
+    (p) => linkedIds.has(p.id) || (p.client_id === inv.client_id && inv.line_items.some((li) => lineIsForProject(li, p))),
   )
 }
 
@@ -173,7 +181,7 @@ export function invoiceProjects(
  * = paid. Falls back to payments linked directly to the invoice; null when it has neither.
  */
 export function invoiceStatus(
-  inv: { id: string; client_id: string; line_items: { description: string }[]; due_date?: string | null },
+  inv: { id: string; client_id: string; line_items: LineRef[]; due_date?: string | null },
   projects: Project[],
   payments: Payment[],
 ): PaymentStatus | null {
@@ -204,9 +212,9 @@ export function invoicePaymentStatus(invoiceId: string, payments: Payment[]): Pa
 }
 
 /** Projects ready to invoice: marked Completed (Finished means it's already settled) and not on an invoice yet. */
-export function isInvoiceable(project: Project, invoices: { client_id: string; line_items: { description: string }[] }[], payments: Payment[]) {
+export function isInvoiceable(project: Project, invoices: { client_id: string; line_items: LineRef[] }[], payments: Payment[]) {
   if (project.status !== 'completed') return false
-  const onInvoice = invoices.some((i) => i.client_id === project.client_id && i.line_items.some((li) => li.description.trim() === project.title.trim()))
+  const onInvoice = invoices.some((i) => i.client_id === project.client_id && i.line_items.some((li) => lineIsForProject(li, project)))
   const paymentInvoiced = payments.some((p) => p.project_ids?.includes(project.id) && p.invoice_id)
   return !onInvoice && !paymentInvoiced
 }
@@ -266,4 +274,33 @@ export function taskAssigneeIds(t: { assignee_id?: string | null; assignee_ids?:
 
 export function isAssignedTo(t: { assignee_id?: string | null; assignee_ids?: string[] | null }, userId?: string | null) {
   return Boolean(userId) && taskAssigneeIds(t).includes(userId!)
+}
+
+export interface TaskWork {
+  title: string
+  /** Minutes logged (hourly projects); 0 otherwise. */
+  minutes: number
+}
+
+/**
+ * What was done on a project, task by task.
+ * Hourly: every task with time logged, plus "Other work" for time logged on the project itself.
+ * Other billing types: the tasks marked done.
+ */
+export function projectTaskWork(project: Project, tasks: Task[], timeEntries: TimeEntry[]): TaskWork[] {
+  const own = tasks.filter((t) => t.project_id === project.id)
+  if (project.billing_type !== 'hourly') {
+    return own.filter((t) => t.status === 'done').map((t) => ({ title: t.title, minutes: 0 }))
+  }
+  const byTask = new Map<string, number>()
+  let loose = 0
+  for (const e of timeEntries) {
+    if (e.project_id !== project.id) continue
+    const m = Number(e.minutes) || 0
+    if (e.task_id && own.some((t) => t.id === e.task_id)) byTask.set(e.task_id, (byTask.get(e.task_id) ?? 0) + m)
+    else loose += m
+  }
+  const out = own.filter((t) => (byTask.get(t.id) ?? 0) > 0).map((t) => ({ title: t.title, minutes: byTask.get(t.id)! }))
+  if (loose > 0) out.push({ title: 'Other work', minutes: loose })
+  return out
 }

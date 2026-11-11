@@ -15,10 +15,10 @@ import { A4_WIDTH, InvoicePaper, ScaledInvoice } from '@/features/invoices/Invoi
 import { SUPPORTED_CURRENCIES } from '@/lib/currency'
 import { exportElementToPdf, invoiceFilename } from '@/lib/pdf'
 import { paymentTitle } from '@/data/actions'
-import { clientColor, clientDisplayName, effectivePaymentStatus, invoiceStatus, isInvoiceable, withWorkMonthNote } from '@/lib/derive'
+import { clientColor, clientDisplayName, effectivePaymentStatus, invoiceStatus, isInvoiceable, lineIsForProject, projectTaskWork, withWorkMonthNote } from '@/lib/derive'
 import { formatDate, formatMoney, todayISO } from '@/lib/format'
 import { paymentStatus, paymentTerms } from '@/lib/status'
-import type { Client, Invoice, InvoiceLineItem, Project } from '@/types'
+import type { Client, Invoice, InvoiceLineItem, Project, Task, TimeEntry } from '@/types'
 import { DateInput } from '@/components/ui/date-picker'
 
 const COLORS = ['#4F46E5', '#DB2777', '#0284C7', '#0D9488', '#0F0F14']
@@ -94,7 +94,7 @@ export function InvoiceEditor() {
   // so an invoice made from projects links to those payments instead of creating new ones.
   const linkedPayments = existing ? payments.filter((p) => p.invoice_id === existing.id) : []
   const projectIdsOnInvoice = projects
-    .filter((p) => p.client_id === f.client_id && f.line_items.some((li) => li.description.trim() && li.description.trim().toLowerCase() === p.title.trim().toLowerCase()))
+    .filter((p) => p.client_id === f.client_id && f.line_items.some((li) => lineIsForProject(li, p)))
     .map((p) => p.id)
   const projectPayments = payments.filter(
     (p) =>
@@ -152,7 +152,7 @@ export function InvoiceEditor() {
     // duplicate numbers, and that must not block saving an existing invoice.
     const numberChanged = !existing || existing.number.trim() !== f.number.trim()
     if (numberChanged && invoices.some((i) => i.number.trim() === f.number.trim() && i.id !== existing?.id)) return toast.error(`Invoice ${f.number} already exists`)
-    const items = f.line_items.filter((li) => li.description.trim() || Number(li.price)).map((li) => ({ description: li.description.trim(), price: Number(li.price) || 0, qty: Number(li.qty) || 1 }))
+    const items = f.line_items.filter((li) => li.description.trim() || Number(li.price)).map((li) => ({ description: li.description.trim(), price: Number(li.price) || 0, qty: Number(li.qty) || 1, ...(li.project_id ? { project_id: li.project_id } : {}) }))
     const data = {
       client_id: f.client_id,
       number: f.number.trim(),
@@ -354,32 +354,60 @@ export function InvoiceEditor() {
         open={pickOpen}
         onClose={() => setPickOpen(false)}
         clientId={f.client_id}
-        exclude={f.line_items.map((li) => li.description.trim()).filter(Boolean)}
-        onAdd={(items, currency, chosen) => {
-          setF((s) => ({ ...s, currency: s.line_items.some((li) => li.description.trim()) ? s.currency : currency ?? s.currency, line_items: [...s.line_items.filter((li) => li.description.trim() || Number(li.price)), ...items], notes: withWorkMonthNote(s.notes, chosen) }))
+        onInvoice={f.line_items}
+        onAdd={(items, currency, chosen, noteLines) => {
+          setF((s) => ({ ...s, currency: s.line_items.some((li) => li.description.trim()) ? s.currency : currency ?? s.currency, line_items: [...s.line_items.filter((li) => li.description.trim() || Number(li.price)), ...items], notes: withExtraNoteLines(withWorkMonthNote(s.notes, chosen), noteLines) }))
         }}
       />
     </>
   )
 }
 
-function ProjectPicker({ open, onClose, clientId, onAdd, exclude }: { open: boolean; onClose: () => void; clientId: string; onAdd: (items: InvoiceLineItem[], currency: string | undefined, chosen: Project[]) => void; exclude: string[] }) {
-  const { projects, invoices, payments } = useData()
+/** Adds lines to an invoice note, skipping any already there. */
+function withExtraNoteLines(note: string, lines: string[]) {
+  const add = lines.filter((l) => !note.includes(l))
+  if (!add.length) return note
+  return [note.trim(), add.join('\n')].filter(Boolean).join('\n\n')
+}
+
+/** An hourly project billed task by task: one line per task (hours × rate). Null when it
+ *  can't be split (not hourly, no rate, or no time logged). */
+function hourlyTaskLines(p: Project, tasks: Task[], timeEntries: TimeEntry[]): InvoiceLineItem[] | null {
+  if (p.billing_type !== 'hourly' || p.hourly_rate == null) return null
+  const work = projectTaskWork(p, tasks, timeEntries)
+  if (!work.length) return null
+  return work.map((w) => ({ description: w.title, price: Number(p.hourly_rate), qty: Math.round((w.minutes / 60) * 100) / 100, project_id: p.id }))
+}
+
+function ProjectPicker({ open, onClose, clientId, onAdd, onInvoice }: { open: boolean; onClose: () => void; clientId: string; onAdd: (items: InvoiceLineItem[], currency: string | undefined, chosen: Project[], noteLines: string[]) => void; onInvoice: InvoiceLineItem[] }) {
+  const { projects, invoices, payments, tasks, timeEntries } = useData()
   const [sel, setSel] = useState<Set<string>>(new Set())
+  const [byTask, setByTask] = useState(false)
   useEffect(() => {
     if (open) setSel(new Set())
   }, [open])
   // Only Completed projects that aren't on an invoice yet (Finished ones are already settled).
   const list = projects
-    .filter((p) => p.client_id === clientId && isInvoiceable(p, invoices, payments) && !exclude.includes(p.title.trim()))
+    .filter((p) => p.client_id === clientId && isInvoiceable(p, invoices, payments) && !onInvoice.some((li) => lineIsForProject(li, p)))
     .sort((a, b) => (b.completed_at ?? b.due_date ?? '').localeCompare(a.completed_at ?? a.due_date ?? ''))
+  const hasHourly = list.some((p) => p.billing_type === 'hourly')
+  const chosen = list.filter((p) => sel.has(p.id))
+  // Hourly projects with "List tasks" on become one line per task; everything else one line per project.
+  const split = chosen.map((p) => ({ p, lines: byTask ? hourlyTaskLines(p, tasks, timeEntries) : null }))
+  const items = split.flatMap(({ p, lines }) => lines ?? [{ description: p.title, price: Number(p.amount) || 0, qty: 1 }])
   const add = () => {
-    const chosen = list.filter((p) => sel.has(p.id))
-    onAdd(chosen.map((p) => ({ description: p.title, price: Number(p.amount) || 0, qty: 1 })), chosen[0]?.currency, chosen)
+    // Task lines don't name the project, so say which project they're for in the note.
+    const noteLines = split.filter((x) => x.lines).map(({ p }) => `Hourly work for: ${p.title}`)
+    onAdd(items, chosen[0]?.currency, chosen, noteLines)
     onClose()
   }
+  const note = hasHourly ? (
+    <label className="row-sm" style={{ cursor: 'pointer' }} title="Hourly projects only. Each task becomes its own line: hours × rate.">
+      <input type="checkbox" className="cb" checked={byTask} onChange={(e) => setByTask(e.target.checked)} /> List tasks for hourly projects
+    </label>
+  ) : 'Completed projects not on an invoice yet'
   return (
-    <Modal open={open} onClose={onClose} title="Add from projects" note="Completed projects not on an invoice yet" footer={<><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="button" className="btn btn-pri" disabled={!sel.size} onClick={add}>Add {sel.size || ''} line{sel.size === 1 ? '' : 's'}</button></>}>
+    <Modal open={open} onClose={onClose} title="Add from projects" note={note} footer={<><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="button" className="btn btn-pri" disabled={!sel.size} onClick={add}>Add {items.length || ''} line{items.length === 1 ? '' : 's'}</button></>}>
       <div style={{ maxHeight: '55vh', overflowY: 'auto' }}>
         {list.length === 0 && (
           <div className="empty sm">
@@ -404,7 +432,7 @@ function ProjectPicker({ open, onClose, clientId, onAdd, exclude }: { open: bool
             />
             <span className="txt">
               <span className="m" style={{ display: 'block' }}>{p.title}</span>
-              <span className="xs muted">Completed{p.completed_at ? ` ${formatDate(p.completed_at.slice(0, 10))}` : p.due_date ? ` · due ${formatDate(p.due_date)}` : ''}</span>
+              <span className="xs muted">Completed{p.completed_at ? ` ${formatDate(p.completed_at.slice(0, 10))}` : p.due_date ? ` · due ${formatDate(p.due_date)}` : ''}{p.billing_type === 'hourly' ? ' · Hourly' : ''}</span>
             </span>
             <span className="num small m">{p.amount ? formatMoney(p.amount, p.currency) : '—'}</span>
           </label>

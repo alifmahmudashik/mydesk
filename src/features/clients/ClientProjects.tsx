@@ -9,23 +9,39 @@ import { Empty } from '@/components/ui/layout'
 import { AvatarStack } from '@/components/ui/avatar'
 import { StatusPill } from '@/components/ui/pill'
 import { Modal } from '@/components/ui/modal'
-import { sumByCurrency, isAssignedTo } from '@/lib/derive'
-import { formatDate, formatMoney, isOverdue } from '@/lib/format'
+import { sumByCurrency, isAssignedTo, projectTaskWork } from '@/lib/derive'
+import { formatDate, formatMinutes, formatMoney, isOverdue } from '@/lib/format'
 import { projectStatus } from '@/lib/status'
 import { copyText } from '@/lib/utils'
 import { ProjectBulkBar, SelectBox, SelectButton, SelectionProvider, useSelection } from '@/components/domain/BulkSelect'
-import type { Client, Project, ProjectStatus } from '@/types'
+import type { Client, Project, ProjectStatus, Task, TimeEntry } from '@/types'
+
+const projectMinutesFrom = (p: Project, timeEntries: TimeEntry[]) => timeEntries.filter((e) => e.project_id === p.id).reduce((s, e) => s + (Number(e.minutes) || 0), 0)
 
 const RING: Record<ProjectStatus, string> = { not_started: '', in_progress: 'prog', waiting_for_client: 'wait', blocked: 'block', completed: 'done', finished: 'done', cancelled: 'cancel' }
 
-/** "1. Title — $30" lines plus a per-currency total, ready to paste to the client. */
-function buildChatSummary(firstName: string, selected: Project[]) {
+/** Task lines under a project: hourly ones show time and its cost, others just the task. */
+function taskLines(p: Project, tasks: Task[], timeEntries: TimeEntry[]) {
+  const rate = p.billing_type === 'hourly' && p.hourly_rate != null ? Number(p.hourly_rate) : null
+  return projectTaskWork(p, tasks, timeEntries).map((w) =>
+    p.billing_type === 'hourly'
+      ? `   • ${w.title} — ${formatMinutes(w.minutes)}${rate != null ? ` (${formatMoney(Math.round(((w.minutes * rate) / 60) * 100) / 100, p.currency, { cents: true })})` : ''}`
+      : `   • ${w.title}`,
+  )
+}
+
+/** "1. Title — $30" lines plus a per-currency total, ready to paste to the client.
+ *  With tasks on, each project lists its tasks underneath (hours and cost for hourly ones). */
+function buildChatSummary(firstName: string, selected: Project[], withTasks = false, tasks: Task[] = [], timeEntries: TimeEntry[] = []) {
   return [
     `Hi ${firstName},`,
     '',
     'Here is the summary of projects worked on:',
     '',
-    ...selected.map((p, i) => `${i + 1}. ${p.title} — ${formatMoney(p.amount, p.currency)}`),
+    ...selected.flatMap((p, i) => [
+      `${i + 1}. ${p.title} — ${formatMoney(p.amount, p.currency)}${p.billing_type === 'hourly' && p.hourly_rate != null ? ` (${formatMinutes(projectMinutesFrom(p, timeEntries))} × ${formatMoney(Number(p.hourly_rate), p.currency)}/h)` : ''}`,
+      ...(withTasks ? taskLines(p, tasks, timeEntries) : []),
+    ]),
     '',
     `Total: ${sumByCurrency(selected)}`,
     '',
@@ -40,9 +56,10 @@ function buildChatSummary(firstName: string, selected: Project[]) {
 export function ClientProjects({ client }: { client: Client }) {
   const isAdmin = useIsAdmin()
   const { openCreate } = useUI()
-  const { projects, tasks, profiles, payments } = useData()
+  const { projects, tasks, profiles, payments, timeEntries } = useData()
   const [finishedOpen, setFinishedOpen] = useState(false)
   const [exportText, setExportText] = useState<string | null>(null)
+  const [withTasks, setWithTasks] = useState(false)
 
   const all = useMemo(() => projects.filter((p) => p.client_id === client.id), [projects, client.id])
   const selection = useSelection(all.map((p) => p.id))
@@ -167,7 +184,7 @@ export function ClientProjects({ client }: { client: Client }) {
           sel={selection}
           allIds={all.map((p) => p.id)}
           extra={isAdmin ? (
-            <button type="button" className="btn btn-sm" disabled={selected.length === 0} title={`Total: ${sumByCurrency(selected)}`} onClick={() => setExportText(buildChatSummary(firstName, selected))}>
+            <button type="button" className="btn btn-sm" disabled={selected.length === 0} title={`Total: ${sumByCurrency(selected)}`} onClick={() => setExportText(buildChatSummary(firstName, selected, withTasks, tasks, timeEntries))}>
               <MessageSquare className="i i-sm" />Export message
             </button>
           ) : undefined}
@@ -178,6 +195,21 @@ export function ClientProjects({ client }: { client: Client }) {
         open={exportText !== null}
         onClose={() => setExportText(null)}
         title="Export as chat"
+        note={
+          <label className="row-sm" style={{ cursor: 'pointer' }} title="List each project's tasks. Hourly projects show the time and cost of each task.">
+            <input
+              type="checkbox"
+              className="cb"
+              checked={withTasks}
+              onChange={(e) => {
+                setWithTasks(e.target.checked)
+                // Rebuilds the message (replaces any edits made in the box).
+                setExportText(buildChatSummary(firstName, selected, e.target.checked, tasks, timeEntries))
+              }}
+            />{' '}
+            Include tasks
+          </label>
+        }
         footer={
           <button
             type="button"
