@@ -3,7 +3,7 @@
 // appears here automatically. The desktop app itself only needs rebuilding
 // if this folder changes.
 
-const { app, BrowserWindow, dialog, ipcMain, session, shell } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, powerMonitor, safeStorage, session, shell } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -117,6 +117,86 @@ ipcMain.handle('settings:set', (e, key, value) => {
 ipcMain.handle('app:version', (e) => (fromApp(e) ? app.getVersion() : null))
 
 const fromApp = (e) => Boolean(win) && e.sender === win.webContents
+
+// ---- sign-in storage -----------------------------------------------------------
+// The site's login (Supabase session) is saved here instead of only in the window's
+// localStorage. Chromium writes localStorage to disk a few seconds late, and a Windows
+// restart can kill the app before that. The session's refresh token changes every hour
+// and an old one is rejected, so a lost write meant being signed out after a restart.
+// This file is written (and synced to disk) the moment the value changes, encrypted
+// with Windows' own user encryption when available.
+const authFile = () => path.join(app.getPath('userData'), 'auth.json')
+let authStore = null
+
+const loadAuth = () => {
+  if (authStore) return authStore
+  try {
+    const raw = JSON.parse(fs.readFileSync(authFile(), 'utf8'))
+    authStore = raw.enc ? JSON.parse(safeStorage.decryptString(Buffer.from(raw.data, 'base64'))) : raw.data || {}
+  } catch {
+    authStore = {}
+  }
+  return authStore
+}
+
+const saveAuth = () => {
+  try {
+    const json = JSON.stringify(authStore || {})
+    const enc = safeStorage.isEncryptionAvailable()
+    const body = JSON.stringify(enc ? { enc: true, data: safeStorage.encryptString(json).toString('base64') } : { enc: false, data: authStore })
+    // Write a temp file, flush it to disk, then swap it in, so a crash never leaves half a file.
+    const tmp = authFile() + '.tmp'
+    const fd = fs.openSync(tmp, 'w')
+    try {
+      fs.writeSync(fd, body)
+      fs.fsyncSync(fd)
+    } finally {
+      fs.closeSync(fd)
+    }
+    fs.renameSync(tmp, authFile())
+  } catch {
+    /* fall back to the page's own localStorage copy */
+  }
+}
+
+// Only the MyDesk site itself may read or write it (not sign-in pages or the offline page).
+const fromAppSite = (e) => {
+  if (!fromApp(e)) return false
+  try {
+    const origin = new URL(e.senderFrame?.url || '').origin
+    return origin === APP_ORIGIN || /^http:\/\/localhost(:\d+)?$/.test(origin)
+  } catch {
+    return false
+  }
+}
+const validKey = (key) => typeof key === 'string' && key.length > 0 && key.length < 200
+
+ipcMain.on('auth:get', (e, key) => {
+  e.returnValue = fromAppSite(e) && validKey(key) ? (loadAuth()[key] ?? null) : null
+})
+ipcMain.on('auth:set', (e, key, value) => {
+  if (fromAppSite(e) && validKey(key) && typeof value === 'string' && value.length < 100000 && loadAuth()[key] !== value) {
+    authStore[key] = value
+    saveAuth()
+  }
+  e.returnValue = true
+})
+ipcMain.on('auth:remove', (e, key) => {
+  if (fromAppSite(e) && validKey(key) && key in loadAuth()) {
+    delete authStore[key]
+    saveAuth()
+  }
+  e.returnValue = true
+})
+
+// Also push the window's own storage to disk before Windows shuts down, sleeps or we quit.
+const flushStorage = () => {
+  try {
+    session.defaultSession.flushStorageData()
+  } catch {
+    /* not important */
+  }
+}
 
 // ---- updates (from GitHub releases) ------------------------------------------
 // Checks on start and every 6 hours. A new version asks first; "Download and
@@ -238,8 +318,12 @@ function createWindow() {
 
   // Closing: unload the page first so MyDesk can tell the server you're offline
   // (then emails resume right away), then close for real.
+  // Windows is signing out / restarting: save everything now, it may not wait for us.
+  win.on('session-end', flushStorage)
+
   win.on('close', (e) => {
     saveState(win)
+    flushStorage()
     if (closing || installing) return // the updater is closing us to reinstall
     closing = true
     e.preventDefault()
@@ -268,6 +352,9 @@ app.whenReady().then(() => {
   session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => callback(allowed(permission)))
   session.defaultSession.setPermissionCheckHandler((_wc, permission) => allowed(permission))
   createWindow()
+  powerMonitor.on('shutdown', flushStorage)
+  powerMonitor.on('suspend', flushStorage)
+  app.on('before-quit', flushStorage)
   setTimeout(checkForUpdates, 8000)
   setInterval(checkForUpdates, 6 * 60 * 60 * 1000)
 })

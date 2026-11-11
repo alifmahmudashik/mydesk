@@ -37,6 +37,12 @@ if (isApp) {
     getVersion: () => ipcRenderer.invoke('app:version'),
     getSettings: () => ipcRenderer.invoke('settings:get'),
     setSetting: (key, value) => ipcRenderer.invoke('settings:set', key, value),
+    // Sign-in storage saved straight to disk by the app (see main.js). Synchronous, like localStorage.
+    authStorage: {
+      getItem: (key) => ipcRenderer.sendSync('auth:get', key),
+      setItem: (key, value) => void ipcRenderer.sendSync('auth:set', key, value),
+      removeItem: (key) => void ipcRenderer.sendSync('auth:remove', key),
+    },
     getUpdate: () => ipcRenderer.invoke('update:get'),
     checkForUpdates: () => ipcRenderer.invoke('update:check'),
     downloadUpdate: () => ipcRenderer.invoke('update:download'),

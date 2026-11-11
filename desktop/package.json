@@ -1,7 +1,7 @@
 {
   "name": "mydesk-desktop",
   "productName": "MyDesk",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "MyDesk for Windows",
   "private": true,
   "main": "main.js",
