@@ -54,8 +54,8 @@ export const InvoicePaper = forwardRef<HTMLDivElement, InvoicePaperProps>(functi
   const toName = legalName || (p.client?.use_company_name && p.client.company_name ? p.client.company_name : p.client?.name ?? '—')
   const pay = visible(p.paymentFields)
 
-  const th = { padding: '13px 16px', fontSize: 15, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' as const, color: '#fff', textAlign: 'right' as const }
-  const td = { padding: '13px 16px', borderBottom: `1px solid ${LINE}`, textAlign: 'right' as const, fontVariantNumeric: 'tabular-nums' as const }
+  const th = { padding: '10px 14px', fontSize: 13, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' as const, color: '#fff', textAlign: 'right' as const }
+  const td = { padding: '12px 14px', borderBottom: `1px solid ${LINE}`, textAlign: 'right' as const, fontVariantNumeric: 'tabular-nums' as const }
 
   return (
     <div
@@ -151,7 +151,7 @@ export const InvoicePaper = forwardRef<HTMLDivElement, InvoicePaperProps>(functi
           <Row label={`Tax (${Number(p.taxRate)}%)`} value={money(tax, p.currency)} />
           {fee > 0 && <Row label="Processing fee" value={money(fee, p.currency)} />}
           <div style={{ overflow: 'hidden', borderRadius: 6 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 16px', background: brand, color: '#fff', fontWeight: 700 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 14px', fontSize: 15, background: brand, color: '#fff', fontWeight: 700 }}>
               <span>Total</span>
               <span style={{ fontVariantNumeric: 'tabular-nums' }}>{money(total, p.currency)}</span>
             </div>
@@ -171,12 +171,15 @@ export const InvoicePaper = forwardRef<HTMLDivElement, InvoicePaperProps>(functi
 
 function Row({ label, value }: { label: ReactNode; value: string }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 16px' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 14px' }}>
       <span style={{ color: MUTED }}>{label}</span>
       <span style={{ fontVariantNumeric: 'tabular-nums' }}>{value}</span>
     </div>
   )
 }
+
+/** On screen the page never shows bigger than this, so it reads like a document next to the form. */
+const MAX_PREVIEW_SCALE = 0.85
 
 /** Shows the A4 invoice scaled down to fit its container (never scaled up). */
 export function ScaledInvoice(props: InvoicePaperProps) {
@@ -190,7 +193,7 @@ export function ScaledInvoice(props: InvoicePaperProps) {
     const page = pageRef.current
     if (!frame || !page) return
     const update = () => {
-      const s = Math.min(1, frame.clientWidth / A4_WIDTH)
+      const s = Math.min(MAX_PREVIEW_SCALE, frame.clientWidth / A4_WIDTH)
       setScale(s)
       setHeight(page.offsetHeight * s)
     }
