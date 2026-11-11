@@ -16,8 +16,8 @@ import { COUNTRIES } from '@/lib/geo'
 import { clientColor, clientDisplayName } from '@/lib/derive'
 import { paymentTerms } from '@/lib/status'
 import type { ClientStatus, InvoiceField } from '@/types'
+import { ColorPicker } from '@/components/ui/color-picker'
 
-const COLORS = ['#4F46E5', '#8B5CF6', '#0284C7', '#0D9488', '#16A34A', '#D97706', '#E11D48', '#475569']
 const ALL_TZ: string[] = (() => {
   try {
     return (Intl as unknown as { supportedValuesOf: (k: string) => string[] }).supportedValuesOf('timeZone')
@@ -137,7 +137,6 @@ export function ClientSettingsPage() {
 
   const nProjects = projects.filter((p) => p.client_id === client.id).length
   const nInvoices = invoices.filter((i) => i.client_id === client.id).length
-  const hex = f.brand_color.replace('#', '')
 
   return (
     <>
@@ -244,17 +243,7 @@ export function ClientSettingsPage() {
             </div>
             <div className="field">
               <span className="lbl">Brand accent color</span>
-              <div className="row wrap" style={{ gap: 14 }}>
-                <div className="swatches">
-                  {COLORS.map((c) => (
-                    <input key={c} className="swatch" type="radio" name="cec" style={{ ['--c' as string]: c }} checked={f.brand_color.toLowerCase() === c.toLowerCase()} onChange={() => set('brand_color', c)} aria-label={c} />
-                  ))}
-                </div>
-                <span className="prefix" style={{ width: 150 }}>
-                  <span>#</span>
-                  <input className="inp mono" value={hex} maxLength={6} aria-label="Custom hex" onChange={(e) => set('brand_color', `#${e.target.value.replace(/[^0-9a-f]/gi, '')}`)} />
-                </span>
-              </div>
+              <ColorPicker value={f.brand_color} onChange={(c) => set('brand_color', c)} extra={[clientColor(client)]} />
             </div>
             <div className="field">
               <span className="lbl">Custom invoice fields</span>

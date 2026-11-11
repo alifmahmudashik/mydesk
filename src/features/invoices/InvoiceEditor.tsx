@@ -20,8 +20,8 @@ import { formatDate, formatMoney, todayISO } from '@/lib/format'
 import { paymentStatus, paymentTerms } from '@/lib/status'
 import type { Client, Invoice, InvoiceLineItem, Project, Task, TimeEntry } from '@/types'
 import { DateInput } from '@/components/ui/date-picker'
+import { ColorPicker } from '@/components/ui/color-picker'
 
-const COLORS = ['#4F46E5', '#DB2777', '#0284C7', '#0D9488', '#0F0F14']
 
 function suggestNumber(client: Client | undefined, invoices: Invoice[]) {
   if (!client) return ''
@@ -319,14 +319,7 @@ export function InvoiceEditor() {
               </div>
               <div className="field">
                 <span className="lbl">Brand color</span>
-                <div className="row wrap">
-                  <div className="swatches">
-                    {[...new Set([client ? clientColor(client) : null, ...COLORS].filter(Boolean) as string[])].map((c) => (
-                      <input key={c} className="swatch" type="radio" name="ivc" style={{ ['--c' as string]: c }} checked={f.brand_color.toLowerCase() === c.toLowerCase()} onChange={() => set('brand_color', c)} aria-label={c} />
-                    ))}
-                  </div>
-                  <input type="color" className="swatch-input" value={/^#[0-9a-f]{6}$/i.test(f.brand_color) ? f.brand_color : '#4F46E5'} onChange={(e) => set('brand_color', e.target.value)} aria-label="Custom color" />
-                </div>
+                <ColorPicker value={f.brand_color} onChange={(c) => set('brand_color', c)} extra={[client ? clientColor(client) : null]} />
               </div>
               <PaidTotalField value={f.paid_total} due={due} fee={feeAmount} currency={f.currency} onChange={(v) => set('paid_total', v)} />
               <Field label="Note"><textarea className="inp" rows={2} value={f.notes} onChange={(e) => set('notes', e.target.value)} /></Field>

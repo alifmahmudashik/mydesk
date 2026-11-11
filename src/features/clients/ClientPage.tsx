@@ -18,8 +18,9 @@ import { StatusPill } from '@/components/ui/pill'
 import { RemindModal } from '@/features/payments/RemindModal'
 import { PaymentModal } from '@/features/payments/PaymentModal'
 import { ClientProjects } from '@/features/clients/ClientProjects'
+import { BrandingCard, TeamAccessCard } from '@/features/clients/ClientSideCards'
 import { PrivacyToggle } from '@/components/ui/privacy-toggle'
-import { clientColor, clientDisplayName, clientSecondaryName, effectivePaymentStatus, hasClientAccess, invoiceStatus, isOpenPayment, OPEN_PROJECT, profileDisplayName, sumByCurrency } from '@/lib/derive'
+import { clientDisplayName, clientSecondaryName, effectivePaymentStatus, hasClientAccess, invoiceStatus, isOpenPayment, OPEN_PROJECT, sumByCurrency } from '@/lib/derive'
 import { formatDate, formatMoney, lateLabel } from '@/lib/format'
 import { clientStatus, paymentStatus } from '@/lib/status'
 import type { Payment } from '@/types'
@@ -31,7 +32,7 @@ export function ClientPage() {
   const navigate = useNavigate()
   const isAdmin = useIsAdmin()
   const { openCreate } = useUI()
-  const { clients, projects, tasks, payments, invoices, profiles, clientMembers, projectMembers, clientNotes, me, updateRow } = useData()
+  const { clients, projects, tasks, payments, invoices, clientMembers, clientNotes, me, updateRow } = useData()
   const [params, setParams] = useSearchParams()
   const tab = (params.get('tab') as Tab) || 'projects'
   const [note, setNote] = useState('')
@@ -67,9 +68,6 @@ export function ClientPage() {
   const paid = cPayments.filter((p) => p.status === 'paid')
   const open = cPayments.filter(isOpenPayment)
   const cInvoices = invoices.filter((i) => i.client_id === id).sort((a, b) => (b.issue_date ?? '').localeCompare(a.issue_date ?? ''))
-  const team = profiles.filter((u) => clientMembers.some((m) => m.client_id === id && m.user_id === u.id))
-  // People who only have some of this client's projects.
-  const projectOnly = profiles.filter((u) => !team.includes(u) && projectMembers.some((m) => m.user_id === u.id && cProjects.some((p) => p.id === m.project_id)))
   const savedNote = clientNoteFor(id)
   const sharedNote = clientNotes.find((n) => n.client_id === id && n.shared && n.body.trim())
   const canAddProject = hasClientAccess(me, id, clientMembers)
@@ -286,34 +284,8 @@ export function ClientPage() {
                 </div>
               </section>
             )}
-            <section className="card card-b stack">
-              <div className="row between"><span className="label-caps">Team with access</span>{isAdmin && <Link className="link small" to={`/team?client=${id}`}>Manage</Link>}</div>
-              {team.length === 0 && projectOnly.length === 0 && <span className="small muted">Only owners and admins.</span>}
-              {team.map((u) => (
-                <Link key={u.id} className="row" to={`/team/${u.id}`}>
-                  <Avatar profile={u} size="md" />
-                  <div className="grow small m">{profileDisplayName(u)}</div>
-                  <span className="pill" title="Every project for this client">Whole client</span>
-                </Link>
-              ))}
-              {projectOnly.map((u) => {
-                const n = projectMembers.filter((m) => m.user_id === u.id && cProjects.some((p) => p.id === m.project_id)).length
-                return (
-                  <Link key={u.id} className="row" to={`/team/${u.id}`}>
-                    <Avatar profile={u} size="md" />
-                    <div className="grow small m">{profileDisplayName(u)}</div>
-                    <span className="pill" title="Only the projects shared with them">{n} project{n === 1 ? '' : 's'}</span>
-                  </Link>
-                )
-              })}
-            </section>
-            {isAdmin && (
-              <section className="card card-b stack">
-                <span className="label-caps">Invoice branding</span>
-                <div className="row"><span style={{ width: 28, height: 28, borderRadius: 7, background: clientColor(client) }} /><span className="small mono">{clientColor(client).toUpperCase()}</span></div>
-                <span className="xs muted">Used on every PDF invoice for this client.</span>
-              </section>
-            )}
+            <TeamAccessCard client={client} canManage={isAdmin} />
+            {isAdmin && <BrandingCard client={client} />}
           </aside>
         </div>
       </Content>

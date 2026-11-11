@@ -11,8 +11,8 @@ import { uid } from '@/lib/utils'
 import type { PaymentProfile } from '@/types'
 import { DeleteSection } from '@/features/workspace/DeleteSection'
 import { useIsOwner } from '@/hooks/usePermissions'
+import { ColorPicker } from '@/components/ui/color-picker'
 
-const COLORS = ['#4F46E5', '#0284C7', '#0D9488', '#0F0F14']
 
 export function WorkspaceSettingsPage() {
   const { invoiceSettings, saveInvoiceSettings, workspace, saveWorkspace } = useData()
@@ -102,12 +102,7 @@ export function WorkspaceSettingsPage() {
             <div className="f2">
               <div className="field">
                 <span className="lbl">Invoice colour</span>
-                <div className="row wrap" style={{ gap: 14 }}>
-                  <div className="swatches">
-                    {COLORS.map((c) => <input key={c} className="swatch" type="radio" name="stc" style={{ ['--c' as string]: c }} checked={f.brand_color.toLowerCase() === c.toLowerCase()} onChange={() => set('brand_color', c)} aria-label={c} />)}
-                  </div>
-                  <span className="prefix" style={{ width: 150 }}><span>#</span><input className="inp mono" value={f.brand_color.replace('#', '')} maxLength={6} aria-label="Hex" onChange={(e) => set('brand_color', `#${e.target.value.replace(/[^0-9a-f]/gi, '')}`)} /></span>
-                </div>
+                <ColorPicker value={f.brand_color} onChange={(c) => set('brand_color', c)} />
               </div>
             </div>
           </Section>
