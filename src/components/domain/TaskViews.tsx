@@ -45,14 +45,7 @@ export function TaskListRow({ task, showProject = true, showClient = true }: { t
         checked={done}
         disabled={Boolean(sel?.isSelecting)}
         aria-label="Mark complete"
-        onChange={() => !sel?.isSelecting && toggleTaskDone(task)}
-        onClick={(e) => {
-          if (sel?.isSelecting) {
-            e.preventDefault()
-            e.stopPropagation()
-            sel.toggle(task.id)
-          }
-        }}
+        onChange={() => toggleTaskDone(task)}
       />
       <span className="mono xs faint hide-sm" style={{ width: 52, flex: 'none' }}>{taskRef(task, project)}</span>
       <Link

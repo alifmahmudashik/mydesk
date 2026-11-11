@@ -24,18 +24,32 @@ export function TaskCreateModal({ open, onClose, defaults = {} }: Props) {
   const navigate = useNavigate()
   const openProjects = useMemo(() => projects.filter(OPEN_PROJECT), [projects])
 
-  const blank = () => ({
-    title: '',
-    description: '',
-    project_id: defaults.project_id ?? openProjects[0]?.id ?? '',
-    // Start unassigned; pick people yourself (a caller can still pre-fill someone).
-    assignee_ids: (defaults.assignee_id ? [defaults.assignee_id] : []) as string[],
-    status: defaults.status ?? ('todo' as TaskStatus),
-    priority: 'medium' as Priority,
-    due_date: defaults.due_date ?? '',
-    estimate: '',
-    labels: '',
-  })
+  const peopleFor = (projectId: string) => {
+    const p = projects.find((x) => x.id === projectId)
+    return eligibleAssignees(p?.client_id, profiles, clientMembers, p?.id, projectMembers)
+  }
+  /** The only person who can work on a project, if there's exactly one. */
+  const soloFor = (projectId: string) => {
+    const ppl = peopleFor(projectId)
+    return ppl.length === 1 ? ppl[0].id : null
+  }
+
+  const blank = () => {
+    const project_id = defaults.project_id ?? openProjects[0]?.id ?? ''
+    const solo = soloFor(project_id)
+    return {
+      title: '',
+      description: '',
+      project_id,
+      // A caller can pre-fill someone; a one-person project assigns that person; otherwise unassigned.
+      assignee_ids: (defaults.assignee_id ? [defaults.assignee_id] : solo ? [solo] : []) as string[],
+      status: defaults.status ?? ('todo' as TaskStatus),
+      priority: 'medium' as Priority,
+      due_date: defaults.due_date ?? '',
+      estimate: '',
+      labels: '',
+    }
+  }
   const [f, setF] = useState(blank)
   const [another, setAnother] = useState(false)
 
@@ -46,7 +60,18 @@ export function TaskCreateModal({ open, onClose, defaults = {} }: Props) {
 
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((s) => ({ ...s, [k]: v }))
   const project = projects.find((p) => p.id === f.project_id)
-  const people = eligibleAssignees(project?.client_id, profiles, clientMembers, project?.id, projectMembers)
+  const people = peopleFor(f.project_id)
+
+  // Switching project: auto-assign if the new one has a single person. If the old
+  // assignee was only there because of that rule, drop it when moving to a shared project.
+  const changeProject = (project_id: string) =>
+    setF((s) => {
+      const solo = soloFor(project_id)
+      const prevSolo = soloFor(s.project_id)
+      const wasAuto = prevSolo !== null && s.assignee_ids.length === 1 && s.assignee_ids[0] === prevSolo
+      const assignee_ids = solo && (wasAuto || s.assignee_ids.length === 0) ? [solo] : wasAuto ? [] : s.assignee_ids
+      return { ...s, project_id, assignee_ids }
+    })
   const emailed = f.assignee_ids.map((id) => profiles.find((p) => p.id === id)).filter((p) => p && p.id !== me?.id && p.notification_prefs?.assigned !== false)
   const emailsAssignee = emailed.length > 0
 
@@ -96,7 +121,7 @@ export function TaskCreateModal({ open, onClose, defaults = {} }: Props) {
         <textarea className="inp" rows={4} placeholder="Add a description. What does done look like?" aria-label="Description" value={f.description} onChange={(e) => set('description', e.target.value)} />
         <div className="f3">
           <Field label="Project">
-            <Select value={f.project_id} onChange={(e) => set('project_id', e.target.value)} options={projectOptions.length ? projectOptions : [{ value: '', label: 'No open projects' }]} />
+            <Select value={f.project_id} onChange={(e) => changeProject(e.target.value)} options={projectOptions.length ? projectOptions : [{ value: '', label: 'No open projects' }]} />
           </Field>
           <div className="field">
             <span className="lbl">Assignees</span>

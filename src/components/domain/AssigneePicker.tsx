@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Check, UserMinus, Users } from 'lucide-react'
+import { UserMinus, Users } from 'lucide-react'
 import { Menu, MenuItem, MenuSep, MenuTitle } from '@/components/ui/menu'
 import { Avatar, AvatarStack } from '@/components/ui/avatar'
 import { profileDisplayName, profileFullName } from '@/lib/derive'
@@ -34,7 +34,7 @@ interface Props {
   trigger?: (p: { open: boolean; toggle: () => void }) => ReactNode
 }
 
-/** Pick one or more people. Stays open while you tick names. */
+/** Pick one or more people. Each click toggles a person and closes the menu. */
 export function AssigneePicker({ people, value, onChange, meId, variant = 'prop', align = 'left', trigger }: Props) {
   const toggle = (id: string) => onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id])
   return (
@@ -49,18 +49,18 @@ export function AssigneePicker({ people, value, onChange, meId, variant = 'prop'
         </button>
       ))}
     >
-      <MenuTitle>Assign to · pick one or more</MenuTitle>
+      <MenuTitle>Click to add · again to remove</MenuTitle>
+      {people.length === 0 && <div className="xs faint" style={{ padding: '6px 10px' }}>No one has access to this project yet</div>}
       {people.map((p) => (
-        <MenuItem key={p.id} keepOpen on={value.includes(p.id)} icon={<Avatar profile={p} size="xs" />} onSelect={() => toggle(p.id)}>
+        <MenuItem key={p.id} on={value.includes(p.id)} icon={<Avatar profile={p} size="xs" />} onSelect={() => toggle(p.id)}>
           {p.id === meId ? `Me (${profileDisplayName(p)})` : profileFullName(p)}
         </MenuItem>
       ))}
-      <MenuSep />
+      {((people.length > 1 && value.length < people.length) || value.length > 1) && <MenuSep />}
       {people.length > 1 && value.length < people.length && (
-        <MenuItem keepOpen icon={<Users className="i" />} onSelect={() => onChange([...value, ...people.map((p) => p.id).filter((id) => !value.includes(id))])}>Everyone</MenuItem>
+        <MenuItem icon={<Users className="i" />} onSelect={() => onChange([...value, ...people.map((p) => p.id).filter((id) => !value.includes(id))])}>Everyone</MenuItem>
       )}
-      {value.length > 0 && <MenuItem icon={<UserMinus className="i" />} onSelect={() => onChange([])}>Unassign all</MenuItem>}
-      {value.length > 0 && <MenuItem icon={<Check className="i" />} onSelect={() => undefined}>Done</MenuItem>}
+      {value.length > 1 && <MenuItem icon={<UserMinus className="i" />} onSelect={() => onChange([])}>Unassign all</MenuItem>}
     </Menu>
   )
 }
