@@ -473,11 +473,17 @@ export function TaskPage() {
             />
 
             <span>Time logged</span>
-            <span className="row-sm wrap" style={{ padding: '0 8px', rowGap: 6 }}>
-              <b style={{ whiteSpace: 'nowrap' }} className={`m small ${task.estimate_minutes && logged > task.estimate_minutes ? 't-warn' : ''}`}>{formatMinutes(logged)}</b>
-              <button className="btn btn-sm" type="button" style={{ height: 24, fontSize: 11.5 }} onClick={() => setLogOpen(true)}>+ Log time</button>
-              <TimerButton projectId={task.project_id} taskId={task.id} small />
-            </span>
+            <div>
+              <span className="time-total small">
+                <b className={`m ${task.estimate_minutes && logged > task.estimate_minutes ? 't-warn' : ''}`}>{formatMinutes(logged)}</b>
+                {task.estimate_minutes ? <span className="muted">of {formatMinutes(task.estimate_minutes)}</span> : null}
+              </span>
+              {task.estimate_minutes ? (
+                <div className={`time-bar${logged > task.estimate_minutes ? ' over' : ''}`}>
+                  <span style={{ width: `${Math.min(100, Math.round((logged / task.estimate_minutes) * 100))}%` }} />
+                </div>
+              ) : null}
+            </div>
 
             <span>Project</span>
             {project ? <Link className="prop link" to={`/projects/${project.id}`}><span className="trunc" style={{ maxWidth: 160 }}>{shortProjectTitle(project.title)}</span></Link> : <span>—</span>}
@@ -485,14 +491,20 @@ export function TaskPage() {
             {client ? <Link className="prop" to={`/clients/${client.id}`}><ClientMark client={client} size="xs" />{clientDisplayName(client)}</Link> : <span>—</span>}
           </div>
 
-          {time.length > 0 && (
-            <>
-              <div className="divider" style={{ margin: '16px 0' }} />
-              <div className="label-caps" style={{ marginBottom: 8 }}>Time entries</div>
-              <div className="stack-sm small">
-                {[...time].sort((a, b) => b.logged_on.localeCompare(a.logged_on)).map((t) => <TimeEntryRow key={t.id} entry={t} />)}
-              </div>
-            </>
+          <div className="divider" style={{ margin: '16px 0' }} />
+          <div className="row between" style={{ marginBottom: 8 }}>
+            <span className="label-caps">Time</span>
+            <span className="row-sm">
+              <TimerButton projectId={task.project_id} taskId={task.id} small />
+              <button className="btn btn-sm" type="button" style={{ height: 24, fontSize: 11.5 }} onClick={() => setLogOpen(true)}><Plus className="i i-xs" />Log time</button>
+            </span>
+          </div>
+          {time.length > 0 ? (
+            <div className="stack-sm small">
+              {[...time].sort((a, b) => b.logged_on.localeCompare(a.logged_on) || b.created_at.localeCompare(a.created_at)).map((t) => <TimeEntryRow key={t.id} entry={t} />)}
+            </div>
+          ) : (
+            <span className="xs muted">Nothing logged yet.</span>
           )}
 
           <div className="divider" style={{ margin: '16px 0' }} />
@@ -505,7 +517,7 @@ export function TaskPage() {
               </div>
             ))}
             <div className="card card-b xs muted" style={{ background: 'var(--soft)', border: 0, lineHeight: 1.55 }}>
-              Editing this task never emails anyone again. Only a new assignee or a new @mention sends an email.
+              Editing this task never emails anyone. Only a new assignee or a new @mention sends an email.
             </div>
           </div>
           <div className="divider" style={{ margin: '16px 0' }} />

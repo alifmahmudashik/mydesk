@@ -59,14 +59,17 @@ export function LogTimeModal({ open, onClose, projectId, taskId }: { open: boole
   return (
     <Modal open={open} onClose={onClose} title="Log time" size="narrow" footer={<><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="button" className="btn btn-pri" onClick={save}>Log time</button></>}>
       <form className="dlg-b" onSubmit={(e) => { e.preventDefault(); save() }}>
-        <div className="f2">
-          <Field label="Time spent" hint="1h 30m, 45m, 1.5">
-            <input data-autofocus className="inp" value={f.duration} onChange={(e) => setF({ ...f, duration: e.target.value })} placeholder="1h 30m" />
-          </Field>
-          <Field label="Date">
-            <DateInput value={f.date} onChange={(v) => setF({ ...f, date: v ?? todayISO() })} clearable={false} />
-          </Field>
-        </div>
+        <Field label="Time spent">
+          <input data-autofocus className="inp" value={f.duration} onChange={(e) => setF({ ...f, duration: e.target.value })} placeholder="1h 30m, 45m or 1.5" />
+          <div className="qlog-chips" style={{ marginTop: 8 }}>
+            {QUICK.map((m) => (
+              <button key={m} type="button" className={`btn btn-sm${parseDuration(f.duration) === m ? ' on' : ''}`} onClick={() => setF({ ...f, duration: quickLabel(m) })}>{quickLabel(m)}</button>
+            ))}
+          </div>
+        </Field>
+        <Field label="Date">
+          <DateInput value={f.date} onChange={(v) => setF({ ...f, date: v ?? todayISO() })} clearable={false} />
+        </Field>
         {!taskId && (
           <Field label="Task" hint="Leave on the project if it wasn’t for one task.">
             <Select
@@ -221,8 +224,7 @@ export function QuickLogTime({ task }: { task: { id: string; project_id: string;
   const logged = useData((s) => s.timeEntries.filter((e) => e.task_id === task.id).reduce((n, e) => n + (Number(e.minutes) || 0), 0))
   return (
     <Popover
-      title={<span className="trunc" style={{ display: 'block', maxWidth: 240 }}>Log time · {task.title}</span>}
-      width={290}
+      width={300}
       trigger={({ open, toggle }) => (
         <button type="button" className={`chip chip-sm above${open ? ' on' : ''}${logged ? '' : ' dashed'}`} title="Log time on this task" onClick={toggle}>
           <Clock className="i i-xs" />
@@ -235,11 +237,17 @@ export function QuickLogTime({ task }: { task: { id: string; project_id: string;
   )
 }
 
+/** One-click amounts, also offered in the Log time window. */
 const QUICK = [15, 30, 60, 120]
+const quickLabel = (m: number) => (m < 60 ? `${m}m` : `${m / 60}h`)
 
 function QuickLogForm({ task, onDone }: { task: { id: string; project_id: string }; onDone: () => void }) {
   const [duration, setDuration] = useState('')
   const [note, setNote] = useState('')
+  const entries = useData((s) => s.timeEntries)
+    .filter((e) => e.task_id === task.id)
+    .sort((a, b) => b.logged_on.localeCompare(a.logged_on) || b.created_at.localeCompare(a.created_at))
+  const total = entries.reduce((n, e) => n + (Number(e.minutes) || 0), 0)
   const log = (minutes: number | null) => {
     if (!minutes) return toast.error('Enter time like “1h 30m”, “45m” or “1.5”')
     logTime({ projectId: task.project_id, taskId: task.id, minutes, note })
@@ -247,20 +255,27 @@ function QuickLogForm({ task, onDone }: { task: { id: string; project_id: string
     onDone()
   }
   return (
-    <form className="pop-form" onSubmit={(e) => { e.preventDefault(); log(parseDuration(duration)) }}>
-      <div className="row-sm wrap">
+    <form className="qlog" onSubmit={(e) => { e.preventDefault(); log(parseDuration(duration)) }}>
+      <div className="qlog-head">
+        <b>Log time</b>
+        {total > 0 && <span className="xs muted">{formatMinutes(total)} so far</span>}
+      </div>
+      <div className="qlog-chips">
         {QUICK.map((m) => (
-          <button key={m} type="button" className="btn btn-sm" onClick={() => log(m)}>{m < 60 ? `${m}m` : `${m / 60}h`}</button>
+          <button key={m} type="button" className="btn btn-sm" onClick={() => log(m)}>{quickLabel(m)}</button>
         ))}
       </div>
-      <input className="inp" autoFocus placeholder="Or type: 1h 30m, 45m, 1.5" value={duration} onChange={(e) => setDuration(e.target.value)} />
-      <input className="inp" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
-      <div className="pop-actions">
-        <TimerButton projectId={task.project_id} taskId={task.id} />
-        <span className="spacer" />
-        <button type="button" className="btn btn-sm" onClick={onDone}>Cancel</button>
-        <button type="submit" className="btn btn-sm btn-pri" disabled={!duration.trim()}>Log</button>
+      <div className="qlog-custom">
+        <input className="inp" autoFocus placeholder="1h 30m" aria-label="Time spent" value={duration} onChange={(e) => setDuration(e.target.value)} />
+        <button type="submit" className="btn btn-pri" disabled={!duration.trim()}>Log</button>
       </div>
+      <input className="inp" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+      <TimerButton projectId={task.project_id} taskId={task.id} />
+      {entries.length > 0 && (
+        <div className="qlog-list small">
+          {entries.map((e) => <TimeEntryRow key={e.id} entry={e} />)}
+        </div>
+      )}
     </form>
   )
 }
