@@ -160,7 +160,9 @@ button.prop { border: 0; background: transparent; font: inherit; color: inherit;
 .client-group:hover { border-color: var(--line3); box-shadow: 0 2px 8px rgba(16, 16, 24, .06); }
 /* The client's logo identifies the group; no colour stripe. */
 .client-group-h > .cl { width: 28px; height: 28px; border-radius: 8px; font-size: 10.5px; box-shadow: 0 0 0 1px var(--line2), 0 1px 2px rgba(16, 16, 24, .06); }
-.client-group-h > .cl.has-logo { padding: 2px; }
+/* Logos fill their square (no white padding around them). */
+.client-group-h > .cl.has-logo { padding: 0; }
+.client-group-h > .cl.has-logo img { object-fit: cover; }
 .client-group-h { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 8px 14px 8px 10px; background: var(--soft2); border-bottom: 1px solid var(--line-s); }
 .client-group-h .btn-icon { width: 24px; height: 24px; color: var(--faint); }
 .client-group-title { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; }
@@ -880,7 +882,8 @@ html.desktop .side::-webkit-scrollbar { width: 0; } /* still scrolls with the wh
 
 /* Sidebar client list: each client's logo (or tinted initials) instead of a colour dot. */
 .pins a > .cl { width: 18px; height: 18px; border-radius: 5px; font-size: 7.5px; font-weight: 700; box-shadow: 0 0 0 1px rgba(255, 255, 255, .14); }
-.pins a > .cl.has-logo { padding: 1px; box-shadow: 0 0 0 1px rgba(255, 255, 255, .22); }
+.pins a > .cl.has-logo { padding: 0; background: transparent; box-shadow: 0 0 0 1px rgba(255, 255, 255, .16); }
+.pins a > .cl.has-logo img { object-fit: cover; border-radius: inherit; }
 .side .pins a > .cl.tint { background: color-mix(in srgb, var(--cm) 26%, transparent); color: oklch(from var(--cm) max(l, .8) c h); }
 
 /* Topic classroom: discussion composer, activity stream, learner status. */
