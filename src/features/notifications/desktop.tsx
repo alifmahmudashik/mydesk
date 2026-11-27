@@ -150,6 +150,7 @@ const headline: Record<string, string> = {
   learning_shared: 'shared something for you to learn',
   learning_done: 'finished learning',
   topic_added: 'added you to a learning topic',
+  topic_post: 'posted in a learning topic',
 }
 
 /** Who did what as the heading, then the task, then the message itself. */

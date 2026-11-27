@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
-  Bell, Briefcase, ChartColumn, ChevronsUpDown, Clock, CreditCard, Folder, Home, Inbox, ListChecks,
+  Bell, Briefcase, ChartColumn, ChevronsUpDown, CreditCard, Folder, Home, Inbox, ListChecks,
   LogOut, Moon, Search, Settings, Sprout, Sun, User, Users,
 } from 'lucide-react'
 import { useData } from '@/data/store'
@@ -9,14 +9,14 @@ import { useUI } from '@/data/ui'
 import { useIsAdmin } from '@/hooks/usePermissions'
 import { isDarkNow, usePrefs } from '@/hooks/usePrefs'
 import { signOut } from '@/hooks/useAuth'
-import { Avatar } from '@/components/ui/avatar'
+import { Avatar, ClientMark } from '@/components/ui/avatar'
 import { Menu, MenuItem, MenuSep, MenuTitle } from '@/components/ui/menu'
 import { CommandPalette } from '@/components/layout/CommandPalette'
 import { CreateHost } from '@/features/create/CreateHost'
 import { DesktopNotifPrompt, useDesktopNotifications } from '@/features/notifications/desktop'
 import { WorkspaceLogo } from '@/features/workspace/brand'
 import { RunningTimer } from '@/components/domain/TimeTracking'
-import { clientColor, clientDisplayName, effectivePaymentStatus, OPEN_PROJECT, OPEN_TASK, profileFullName, isAssignedTo } from '@/lib/derive'
+import { clientDisplayName, effectivePaymentStatus, OPEN_PROJECT, OPEN_TASK, profileFullName, isAssignedTo } from '@/lib/derive'
 
 const roleLabel = { owner: 'Owner', admin: 'Admin', member: 'Member' } as const
 
@@ -129,7 +129,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="nav-label">WORK</div>
           <NavItem to="/projects" icon={<Folder className="i" />} extra={<span className="cnt">{activeProjects}</span>}>Projects</NavItem>
           <NavItem to="/clients" icon={<Briefcase className="i" />} extra={<span className="cnt">{activeClients}</span>}>Clients</NavItem>
-          <NavItem to="/clock" icon={<Clock className="i" />}>Clock</NavItem>
           <NavItem to="/team" icon={<Users className="i" />}>Team</NavItem>
           <NavItem to="/improvement" icon={<Sprout className="i" />} extra={toLearn ? <span className="cnt">{toLearn}</span> : null}>Improvement</NavItem>
         </nav>
@@ -138,7 +137,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="nav-label">CLIENTS</div>
             {sideClients.map((c) => (
               <NavLink key={c.id} to={`/clients/${c.id}`} className={({ isActive }) => (isActive ? 'active' : undefined)} title={clientDisplayName(c)}>
-                <span className="sq cc" style={{ ['--cc' as string]: clientColor(c) }} />
+                <ClientMark client={c} size="xs" />
                 <span className="trunc">{clientDisplayName(c)}</span>
                 <span className="cnt">{projects.filter((p) => p.client_id === c.id && OPEN_PROJECT(p)).length || ''}</span>
               </NavLink>

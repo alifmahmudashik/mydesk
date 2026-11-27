@@ -1,5 +1,5 @@
 import { addDays, formatISO, subDays, subHours, subMinutes } from 'date-fns'
-import type { AccessItem, ActivityEvent, AppNotification, Client, ClientMember, ClientNote, ProjectMember, TimeTimer, Invite, Invoice, InvoiceSettings, Payment, PaymentReminder, Profile, Project, ProjectNote, Subtask, Task, TaskAttachment, TaskComment, TaskWatcher, TimeEntry, LearningGoal, LearningItem, LearningTopic, LearningLesson, LearningResource, LearningTopicMember, LearningProgress, TeamLink, CodeSnippet } from '@/types'
+import type { AccessItem, ActivityEvent, AppNotification, Client, ClientMember, ClientNote, ProjectMember, TimeTimer, Invite, Invoice, InvoiceSettings, Payment, PaymentReminder, Profile, Project, ProjectNote, Subtask, Task, TaskAttachment, TaskComment, TaskWatcher, TimeEntry, LearningGoal, LearningItem, LearningTopic, LearningLesson, LearningResource, LearningTopicMember, LearningProgress, LearningPost, TeamLink, CodeSnippet } from '@/types'
 
 // Dates are relative to "today" so demo mode always shows live overdue/upcoming states.
 const day = (offset: number) => formatISO(addDays(new Date(), offset), { representation: 'date' })
@@ -37,6 +37,7 @@ export interface DemoData {
   resources: LearningResource[]
   topicMembers: LearningTopicMember[]
   progress: LearningProgress[]
+  topicPosts: LearningPost[]
   teamLinks: TeamLink[]
   snippets: CodeSnippet[]
 }
@@ -46,7 +47,7 @@ export function emptyData(): DemoData {
     clients: [], projects: [], tasks: [], accessItems: [], payments: [], notes: [], activity: [],
     profiles: [], clientMembers: [], projectMembers: [], clientNotes: [], timers: [], invoices: [], invoiceSettings: null, subtasks: [], comments: [],
     attachments: [], timeEntries: [], watchers: [], notifications: [], invites: [], reminders: [],
-    learning: [], goals: [], topics: [], lessons: [], resources: [], topicMembers: [], progress: [], teamLinks: [], snippets: [],
+    learning: [], goals: [], topics: [], lessons: [], resources: [], topicMembers: [], progress: [], topicPosts: [], teamLinks: [], snippets: [],
   }
 }
 
@@ -307,5 +308,9 @@ function demoTopics() {
     { id: 'pg2', lesson_id: 'ls2', user_id: 'u2', status: 'learning', created_at: ago(2) },
     { id: 'pg3', lesson_id: 'ls1', user_id: 'u1', status: 'done', completed_at: ago(9), created_at: ago(9) },
   ]
-  return { topics, lessons, resources, topicMembers, progress }
+  const topicPosts: LearningPost[] = [
+    { id: 'tpp1', topic_id: 'tp1', user_id: 'u2', body: 'Finished the install lesson. Publishing a named version made rollback really easy.', created_at: ago(4) },
+    { id: 'tpp2', topic_id: 'tp1', user_id: 'u1', body: 'Nice. This one explains trigger groups well, worth a look before lesson 2.', url: 'https://www.simoahava.com/', created_at: ago(3) },
+  ]
+  return { topics, lessons, resources, topicMembers, progress, topicPosts }
 }

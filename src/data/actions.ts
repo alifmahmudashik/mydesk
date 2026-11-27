@@ -374,6 +374,36 @@ export function mirrorHourlyAmount(projectId: string | undefined) {
       payments: own ? s.payments.map((p) => (p.id === own ? { ...p, amount } : p)) : s.payments,
     }
   })
+  // An hourly project starts at $0, so it has no payment yet. Once time is logged it gets
+  // its own payment like any project with a budget, so Billing and invoices can link to it.
+  ensureProjectPayment(project.id)
+}
+
+/**
+ * Makes sure a project has its own payment (admins only: members can't touch money).
+ * Returns the existing or new payment, or null when the project has no amount to bill.
+ */
+export function ensureProjectPayment(projectId: string, opts: { amount?: number; invoiceId?: string | null; dueDate?: string | null; method?: string | null } = {}): Payment | null {
+  const project = S().projects.find((p) => p.id === projectId)
+  if (!project || !isAdmin()) return null
+  const existing = S().payments.find((p) => (p.project_ids ?? []).includes(project.id))
+  if (existing) return existing
+  const amount = Math.round((opts.amount ?? Number(project.amount) ?? 0) * 100) / 100
+  if (!(amount > 0)) return null
+  // Finished means the money is in, so the payment starts as paid.
+  const paid = project.status === 'finished' || project.payment_status === 'paid'
+  return S().createRow<Payment>('payments', {
+    client_id: project.client_id,
+    project_ids: [project.id],
+    amount,
+    currency: project.currency,
+    status: paid ? 'paid' : 'unpaid',
+    payment_date: paid ? (project.completed_at?.slice(0, 10) ?? todayISO()) : null,
+    due_date: opts.dueDate ?? project.due_date ?? null,
+    invoice_id: opts.invoiceId ?? null,
+    payment_method: opts.method ?? null,
+    notes: `Invoice for "${project.title}"`,
+  }, { entity: 'payment', action: paid ? 'paid' : 'created', message: `created a payment for “${project.title}” (${formatMoney(amount, project.currency)})` })
 }
 
 /** Logs time on a task, or on the project itself when there's no task. */

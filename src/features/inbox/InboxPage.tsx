@@ -29,6 +29,7 @@ const verb: Record<string, string> = {
   learning_shared: 'shared something for you to learn:',
   learning_done: 'finished learning',
   topic_added: 'added you to the learning topic',
+  topic_post: 'posted in the learning topic',
 }
 
 function NotifIcon({ n }: { n: AppNotification }) {

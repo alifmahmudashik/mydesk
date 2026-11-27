@@ -20,19 +20,20 @@ import { formatDate, formatFeedAgo } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { LearningGoal, LearningItem, LearningKind, LearningStatus, LearningTopic, Profile } from '@/types'
 import { KINDS, detectKind, hostOf, kindMeta, learnedEvents, normUrl, streak, weekStart, type LearnedEvent } from './learning-utils'
-import { TopicCard, TopicsTab } from './topics'
+import { TopicCard, TopicModal, TopicsTab } from './topics'
 
 /* ---------- page ---------- */
 
-type Tab = 'mine' | 'topics' | 'team' | 'feed'
+type Tab = 'topics' | 'mine' | 'team' | 'feed'
 
 export function ImprovementPage() {
   const { learning, goals, profiles, me, learningReady, demoMode, progress, lessons, topics, topicMembers } = useData()
   const events = useMemo(() => learnedEvents(learning, progress, lessons, topics), [learning, progress, lessons, topics])
   const [params, setParams] = useSearchParams()
-  const tab = (params.get('tab') as Tab) || 'mine'
+  // Topics (shared learning spaces) come first: that's where the team learns together.
+  const tab = (params.get('tab') as Tab) || 'topics'
   const setTab = (t: Tab) => {
-    if (t === 'mine') params.delete('tab')
+    if (t === 'topics') params.delete('tab')
     else params.set('tab', t)
     params.delete('item')
     setParams(params, { replace: true })
@@ -40,6 +41,7 @@ export function ImprovementPage() {
   const [share, setShare] = useState<{ open: boolean; to?: string[]; edit?: LearningItem }>({ open: false })
   const [goalModal, setGoalModal] = useState<{ open: boolean; edit?: LearningGoal }>({ open: false })
   const [finishing, setFinishing] = useState<LearningItem | null>(null)
+  const [newTopic, setNewTopic] = useState(false)
 
   // Deep link from the inbox: ?item=<id> jumps to it and highlights it.
   const focusId = params.get('item')
@@ -49,8 +51,7 @@ export function ImprovementPage() {
     if (!item) return
     const want: Tab = item.assignee_id === me?.id ? 'mine' : item.status === 'done' ? 'feed' : 'team'
     if (want !== tab) {
-      if (want === 'mine') params.delete('tab')
-      else params.set('tab', want)
+      params.set('tab', want)
       setParams(params, { replace: true })
     }
     const t = setTimeout(() => document.getElementById(`li-${focusId}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 350)
@@ -68,10 +69,11 @@ export function ImprovementPage() {
     <>
       <Topbar crumbs={[{ label: 'Improvement' }]}>
         <button type="button" className="btn hide-sm" onClick={() => setGoalModal({ open: true })}><Target className="i" />Add goal</button>
-        <button type="button" className="btn btn-pri" onClick={() => setShare({ open: true })}><Plus className="i" />Share something</button>
+        <button type="button" className="btn hide-sm" onClick={() => setShare({ open: true })}><Send className="i" />Share a link</button>
+        <button type="button" className="btn btn-pri" onClick={() => setNewTopic(true)}><Plus className="i" />New topic</button>
       </Topbar>
       <Content>
-        <PageHead title="Improvement" sub="Learn something new every week. Share links, videos and courses with the team, and note what you learned." />
+        <PageHead title="Improvement" sub="Learn together. Open a topic, add lessons and links, talk about it, and see where everyone is." />
         {!demoMode && !learningReady && (
           <div className="card card-b row" style={{ background: 'var(--warn-bg)', borderColor: 'transparent' }}>
             <span className="small grow" style={{ color: 'var(--warn)' }}>Run <b>supabase/schema.sql</b> in the Supabase SQL editor to turn this on.</span>
@@ -82,8 +84,8 @@ export function ImprovementPage() {
             value={tab}
             onChange={setTab}
             tabs={[
-              { id: 'mine', label: 'My learning', count: mine.filter((i) => i.status !== 'done').length || undefined },
               { id: 'topics', label: <><BookOpen className="i i-sm" />Topics</>, count: topics.filter((t) => !t.archived_at).length || undefined },
+              { id: 'mine', label: 'My learning', count: mine.filter((i) => i.status !== 'done').length || undefined },
               { id: 'team', label: <><Users className="i i-sm" />Team</> },
               { id: 'feed', label: 'What we learned', count: doneThisWeek.length || undefined },
             ]}
@@ -103,7 +105,7 @@ export function ImprovementPage() {
                 onGoal={(g) => setGoalModal({ open: true, edit: g })}
               />
             )}
-            {tab === 'topics' && <TopicsTab />}
+            {tab === 'topics' && <TopicsTab onNew={() => setNewTopic(true)} />}
             {tab === 'team' && (
               <TeamView people={profiles} items={learning} goals={goals} events={events} me={me} focusId={focusId} onShareTo={(id) => setShare({ open: true, to: [id] })} />
             )}
@@ -114,6 +116,7 @@ export function ImprovementPage() {
       <ShareModal state={share} onClose={() => setShare({ open: false })} />
       <GoalModal state={goalModal} onClose={() => setGoalModal({ open: false })} />
       <FinishModal item={finishing} onClose={() => setFinishing(null)} />
+      <TopicModal open={newTopic} onClose={() => setNewTopic(false)} />
     </>
   )
 }

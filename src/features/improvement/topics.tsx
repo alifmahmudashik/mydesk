@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
-  ArrowDown, ArrowUp, BookOpen, Check, ChevronDown, ChevronRight, ExternalLink, LogOut, MoreHorizontal, Pencil, Play, Plus, Trash2, UserPlus, Users,
+  ArrowDown, ArrowUp, BookOpen, Link2, MessageSquare, Send, Check, ChevronDown, ChevronRight, ExternalLink, LogOut, MoreHorizontal, Pencil, Play, Plus, Trash2, UserPlus, Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
@@ -11,18 +11,18 @@ import { Menu, MenuItem, MenuSep } from '@/components/ui/menu'
 import { Avatar, AvatarStack } from '@/components/ui/avatar'
 import { Modal, ConfirmDialog } from '@/components/ui/modal'
 import { Field } from '@/components/ui/field'
+import { Tabs } from '@/components/ui/tabs'
 import { celebrateFrom } from '@/lib/confetti'
 import { profileDisplayName } from '@/lib/derive'
 import { formatFeedAgo } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import type { LearningKind, LearningLesson, LearningProgress, LearningResource, LearningTopic, LearningTopicMember, Profile } from '@/types'
+import type { LearningKind, LearningLesson, LearningPost, LearningProgress, LearningResource, LearningTopic, LearningTopicMember, Profile } from '@/types'
 import { KINDS, TOPIC_COLORS, detectKind, hostOf, kindMeta, normUrl, topicProgress } from './learning-utils'
 
 /* ---------- topics tab ---------- */
 
-export function TopicsTab() {
+export function TopicsTab({ onNew }: { onNew: () => void }) {
   const { topics, lessons, progress, topicMembers, profiles, me, topicsReady, demoMode } = useData()
-  const [creating, setCreating] = useState(false)
   const live = topics.filter((t) => !t.archived_at)
   const joined = live.filter((t) => topicMembers.some((m) => m.topic_id === t.id && m.user_id === me?.id))
   const others = live.filter((t) => !joined.includes(t))
@@ -33,14 +33,10 @@ export function TopicsTab() {
           <span className="small" style={{ color: 'var(--warn)' }}>Run <b>supabase/schema.sql</b> in the Supabase SQL editor to turn on topics.</span>
         </div>
       )}
-      <div className="row between wrap">
-        <span className="small muted">A topic is a learning path, like “Google Tag Manager”, with lessons and a video, doc or link for each.</span>
-        <button type="button" className="btn btn-pri btn-sm" onClick={() => setCreating(true)}><Plus className="i i-sm" />New topic</button>
-      </div>
       {live.length === 0 ? (
         <div className="card">
-          <Empty icon={<BookOpen className="i" />} title="No topics yet" action={<button type="button" className="btn btn-sm btn-pri" onClick={() => setCreating(true)}><Plus className="i i-sm" />Create the first topic</button>}>
-            Start one for something the team wants to learn, then add lessons and resources inside it.
+          <Empty icon={<BookOpen className="i" />} title="No topics yet" action={<button type="button" className="btn btn-sm btn-pri" onClick={onNew}><Plus className="i i-sm" />Create the first topic</button>}>
+            A topic is a shared space for one thing to learn, like “Google Tag Manager”: lessons, links, a discussion, and everyone’s progress in one place.
           </Empty>
         </div>
       ) : (
@@ -59,7 +55,6 @@ export function TopicsTab() {
           )}
         </>
       )}
-      <TopicModal open={creating} onClose={() => setCreating(false)} />
     </div>
   )
 }
@@ -76,6 +71,10 @@ export function TopicCard({ topic, me, lessons, progress, members, people, compa
   const p = topicProgress(topic.id, me?.id, lessons, progress)
   const learners = people.filter((x) => members.some((m) => m.topic_id === topic.id && m.user_id === x.id))
   const color = topic.color || TOPIC_COLORS[0]
+  const allPosts = useData((st) => st.topicPosts)
+  const posts = allPosts.filter((x) => x.topic_id === topic.id)
+  const last = posts[posts.length - 1]
+  const lastBy = last ? people.find((x) => x.id === last.user_id) : undefined
   return (
     <Link to={`/improvement/topics/${topic.id}`} className={cn('tp-card lift', compact && 'compact')} style={{ ['--tc' as string]: color }}>
       <div className="tp-card-h">
@@ -86,6 +85,9 @@ export function TopicCard({ topic, me, lessons, progress, members, people, compa
         </div>
       </div>
       {!compact && topic.description && <p className="tp-desc">{topic.description}</p>}
+      {!compact && last && (
+        <p className="tp-last trunc"><MessageSquare className="i i-xs" /><b>{last.user_id === me?.id ? 'You' : profileDisplayName(lastBy)}:</b> {last.body}</p>
+      )}
       <div className="tp-card-f">
         <div className="grow">
           <div className="bar"><i style={{ width: `${p.pct}%`, background: color }} /></div>
@@ -99,7 +101,7 @@ export function TopicCard({ topic, me, lessons, progress, members, people, compa
 
 /* ---------- create / edit topic ---------- */
 
-function TopicModal({ open, onClose, edit }: { open: boolean; onClose: () => void; edit?: LearningTopic }) {
+export function TopicModal({ open, onClose, edit }: { open: boolean; onClose: () => void; edit?: LearningTopic }) {
   const { profiles, me, createRow, updateRow } = useData()
   const navigate = useNavigate()
   const [title, setTitle] = useState('')
@@ -178,6 +180,9 @@ export function TopicPage() {
   const [confirmDel, setConfirmDel] = useState(false)
   const [newLesson, setNewLesson] = useState('')
   const [openIds, setOpenIds] = useState<Set<string>>(new Set())
+  const [view, setView] = useState<'class' | 'lessons'>('class')
+  const allPosts = useData((st) => st.topicPosts)
+  const posts = allPosts.filter((x) => x.topic_id === id)
 
   if (!topic) {
     return (
@@ -196,10 +201,20 @@ export function TopicPage() {
   const canManage = topic.created_by === me?.id || isAdmin
   const mine = topicProgress(topic.id, me?.id, lessons, progress)
   const nextLesson = list.find((l) => !progress.some((p) => p.lesson_id === l.id && p.user_id === me?.id && p.status === 'done'))
-  const recent = progress
-    .filter((p) => p.status === 'done' && p.takeaway && list.some((l) => l.id === p.lesson_id))
-    .sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? ''))
-    .slice(0, 5)
+  // Each learner's status in this topic, for the side panel.
+  const statusOf = (uid: string) => {
+    const pr = topicProgress(topic.id, uid, lessons, progress)
+    const mineRows = progress.filter((p) => p.user_id === uid && list.some((l) => l.id === p.lesson_id))
+    const now = mineRows.find((p) => p.status === 'learning')
+    const nowLesson = now ? list.find((l) => l.id === now.lesson_id) : undefined
+    const stamps = [
+      ...mineRows.map((p) => p.completed_at ?? p.created_at),
+      ...posts.filter((p) => p.user_id === uid).map((p) => p.created_at),
+    ].sort()
+    const all = pr.total > 0 && pr.done === pr.total
+    const label = all ? 'Finished every lesson' : nowLesson ? `Learning: ${nowLesson.title}` : pr.done > 0 ? `${pr.done} of ${pr.total} lessons done` : 'Not started yet'
+    return { pr, label, tone: all ? 'ok' : nowLesson ? 'pri' : '', lastAt: stamps[stamps.length - 1] }
+  }
 
   const join = () => {
     if (!me || amIn) return
@@ -257,7 +272,7 @@ export function TopicPage() {
                 <small>{mine.total ? `${mine.done} of ${mine.total} lessons done by you` : 'No lessons yet'}</small>
               </div>
               {nextLesson && amIn && (
-                <button type="button" className="btn btn-sm" onClick={() => { setOpenIds((s) => new Set(s).add(nextLesson.id)); setTimeout(() => document.getElementById(`ls-${nextLesson.id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 50) }}>
+                <button type="button" className="btn btn-sm" onClick={() => { setView('lessons'); setOpenIds((s) => new Set(s).add(nextLesson.id)); setTimeout(() => document.getElementById(`ls-${nextLesson.id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 50) }}>
                   <Play className="i i-sm" />Next: {nextLesson.title}
                 </button>
               )}
@@ -267,10 +282,30 @@ export function TopicPage() {
 
         <div className="cols">
           <div className="col-main stack">
-            <div className="row between"><h2 className="h2">Lessons <span className="faint" style={{ fontWeight: 500 }}>{list.length}</span></h2>
-              {list.length > 0 && <button type="button" className="btn btn-sm btn-ghost" onClick={() => setOpenIds(openIds.size ? new Set() : new Set(list.map((l) => l.id)))}>{openIds.size ? 'Collapse all' : 'Expand all'}</button>}
-            </div>
-            <div className="ls-list">
+            <Tabs
+              value={view}
+              onChange={setView}
+              tabs={[
+                { id: 'class', label: <><MessageSquare className="i i-sm" />Discussion</>, count: posts.length || undefined },
+                { id: 'lessons', label: <><BookOpen className="i i-sm" />Lessons</>, count: list.length || undefined },
+              ]}
+              after={view === 'lessons' && list.length > 0 ? <button type="button" className="btn btn-sm btn-ghost" style={{ marginBottom: 6 }} onClick={() => setOpenIds(openIds.size ? new Set() : new Set(list.map((l) => l.id)))}>{openIds.size ? 'Collapse all' : 'Expand all'}</button> : undefined}
+            />
+            {view === 'class' && (
+              <TopicClass
+                topic={topic}
+                lessons={list}
+                posts={posts}
+                amIn={amIn}
+                onJoin={join}
+                onOpenLesson={(lid) => {
+                  setView('lessons')
+                  setOpenIds((s) => new Set(s).add(lid))
+                  setTimeout(() => document.getElementById(`ls-${lid}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 80)
+                }}
+              />
+            )}
+            {view === 'lessons' && <div className="ls-list">
               {list.map((l, i) => (
                 <LessonCard
                   key={l.id}
@@ -289,41 +324,27 @@ export function TopicPage() {
                 <input value={newLesson} onChange={(e) => setNewLesson(e.target.value)} placeholder={list.length ? 'Add a lesson, e.g. “Triggers and variables”, then press Enter' : 'Add the first lesson, e.g. “How to set it up”, then press Enter'} aria-label="New lesson" />
                 {newLesson.trim() && <button type="submit" className="btn btn-sm btn-pri">Add</button>}
               </form>
-            </div>
+            </div>}
           </div>
 
           <div className="col-side stack">
             <section className="card card-b stack">
-              <div className="row between"><div className="label-caps">Learners</div><button type="button" className="link-btn xs" onClick={() => setAdding(true)}>Add people</button></div>
+              <div className="row between"><div className="label-caps">Everyone’s status</div><button type="button" className="link-btn xs" onClick={() => setAdding(true)}>Add people</button></div>
               {learners.length === 0 && <span className="small muted">Nobody has joined yet.</span>}
-              {learners.map((p) => {
-                const pr = topicProgress(topic.id, p.id, lessons, progress)
+              {[...learners].sort((a, b) => (a.id === me?.id ? -1 : b.id === me?.id ? 1 : 0)).map((p) => {
+                const st = statusOf(p.id)
                 return (
                   <div key={p.id} className="tp-learner">
                     <Avatar profile={p} size="sm" />
                     <div className="grow" style={{ minWidth: 0 }}>
-                      <div className="row between small"><span className="m trunc">{p.id === me?.id ? 'You' : profileDisplayName(p)}</span><span className="faint num">{pr.done}/{pr.total}</span></div>
-                      <div className="bar"><i style={{ width: `${pr.pct}%`, background: color }} /></div>
+                      <div className="row between small"><span className="m trunc">{p.id === me?.id ? 'You' : profileDisplayName(p)}</span><span className="faint num">{st.pr.done}/{st.pr.total}</span></div>
+                      <div className="bar"><i style={{ width: `${st.pr.pct}%`, background: color }} /></div>
+                      <div className={cn('xs trunc tp-st', st.tone && `t-${st.tone}`)}>{st.label}{st.lastAt ? <span className="faint"> · {formatFeedAgo(st.lastAt)}</span> : null}</div>
                     </div>
                   </div>
                 )
               })}
             </section>
-            {recent.length > 0 && (
-              <section className="card card-b stack">
-                <div className="label-caps">Recently learned</div>
-                {recent.map((p) => {
-                  const who = profiles.find((x) => x.id === p.user_id)
-                  const l = list.find((x) => x.id === p.lesson_id)
-                  return (
-                    <div key={p.id} className="tp-recent">
-                      <div className="row-sm xs muted"><Avatar profile={who} size="xs" /><b className="m">{profileDisplayName(who)}</b> · {l?.title} · {formatFeedAgo(p.completed_at!)}</div>
-                      <div className="small">{p.takeaway}</div>
-                    </div>
-                  )
-                })}
-              </section>
-            )}
           </div>
         </div>
       </Content>
@@ -337,6 +358,132 @@ export function TopicPage() {
         onConfirm={() => { deleteRow('learning_topics', topic.id); navigate('/improvement?tab=topics') }}
       />
     </>
+  )
+}
+
+/* ---------- discussion (the topic's classroom) ---------- */
+
+type ClassEvent =
+  | { kind: 'post'; id: string; at: string; user: string; post: LearningPost }
+  | { kind: 'done' | 'start'; id: string; at: string; user: string; lesson: LearningLesson; takeaway?: string | null }
+  | { kind: 'resource'; id: string; at: string; user: string; lesson: LearningLesson; res: LearningResource }
+  | { kind: 'lesson'; id: string; at: string; user: string; lesson: LearningLesson }
+  | { kind: 'join'; id: string; at: string; user: string }
+
+/** One stream for the topic: comments people write, plus what they did (started or finished
+ *  a lesson, added a link or a lesson, joined), newest first. */
+function TopicClass({ topic, lessons, posts, amIn, onJoin, onOpenLesson }: {
+  topic: LearningTopic
+  lessons: LearningLesson[]
+  posts: LearningPost[]
+  amIn: boolean
+  onJoin: () => void
+  onOpenLesson: (id: string) => void
+}) {
+  const { progress, resources, topicMembers, profiles, me, createRow, deleteRow } = useData()
+  const isAdmin = useIsAdmin()
+  const [body, setBody] = useState('')
+  const [url, setUrl] = useState('')
+  const [withLink, setWithLink] = useState(false)
+  const [limit, setLimit] = useState(30)
+
+  const events: ClassEvent[] = []
+  for (const p of posts) events.push({ kind: 'post', id: p.id, at: p.created_at, user: p.user_id, post: p })
+  for (const l of lessons) {
+    if (l.created_by) events.push({ kind: 'lesson', id: `l-${l.id}`, at: l.created_at, user: l.created_by, lesson: l })
+    for (const r of resources.filter((x) => x.lesson_id === l.id)) {
+      if (r.created_by) events.push({ kind: 'resource', id: `r-${r.id}`, at: r.created_at, user: r.created_by, lesson: l, res: r })
+    }
+    for (const pr of progress.filter((x) => x.lesson_id === l.id)) {
+      if (pr.status === 'done' && pr.completed_at) events.push({ kind: 'done', id: `d-${pr.id}`, at: pr.completed_at, user: pr.user_id, lesson: l, takeaway: pr.takeaway })
+      else events.push({ kind: 'start', id: `s-${pr.id}`, at: pr.created_at, user: pr.user_id, lesson: l })
+    }
+  }
+  for (const m of topicMembers.filter((x) => x.topic_id === topic.id)) events.push({ kind: 'join', id: `j-${m.id}`, at: m.created_at, user: m.user_id })
+  events.sort((a, b) => b.at.localeCompare(a.at))
+
+  const post = () => {
+    const text = body.trim()
+    const link = url.trim()
+    if ((!text && !link) || !me) return
+    // Posting means you're part of the topic.
+    if (!amIn) onJoin()
+    createRow<LearningPost>('learning_posts', { topic_id: topic.id, user_id: me.id, body: text, url: link ? normUrl(link) : null })
+    setBody('')
+    setUrl('')
+    setWithLink(false)
+  }
+  const name = (uid: string) => (uid === me?.id ? 'You' : profileDisplayName(profiles.find((p) => p.id === uid)))
+  const lessonLink = (l: LearningLesson) => <button type="button" className="link-btn" onClick={() => onOpenLesson(l.id)}>{l.title}</button>
+
+  return (
+    <div className="stack">
+      <form className="card tp-compose" onSubmit={(e) => { e.preventDefault(); post() }}>
+        <Avatar profile={me} size="sm" />
+        <div className="grow stack-sm" style={{ minWidth: 0 }}>
+          <textarea
+            className="inp"
+            rows={2}
+            placeholder="Share what you learned, ask a question, or post a useful link…"
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); post() } }}
+            aria-label="Write a post"
+          />
+          {withLink && <input className="inp sm" autoFocus placeholder="https://… (video, doc, course)" value={url} onChange={(e) => setUrl(e.target.value)} aria-label="Link" />}
+          <div className="row between">
+            <button type="button" className="btn btn-sm btn-ghost" onClick={() => { setWithLink((v) => !v); setUrl('') }}><Link2 className="i i-sm" />{withLink ? 'Remove link' : 'Add a link'}</button>
+            <button type="submit" className="btn btn-sm btn-pri" disabled={!body.trim() && !url.trim()}><Send className="i i-sm" />Post</button>
+          </div>
+        </div>
+      </form>
+
+      {events.length === 0 ? (
+        <div className="card"><Empty icon={<MessageSquare className="i" />} title="Nothing here yet">Post the first message, or open Lessons and start one. Everything people do in this topic shows up here.</Empty></div>
+      ) : (
+        <div className="card tp-feed">
+          {events.slice(0, limit).map((ev) => {
+            const who = profiles.find((p) => p.id === ev.user)
+            const canDelete = ev.kind === 'post' && (ev.user === me?.id || topic.created_by === me?.id || isAdmin)
+            return (
+              <div key={ev.id} className={cn('tp-ev', ev.kind === 'post' && 'is-post')}>
+                <Avatar profile={who} size="sm" />
+                <div className="grow" style={{ minWidth: 0 }}>
+                  <div className="tp-ev-h">
+                    <b>{name(ev.user)}</b>
+                    <span className="muted">
+                      {ev.kind === 'post' && 'posted'}
+                      {ev.kind === 'done' && <>finished {lessonLink(ev.lesson)}</>}
+                      {ev.kind === 'start' && <>started {lessonLink(ev.lesson)}</>}
+                      {ev.kind === 'resource' && <>added a {kindMeta(ev.res.kind).label.toLowerCase()} to {lessonLink(ev.lesson)}</>}
+                      {ev.kind === 'lesson' && <>added the lesson {lessonLink(ev.lesson)}</>}
+                      {ev.kind === 'join' && 'joined the topic'}
+                    </span>
+                    <span className="faint xs">{formatFeedAgo(ev.at)}</span>
+                    {canDelete && ev.kind === 'post' && (
+                      <button type="button" className="btn btn-sm btn-ghost btn-icon tp-ev-x" aria-label="Delete post" title="Delete" onClick={() => deleteRow('learning_posts', ev.post.id)}><Trash2 className="i i-xs" /></button>
+                    )}
+                  </div>
+                  {ev.kind === 'post' && (
+                    <>
+                      {ev.post.body && <p className="tp-ev-body">{ev.post.body}</p>}
+                      {ev.post.url && <a className="tp-ev-link" href={normUrl(ev.post.url)} target="_blank" rel="noreferrer"><ExternalLink className="i i-xs" />{hostOf(ev.post.url) || ev.post.url}</a>}
+                    </>
+                  )}
+                  {ev.kind === 'done' && ev.takeaway && <p className="tp-ev-quote">{ev.takeaway}</p>}
+                  {ev.kind === 'resource' && (
+                    ev.res.url
+                      ? <a className="tp-ev-link" href={normUrl(ev.res.url)} target="_blank" rel="noreferrer"><ExternalLink className="i i-xs" />{ev.res.title}</a>
+                      : <p className="tp-ev-body">{ev.res.title}</p>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+          {events.length > limit && <div className="card-f"><button type="button" className="btn btn-sm" onClick={() => setLimit((n) => n + 30)}>Show older</button></div>}
+        </div>
+      )}
+    </div>
   )
 }
 

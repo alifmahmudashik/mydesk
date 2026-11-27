@@ -7,15 +7,19 @@ import { Empty } from '@/components/ui/layout'
 import { ClientGroup, groupByClient } from '@/components/domain/ClientGroup'
 import { StatusPill } from '@/components/ui/pill'
 import { ConfirmDialog } from '@/components/ui/modal'
-import { clientDisplayName, invoiceStatus, isInvoiceable, sumByCurrency } from '@/lib/derive'
+import { clientDisplayName, invoiceProjects, invoiceStatus, isInvoiceable, sumByCurrency } from '@/lib/derive'
 import { formatDate, formatMoney } from '@/lib/format'
 import { paymentStatus } from '@/lib/status'
 import type { Invoice } from '@/types'
 
 export { invoiceTotal } from '@/lib/invoice-math'
 
-/** The Invoices tab of the Billing page: every invoice, grouped by client. */
-export function InvoicesList({ q }: { q: string }) {
+/** The month an invoice was issued, as yyyy-MM (Billing's month filter uses this). */
+export const invoiceMonth = (i: Invoice) => (i.issue_date ?? i.created_at).slice(0, 7)
+
+/** The Invoices tab of the Billing page: the invoices issued in the selected month
+ *  ('all' for every month), grouped by client. */
+export function InvoicesList({ q, month = 'all', monthName = '', onShowAll }: { q: string; month?: string; monthName?: string; onShowAll?: () => void }) {
   const { invoices, clients, payments, projects, deleteRow } = useData()
   const navigate = useNavigate()
   const [deleting, setDeleting] = useState<Invoice>()
@@ -23,14 +27,16 @@ export function InvoicesList({ q }: { q: string }) {
   const sorted = useMemo(
     () =>
       [...invoices]
+        .filter((i) => month === 'all' || invoiceMonth(i) === month)
         .filter((i) => {
           const c = clients.find((x) => x.id === i.client_id)
           return !q.trim() || `${i.number} ${clientDisplayName(c)}`.toLowerCase().includes(q.trim().toLowerCase())
         })
         .sort((a, b) => (b.issue_date ?? b.created_at).localeCompare(a.issue_date ?? a.created_at)),
-    [invoices, clients, q],
+    [invoices, clients, q, month],
   )
 
+  const otherMonths = month === 'all' ? 0 : invoices.filter((i) => invoiceMonth(i) !== month).length
   const statusOf = (inv: Invoice) => invoiceStatus(inv, projects, payments)
 
   // Completed projects with a budget that aren't on any invoice yet.
@@ -49,8 +55,19 @@ export function InvoicesList({ q }: { q: string }) {
       )}
       {sorted.length === 0 ? (
         <div className="card">
-          <Empty icon={<FileText className="i" />} title={invoices.length ? 'No matches' : 'No invoices yet'} action={!invoices.length ? <Link className="btn btn-pri btn-sm" to="/invoices/new"><Plus className="i i-sm" />New invoice</Link> : undefined}>
-            {invoices.length ? 'Try another search.' : 'Use “Create invoice” on a payment, or start one here.'}
+          <Empty
+            icon={<FileText className="i" />}
+            title={!invoices.length ? 'No invoices yet' : q.trim() ? 'No matches' : `No invoices issued in ${monthName}`}
+            action={
+              !invoices.length || !q.trim() ? (
+                <span className="row-sm">
+                  <Link className="btn btn-pri btn-sm" to="/invoices/new"><Plus className="i i-sm" />New invoice</Link>
+                  {otherMonths > 0 && onShowAll && <button type="button" className="btn btn-sm" onClick={onShowAll}>Show all months</button>}
+                </span>
+              ) : undefined
+            }
+          >
+            {!invoices.length ? 'Use “Create invoice” on a payment, or start one here.' : q.trim() ? 'Try another search.' : `${otherMonths} invoice${otherMonths === 1 ? ' was' : 's were'} issued in other months.`}
           </Empty>
         </div>
       ) : (
@@ -77,11 +94,17 @@ export function InvoicesList({ q }: { q: string }) {
                       {g.rows.map((inv) => {
                         const st = statusOf(inv)
                         const linked = payments.filter((p) => p.invoice_id === inv.id).length
+                        const projs = linked ? [] : invoiceProjects(inv, projects, payments)
+                        const linkNote = linked
+                          ? `${linked} payment${linked === 1 ? '' : 's'} linked`
+                          : projs.length
+                            ? 'Payment not linked yet. Open and save to link it.'
+                            : 'Not linked to a project'
                         return (
                           <tr key={inv.id} className="hov">
                             <td>
                               <Link className="mono m cover" to={`/invoices/${inv.id}`}>{inv.number}</Link>
-                              <div className="xs faint">{linked ? `${linked} payment${linked === 1 ? '' : 's'} linked` : 'No payment linked'}</div>
+                              <div className={`xs ${!linked && projs.length ? 't-warn' : 'faint'}`}>{linkNote}</div>
                             </td>
                             <td>{formatDate(inv.issue_date)}</td>
                             <td>{st ? <StatusPill meta={paymentStatus[st]} /> : <span className="pill gray" title="No line item matches one of this client’s projects">No project</span>}</td>

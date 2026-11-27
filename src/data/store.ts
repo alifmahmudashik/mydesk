@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
 import { deriveProjectKey } from '@/lib/derive'
 import type {
-  AccessItem, ActivityAction, ActivityEntity, ActivityEvent, AppNotification, Client, ClientMember, Invite, Invoice, InvoiceSettings, Payment, PaymentReminder, Profile, Project, ProjectNote, Subtask, Task, TaskAttachment, TaskComment, TaskWatcher, TimeEntry, LearningGoal, LearningItem, LearningTopic, LearningLesson, LearningResource, LearningTopicMember, LearningProgress, TeamLink, CodeSnippet, Workspace, ProjectMember, ClientNote, TimeTimer,
+  AccessItem, ActivityAction, ActivityEntity, ActivityEvent, AppNotification, Client, ClientMember, Invite, Invoice, InvoiceSettings, Payment, PaymentReminder, Profile, Project, ProjectNote, Subtask, Task, TaskAttachment, TaskComment, TaskWatcher, TimeEntry, LearningGoal, LearningItem, LearningTopic, LearningLesson, LearningResource, LearningTopicMember, LearningProgress, LearningPost, TeamLink, CodeSnippet, Workspace, ProjectMember, ClientNote, TimeTimer,
 } from '@/types'
 
 const LOCAL_KEY = 'mydesk-data-v3'
@@ -17,14 +17,14 @@ export type Table =
   | 'profiles' | 'client_members' | 'invoices'
   | 'subtasks' | 'task_comments' | 'task_attachments' | 'time_entries' | 'task_watchers'
   | 'notifications' | 'invites' | 'payment_reminders' | 'learning_items' | 'learning_goals'
-  | 'learning_topics' | 'learning_lessons' | 'learning_resources' | 'learning_topic_members' | 'learning_progress'
+  | 'learning_topics' | 'learning_lessons' | 'learning_resources' | 'learning_topic_members' | 'learning_progress' | 'learning_posts'
   | 'team_links' | 'code_snippets' | 'project_members' | 'client_notes' | 'time_timers'
 
 type StateKey =
   | 'clients' | 'projects' | 'tasks' | 'accessItems' | 'payments' | 'notes' | 'profiles'
   | 'clientMembers' | 'invoices' | 'subtasks' | 'comments' | 'attachments' | 'timeEntries'
   | 'watchers' | 'notifications' | 'invites' | 'reminders' | 'learning' | 'goals'
-  | 'topics' | 'lessons' | 'resources' | 'topicMembers' | 'progress' | 'teamLinks' | 'snippets'
+  | 'topics' | 'lessons' | 'resources' | 'topicMembers' | 'progress' | 'topicPosts' | 'teamLinks' | 'snippets'
   | 'projectMembers' | 'clientNotes' | 'timers'
 
 const tableToKey: Record<Table, StateKey> = {
@@ -52,6 +52,7 @@ const tableToKey: Record<Table, StateKey> = {
   learning_resources: 'resources',
   learning_topic_members: 'topicMembers',
   learning_progress: 'progress',
+  learning_posts: 'topicPosts',
   team_links: 'teamLinks',
   code_snippets: 'snippets',
   project_members: 'projectMembers',
@@ -133,7 +134,7 @@ function snapshot(s: DataState): DemoData {
     subtasks: s.subtasks, comments: s.comments, attachments: s.attachments, timeEntries: s.timeEntries,
     watchers: s.watchers, notifications: s.notifications, invites: s.invites, reminders: s.reminders,
     learning: s.learning, goals: s.goals, topics: s.topics, lessons: s.lessons, resources: s.resources,
-    topicMembers: s.topicMembers, progress: s.progress, teamLinks: s.teamLinks, snippets: s.snippets,
+    topicMembers: s.topicMembers, progress: s.progress, topicPosts: s.topicPosts, teamLinks: s.teamLinks, snippets: s.snippets,
   }
 }
 
@@ -328,6 +329,9 @@ export const useData = create<DataState>((set, get) => {
       live('task_comments'),
       live('tasks'),
       live('subtasks'),
+      live('learning_posts'),
+      live('learning_progress'),
+      live('learning_resources'),
       sb
         .channel('rt-activity')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_log' }, (payload) => {
@@ -421,6 +425,7 @@ export const useData = create<DataState>((set, get) => {
           all<LearningResource>('learning_resources', 'created_at', true),
           all<LearningTopicMember>('learning_topic_members', 'created_at', true),
           all<LearningProgress>('learning_progress', 'created_at', true),
+          all<LearningPost>('learning_posts', 'created_at', true),
           all<TeamLink>('team_links', 'position', true),
           all<CodeSnippet>('code_snippets', 'position', true),
           sb.from('workspaces').select('*').limit(1).maybeSingle(),
@@ -442,7 +447,7 @@ export const useData = create<DataState>((set, get) => {
       const [
         clients, projects, tasks, accessItems, payments, notes, activity, profiles, members, invoices,
         invoiceSettings, subtasks, comments, attachments, timeEntries, watchers, notifications, invites,
-        reminders, user, learning, goals, topics, lessons, resources, topicMembers, progress, teamLinks, snippets,
+        reminders, user, learning, goals, topics, lessons, resources, topicMembers, progress, topicPosts, teamLinks, snippets,
         workspace, projectMembers, clientNotes, timers,
       ] = res
       const profileRows = profiles.data ?? []
@@ -477,6 +482,7 @@ export const useData = create<DataState>((set, get) => {
         resources: resources.data ?? [],
         topicMembers: topicMembers.data ?? [],
         progress: progress.data ?? [],
+        topicPosts: topicPosts.data ?? [],
         topicsReady: !topics.error,
         teamLinks: teamLinks.data ?? [],
         teamLinksReady: !teamLinks.error,

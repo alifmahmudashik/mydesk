@@ -1699,6 +1699,67 @@ create trigger learning_members_after_insert after insert on learning_topic_memb
   for each row execute function public.learning_members_after_insert();
 
 -- ---------------------------------------------------------------------------
+-- Topic discussion: comments (and links) inside a learning topic, like a small
+-- classroom. Everyone in the workspace can read; you post as yourself; you, the
+-- topic creator or an admin can remove a post. Other learners get notified.
+-- Safe to re-run.
+-- ---------------------------------------------------------------------------
+
+create table if not exists learning_posts (
+  id uuid primary key default gen_random_uuid(),
+  topic_id uuid not null references learning_topics (id) on delete cascade,
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  body text not null,
+  url text,
+  workspace_id uuid default public.my_workspace_id() references workspaces (id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+create index if not exists learning_posts_topic_idx on learning_posts (topic_id, created_at);
+alter table learning_posts enable row level security;
+
+drop policy if exists "learning_posts_select" on learning_posts;
+create policy "learning_posts_select" on learning_posts for select using (workspace_id = my_workspace_id());
+drop policy if exists "learning_posts_insert" on learning_posts;
+create policy "learning_posts_insert" on learning_posts for insert
+  with check (user_id = auth.uid() and workspace_id = my_workspace_id());
+drop policy if exists "learning_posts_update" on learning_posts;
+create policy "learning_posts_update" on learning_posts for update
+  using (workspace_id = my_workspace_id() and user_id = auth.uid());
+drop policy if exists "learning_posts_delete" on learning_posts;
+create policy "learning_posts_delete" on learning_posts for delete
+  using (workspace_id = my_workspace_id() and (user_id = auth.uid() or learning_topic_owner(topic_id) = auth.uid() or is_admin()));
+
+create or replace function public.learning_posts_after_insert() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare v_title text; r record;
+begin
+  select title into v_title from learning_topics where id = new.topic_id;
+  for r in select user_id from learning_topic_members where topic_id = new.topic_id and user_id <> new.user_id loop
+    perform notify(r.user_id, 'topic_post', new.user_id, 'learning_topic', new.topic_id, null,
+      v_title, left(new.body, 140), '/improvement/topics/' || new.topic_id,
+      'topic_post:' || new.id || ':' || r.user_id, null, null);
+  end loop;
+  return null;
+end $$;
+drop trigger if exists learning_posts_after_insert on learning_posts;
+create trigger learning_posts_after_insert after insert on learning_posts
+  for each row execute function public.learning_posts_after_insert();
+
+-- Live updates inside a topic (posts, progress, resources).
+do $$
+declare t text;
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    foreach t in array array['learning_posts','learning_progress','learning_resources'] loop
+      if not exists (select 1 from pg_publication_tables
+                     where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t) then
+        execute format('alter publication supabase_realtime add table public.%I', t);
+      end if;
+    end loop;
+  end if;
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- Team links: meeting rooms and other shared links shown on the Team page.
 -- Everyone on the team can see them; owners/admins add and edit. Safe to re-run.
 -- ---------------------------------------------------------------------------

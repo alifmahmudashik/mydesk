@@ -342,7 +342,7 @@ export interface TaskWatcher {
 export type NotificationType =
   | 'assigned' | 'mentioned' | 'mentioned_note' | 'comment' | 'completed'
   | 'overdue' | 'paid' | 'invite_accepted' | 'due_soon' | 'access_granted'
-  | 'learning_shared' | 'learning_done' | 'topic_added'
+  | 'learning_shared' | 'learning_done' | 'topic_added' | 'topic_post'
 
 export interface AppNotification {
   id: string
@@ -467,6 +467,18 @@ export interface LearningProgress {
   status: 'learning' | 'done'
   takeaway?: string | null
   completed_at?: string | null
+  created_at: string
+}
+
+/** A comment in a topic's discussion: a question, a note on what someone learned, or a
+ *  link they found. Everyone on the topic sees it and the other learners get notified. */
+export interface LearningPost {
+  id: string
+  topic_id: string
+  user_id: string
+  body: string
+  /** Optional link shared with the comment (a video, doc, course…). */
+  url?: string | null
   created_at: string
 }
 

@@ -31,8 +31,6 @@ const loadClientPage = () => import('@/features/clients/ClientPage')
 const ClientPage = lazy(() => loadClientPage().then((m) => ({ default: m.ClientPage })))
 const loadClientSettingsPage = () => import('@/features/clients/ClientSettingsPage')
 const ClientSettingsPage = lazy(() => loadClientSettingsPage().then((m) => ({ default: m.ClientSettingsPage })))
-const loadClockPage = () => import('@/features/clock/ClockPage')
-const ClockPage = lazy(() => loadClockPage().then((m) => ({ default: m.ClockPage })))
 const loadImprovementPage = () => import('@/features/improvement/ImprovementPage')
 const loadTopicsModule = () => import('@/features/improvement/topics')
 const TopicPage = lazy(() => loadTopicsModule().then((m) => ({ default: m.TopicPage })))
@@ -55,7 +53,7 @@ const WorkspaceSettingsPage = lazy(() => loadWorkspaceSettingsPage().then((m) =>
 /** Download every page's code in the background once the app is idle, so
  *  switching pages never waits on the network. */
 function prefetchPages() {
-  const all = [loadImprovementPage, loadTopicsModule, loadInboxPage, loadTasksPage, loadTaskPage, loadProjectsPage, loadProjectPage, loadClientsPage, loadClientPage, loadClientSettingsPage, loadClockPage, loadTeamPage, loadMemberPage, loadPaymentsPage, loadInvoiceEditor, loadAnalyticsPage, loadAccountPage, loadWorkspaceSettingsPage]
+  const all = [loadImprovementPage, loadTopicsModule, loadInboxPage, loadTasksPage, loadTaskPage, loadProjectsPage, loadProjectPage, loadClientsPage, loadClientPage, loadClientSettingsPage, loadTeamPage, loadMemberPage, loadPaymentsPage, loadInvoiceEditor, loadAnalyticsPage, loadAccountPage, loadWorkspaceSettingsPage]
   const run = () => all.forEach((load) => void load().catch(() => {}))
   const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }
   if (w.requestIdleCallback) w.requestIdleCallback(run, { timeout: 3000 })
@@ -86,7 +84,6 @@ function Routed() {
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/clients/:id" element={<ClientPage />} />
           <Route path="/clients/:id/settings" element={<AdminOnly><ClientSettingsPage /></AdminOnly>} />
-          <Route path="/clock" element={<ClockPage />} />
           <Route path="/improvement" element={<ImprovementPage />} />
           <Route path="/improvement/topics/:id" element={<TopicPage />} />
           <Route path="/team" element={<TeamPage />} />

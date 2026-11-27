@@ -20,7 +20,7 @@ const LATEST_RELEASE_URL = 'https://github.com/alifmahmudashik/mydesk/releases/l
 const WINDOWS_EXE_URL = 'https://github.com/alifmahmudashik/mydesk/releases/latest/download/MyDesk-Setup-1.2.0.exe'
 const GITHUB_REPO_URL = 'https://github.com/alifmahmudashik/mydesk'
 
-type PreviewTab = 'tasks' | 'billing' | 'clients' | 'clock'
+type PreviewTab = 'tasks' | 'billing' | 'clients'
 
 export function HomePage() {
   const [activeTab, setActiveTab] = useState<PreviewTab>('tasks')
@@ -130,14 +130,6 @@ export function HomePage() {
               >
                 <Briefcase className="i i-xs" />
                 <span>Clients</span>
-              </button>
-              <button
-                type="button"
-                className={`preview-tab-btn ${activeTab === 'clock' ? 'active' : ''}`}
-                onClick={() => setActiveTab('clock')}
-              >
-                <Clock className="i i-xs" />
-                <span>Time Clock</span>
               </button>
             </div>
             <span className="home-preview-tag hide-sm">Interactive preview</span>
@@ -277,39 +269,6 @@ export function HomePage() {
               </div>
             )}
 
-            {activeTab === 'clock' && (
-              <div className="preview-pane">
-                <div className="preview-timer-box">
-                  <div className="timer-display">
-                    <span className="timer-digits">02:44:18</span>
-                    <span className="pill ok timer-status">Running</span>
-                  </div>
-                  <div className="timer-meta">
-                    <b>Acme Studios</b> · Web Platform API Integration
-                  </div>
-                </div>
-                <div className="preview-table" style={{ marginTop: 16 }}>
-                  <div className="preview-table-row header">
-                    <span>Date</span>
-                    <span>Project</span>
-                    <span>Task</span>
-                    <span className="r">Duration</span>
-                  </div>
-                  <div className="preview-table-row">
-                    <span>Today</span>
-                    <span>Web Platform</span>
-                    <span>Auth webhook verification</span>
-                    <span className="r num">1h 45m</span>
-                  </div>
-                  <div className="preview-table-row">
-                    <span>Yesterday</span>
-                    <span>Northwind Labs</span>
-                    <span>Database schema migration</span>
-                    <span className="r num">3h 10m</span>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </section>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Send, Trash2 } from 'lucide-react'
+import { FileText, Send, Trash2 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useData } from '@/data/store'
 import { markPaymentPaid, paymentTitle } from '@/data/actions'
@@ -8,7 +9,7 @@ import { Field, MoneyInput, Select } from '@/components/ui/field'
 import { ClientMark } from '@/components/ui/avatar'
 import { SUPPORTED_CURRENCIES } from '@/lib/currency'
 import { celebrateFrom } from '@/lib/confetti'
-import { clientDisplayName, effectivePaymentStatus } from '@/lib/derive'
+import { clientDisplayName, effectivePaymentStatus, invoiceProjects } from '@/lib/derive'
 import { formatDate, formatMoney, lateLabel, todayISO } from '@/lib/format'
 import type { Payment, PaymentStatus } from '@/types'
 import { DateInput } from '@/components/ui/date-picker'
@@ -24,7 +25,7 @@ interface Props {
 const METHODS = ['Wise', 'Payoneer', 'Bank transfer', 'PayPal', 'Stripe', 'Cash', 'Other']
 
 export function PaymentModal({ open, onClose, payment, defaults = {}, onRemind }: Props) {
-  const { clients, projects, invoiceSettings, reminders, createRow, updateRow, deleteRow } = useData()
+  const { clients, projects, invoices, payments, invoiceSettings, reminders, createRow, updateRow, deleteRow } = useData()
   const [confirmDelete, setConfirmDelete] = useState(false)
   const activeClients = clients.filter((c) => c.status !== 'archived' || c.id === payment?.client_id)
   const methods = useMemo(() => [...new Set([...(invoiceSettings?.payment_profiles ?? []).map((p) => p.name).filter(Boolean), ...METHODS])], [invoiceSettings])
@@ -68,9 +69,18 @@ export function PaymentModal({ open, onClose, payment, defaults = {}, onRemind }
     })
   }
 
+  // The invoice this payment belongs to: the one it's linked to, else the client's invoice
+  // that bills one of the picked projects (so picking a project links its invoice too).
+  const invoice =
+    invoices.find((i) => i.id === payment?.invoice_id) ??
+    (f.project_ids.length
+      ? invoices.find((i) => i.client_id === f.client_id && invoiceProjects(i, projects, payments).some((pr) => f.project_ids.includes(pr.id)))
+      : undefined)
+
   const data = () => ({
     client_id: f.client_id,
     project_ids: f.project_ids,
+    invoice_id: invoice?.id ?? null,
     amount: Number(f.amount) || 0,
     currency: f.currency,
     status: f.status,
@@ -86,13 +96,21 @@ export function PaymentModal({ open, onClose, payment, defaults = {}, onRemind }
     const d = data()
     if (payment) {
       const becamePaid = payment.status !== 'paid' && d.status === 'paid'
+      if (becamePaid) {
+        // Same as "Mark as paid": projects whose payments are now all paid become Finished.
+        updateRow('payments', payment.id, { ...d, status: payment.status })
+        markPaymentPaid({ ...payment, ...d }, { method: d.payment_method ?? undefined })
+        onClose()
+        return
+      }
       updateRow('payments', payment.id, d, {
         entity: 'payment', entityId: payment.id, action: becamePaid ? 'paid' : 'updated',
         message: becamePaid ? `received ${formatMoney(d.amount, d.currency)} from ${clientDisplayName(client)}` : `updated a payment from ${clientDisplayName(client)}`,
       })
       toast.success('Payment saved')
     } else {
-      createRow<Payment>('payments', d, { entity: 'payment', action: d.status === 'paid' ? 'paid' : 'created', message: `recorded ${formatMoney(d.amount, d.currency)} from ${clientDisplayName(client)}` })
+      const row = createRow<Payment>('payments', { ...d, status: d.status === 'paid' ? 'unpaid' : d.status }, { entity: 'payment', action: d.status === 'paid' ? 'paid' : 'created', message: `recorded ${formatMoney(d.amount, d.currency)} from ${clientDisplayName(client)}` })
+      if (d.status === 'paid') markPaymentPaid({ ...row, ...d }, { silent: true, method: d.payment_method ?? undefined })
       toast.success('Payment recorded')
     }
     onClose()
@@ -175,6 +193,13 @@ export function PaymentModal({ open, onClose, payment, defaults = {}, onRemind }
               </div>
             )}
           </div>
+          {invoice && (
+            <div className="row-sm small muted">
+              <FileText className="i i-sm" />
+              <span>{payment?.invoice_id ? 'On invoice' : 'Will be linked to invoice'}</span>
+              <Link className="mono m" to={`/invoices/${invoice.id}`} onClick={onClose}>{invoice.number}</Link>
+            </div>
+          )}
           <div className="f2">
             <Field label="Amount">
               <MoneyInput amount={f.amount} currency={f.currency} onAmount={(v) => set('amount', v)} onCurrency={(v) => set('currency', v)} currencies={[...SUPPORTED_CURRENCIES]} />

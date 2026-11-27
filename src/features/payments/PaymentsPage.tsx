@@ -22,7 +22,7 @@ import { paymentStatus, paymentTerms } from '@/lib/status'
 import type { Payment } from '@/types'
 import { DateInput } from '@/components/ui/date-picker'
 import { MonthFilter } from '@/components/ui/month-picker'
-import { InvoicesList } from '@/features/invoices/InvoicesPage'
+import { InvoicesList, invoiceMonth } from '@/features/invoices/InvoicesPage'
 
 type Tab = 'open' | 'overdue' | 'paid' | 'invoices'
 
@@ -90,6 +90,8 @@ export function PaymentsPage() {
     .filter((p) => effectivePaymentStatus(p) === 'overdue' || justPaid[p.id]?.wasOverdue)
     .sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? ''))
   const paid = payments.filter((p) => p.status === 'paid' && inMonth(p)).sort((a, b) => (b.payment_date ?? '').localeCompare(a.payment_date ?? ''))
+  // Invoices count in the month they were issued.
+  const monthInvoices = invoices.filter((i) => all || invoiceMonth(i) === month)
   const noDate = open.filter((p) => !p.due_date)
   const otherOpen = all ? [] : allOpen.filter((p) => !inMonth(p))
 
@@ -242,7 +244,7 @@ export function PaymentsPage() {
               { id: 'open', label: 'Open', count: open.length },
               { id: 'overdue', label: <>Overdue {overdue.length > 0 && <span className="n" style={{ background: 'var(--bad-bg)', color: 'var(--bad)' }}>{overdue.length}</span>}</> },
               { id: 'paid', label: 'Paid', count: paid.length },
-              { id: 'invoices', label: 'Invoices', count: invoices.length },
+              { id: 'invoices', label: 'Invoices', count: monthInvoices.length },
             ]}
             after={
               <label className="inp-wrap" style={{ width: 240, maxWidth: '45vw', height: 32, marginBottom: 6 }}>
@@ -382,7 +384,7 @@ export function PaymentsPage() {
                   )}
                 </div>
               ))}
-            {tab === 'invoices' && <InvoicesList q={q} />}
+            {tab === 'invoices' && <InvoicesList q={q} month={month} monthName={monthName} onShowAll={() => setMonth('all')} />}
           </div>
         </div>
       </Content>

@@ -14,7 +14,7 @@ import { Modal } from '@/components/ui/modal'
 import { A4_WIDTH, InvoicePaper, ScaledInvoice } from '@/features/invoices/InvoicePaper'
 import { SUPPORTED_CURRENCIES } from '@/lib/currency'
 import { exportElementToPdf, invoiceFilename } from '@/lib/pdf'
-import { paymentTitle } from '@/data/actions'
+import { ensureProjectPayment, paymentTitle } from '@/data/actions'
 import { clientColor, clientDisplayName, effectivePaymentStatus, invoiceStatus, isInvoiceable, lineIsForProject, projectTaskWork, withWorkMonthNote } from '@/lib/derive'
 import { formatDate, formatMoney, todayISO } from '@/lib/format'
 import { paymentStatus, paymentTerms } from '@/lib/status'
@@ -178,7 +178,32 @@ export function InvoiceEditor() {
     // Invoices are documents. Paid/unpaid lives on each project's payment (Finished = paid),
     // so saving only links those payments to this invoice — it never creates or settles one.
     // A new invoice must exist in the database before payments can point at it.
+    const method = profiles.find((x) => x.id === f.payment_profile_id)?.name
     const linkPayments = () => {
+      const { payments: now } = useData.getState()
+      // A project on the invoice with no payment of its own (an hourly project starts at $0,
+      // so it never got one) gets one now. A payment recorded by hand for the same amount,
+      // with no project, is adopted instead of adding a second one.
+      const without = projectIdsOnInvoice.filter((pid) => !now.some((p) => (p.project_ids ?? []).includes(pid)))
+      const adopted = new Set<string>()
+      for (const pid of without) {
+        const lines = items.filter((li) => li.project_id === pid || lineIsForProject(li, projects.find((p) => p.id === pid)!))
+        const amount = Math.round((projectIdsOnInvoice.length === 1 ? due : lines.reduce((s, li) => s + li.price * li.qty, 0)) * 100) / 100
+        const loose = now.find(
+          (p) =>
+            !adopted.has(p.id) &&
+            p.client_id === data.client_id &&
+            (p.project_ids ?? []).length === 0 &&
+            p.status !== 'refunded' &&
+            (p.invoice_id === invId || (!p.invoice_id && Math.abs(Number(p.amount) - amount) < 0.01)),
+        )
+        if (loose) {
+          adopted.add(loose.id)
+          updateRow('payments', loose.id, { project_ids: [pid], invoice_id: invId, ...(method && !loose.payment_method ? { payment_method: method } : {}) })
+        } else {
+          ensureProjectPayment(pid, { amount, invoiceId: invId, dueDate: data.due_date, method })
+        }
+      }
       for (const p of linkedPayments) {
         const stillOnInvoice = projectPayments.includes(p) || (p.project_ids ?? []).length === 0
         if (!stillOnInvoice) updateRow('payments', p.id, { invoice_id: null })
@@ -187,7 +212,6 @@ export function InvoiceEditor() {
         const patch: Record<string, unknown> = {}
         if (p.invoice_id !== invId) patch.invoice_id = invId
         // Remember how it's paid (Wise, Payoneer…) from the invoice's payment profile.
-        const method = profiles.find((x) => x.id === f.payment_profile_id)?.name
         if (method && !p.payment_method) patch.payment_method = method
         // Open payments follow the invoice's due date, so "overdue" matches what the client was sent.
         if (p.status !== 'paid' && p.status !== 'refunded' && data.due_date && p.due_date !== data.due_date) patch.due_date = data.due_date
@@ -235,6 +259,10 @@ export function InvoiceEditor() {
         : `Paid status follows ${which}: ${paid} of ${projectPayments.length} paid. Mark the project Finished when the money arrives.`
     }
     if (linkedPayments.length > 0) return `Linked to an earlier payment (${paymentStatus[effectivePaymentStatus(linkedPayments[0])].label.toLowerCase()}).`
+    if (projectIdsOnInvoice.length > 0) {
+      const names = projects.filter((p) => projectIdsOnInvoice.includes(p.id)).map((p) => p.title)
+      return `For ${names.length === 1 ? `“${names[0]}”` : `${names.length} projects`}, which ${names.length === 1 ? 'has' : 'have'} no payment yet. Save the invoice and the payment is created and linked here, so Billing tracks it.`
+    }
     return 'Not linked to a project, so it has no paid status. Use “Add from projects” to link one.'
   }
   if (!isNew && !existing) {
@@ -310,6 +338,8 @@ export function InvoiceEditor() {
                 <Field label="Payment method">
                   <select className="inp" value={f.payment_profile_id} onChange={(e) => pickProfile(e.target.value)}>
                     {profiles.map((p) => <option key={p.id} value={p.id}>{p.name || 'Untitled'}</option>)}
+                    {/* The profile was deleted in Business settings: the invoice keeps its saved details. */}
+                    {f.payment_profile_id !== 'none' && !profiles.some((p) => p.id === f.payment_profile_id) && <option value={f.payment_profile_id}>Saved details (profile deleted)</option>}
                     <option value="none">None</option>
                   </select>
                 </Field>

@@ -12,7 +12,8 @@ export function formatMoney(amount: number, currency = 'USD', opts: { cents?: bo
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency,
-      minimumFractionDigits: opts.cents ? 2 : 0,
+      // Any amount with cents shows both digits ($1,947.50, never $1,947.5).
+      minimumFractionDigits: opts.cents || amount % 1 !== 0 ? 2 : 0,
       maximumFractionDigits: opts.cents || amount % 1 !== 0 ? 2 : 0,
     }).format(amount)
   } catch {
